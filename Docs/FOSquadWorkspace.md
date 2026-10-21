@@ -136,10 +136,8 @@ For future updates:
 
 `EngineRevision` records a published baseline, not the mutable local checkout: always compare it with `git -C Engine rev-parse HEAD` when investigating differences.
 
-### Pending migration in the current checkout
+### Published game-side migration
 
-No changes were committed or pushed, and the index is unchanged. Until the gitlink-to-symlink conversion is committed, Git 2.47 may try to inspect the old submodule and reject the symlink during `git status`. The local-only setting `submodule.Engine.ignore=dirty` avoids that probe while still showing `T Engine` (the pending type change); inspect engine changes in its own repository. After committing the conversion, remove this temporary setting:
+Game commit `47c2b49e5a5a7cb045013b894d349e165fbcefe5` publishes the gitlink-to-symlink conversion, unit-suite removal, agent policy and corrected game documentation to the fork. The temporary local `submodule.Engine.ignore=dirty` workaround was removed after that conversion. Fresh clones need no submodule workaround; inspect engine changes in its own repository.
 
-```sh
-git config --local --unset submodule.Engine.ignore
-```
+The documentation-repair integration reran CMake configuration and `CompileAngelScript` successfully against the local dirty engine, with no compiler warnings. `git diff --check` and the existing nullable/native ABI validator also passed. The post-push `TLA_ServerHeadless` / `TLA_Client` build completed successfully; `BakeResources` subsequently completed against the prepared `2026.1.58-dev` engine state without matched warning/error diagnostics. Logs are retained locally under `Build/DocumentationRepair/`. These checks do not establish gameplay, rendered-site or deployment acceptance. Engine publication is still pending, so the pin continues to reference the earlier actually published engine baseline.
