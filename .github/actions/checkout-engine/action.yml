@@ -1,0 +1,31 @@
+name: Checkout FOSquad engine
+description: Materialize the pinned engine at the legacy Engine path on CI runners.
+runs:
+  using: composite
+  steps:
+    - name: Read engine revision and remove the link placeholder
+      id: engine
+      shell: python
+      run: |
+        import os
+        import re
+        from pathlib import Path
+
+        revision = Path("EngineRevision").read_text(encoding="ascii").strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+            raise SystemExit("EngineRevision must contain a full Git commit SHA")
+        engine = Path("Engine")
+        if engine.is_symlink():
+            engine.unlink()  # Never follow the link or remove the external checkout.
+        elif engine.is_file() and engine.read_text().strip() == "../FOSquad_Engine":
+            engine.unlink()  # Git for Windows with core.symlinks=false.
+        elif engine.exists():
+            raise SystemExit("Refusing to replace an existing Engine directory/file")
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            output.write(f"revision={revision}\n")
+    - uses: actions/checkout@v6
+      with:
+        repository: qwear0/fonline
+        ref: ${{ steps.engine.outputs.revision }}
+        path: Engine
+        persist-credentials: false

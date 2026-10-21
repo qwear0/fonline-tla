@@ -1,15 +1,17 @@
 # FOnline: The Life After
 
-[![Build](https://github.com/cvet/fonline-tla/workflows/build/badge.svg)](https://github.com/cvet/fonline-tla/actions)
 [![Last commit](https://img.shields.io/github/last-commit/cvet/fonline-tla.svg)](https://github.com/cvet/fonline-tla/commits/master)
 [![License](https://img.shields.io/github/license/cvet/fonline-tla.svg)](LICENSE)
 [![Site](https://img.shields.io/badge/site-tla.fonline.ru-blue.svg)](https://tla.fonline.ru)
 
 **FOnline: The Life After** (TLA) is a multiplayer post-apocalyptic isometric RPG built on the reusable [FOnline engine](https://github.com/cvet/fonline). It is a large, playable game project with a persistent world, Fallout-style hex maps, quests, dialogs, critters, items, factions, world-map encounters, client UI, editor tooling, and cross-platform build automation.
 
-The repository is split into a pinned engine submodule plus TLA-specific game content:
+This FOSquad fork uses two independent repositories: the game here and the engine in a sibling checkout.
+See [FOSquad workspace setup](Docs/FOSquadWorkspace.md) for local build commands and verification results.
 
-- `Engine/` is the reusable FOnline engine, consumed as a git submodule.
+**Fork policy:** game and engine unit suites have been removed. Do not add automated tests or test infrastructure without an explicit request; use proportionate existing checks or direct application use. See [AGENTS.md](AGENTS.md#verification-and-tests). GitHub workflows are archived outside the active workflow directory.
+
+- `Engine` is a relative symlink to `../FOSquad_Engine`; `EngineRevision` records the last published engine baseline; it need not match a dirty local engine checkout.
 - `Scripts/*.fos` contains AngelScript gameplay and client/server behavior.
 - `SourceExt/*` contains TLA-native C++ extension hooks and exported script methods.
 - `Maps/`, `Dialogs/`, `Critters/`, `Items/`, `Texts/`, `Gui/`, and `Resources/` contain authored game data and assets.
@@ -73,7 +75,7 @@ Important project characteristics:
 - TLA uses hexagonal Fallout-style map geometry (`FO_GEOMETRY HEXAGONAL`, 32x16 hexes).
 - The default client language is English; resources are baked for Russian and English (`russ engl`).
 - Baked resources, caches, logs, and binaries are generated locally and are not the authoritative source of game content.
-- The engine submodule is actively shared with other FOnline projects. Treat it as upstream unless a task explicitly requires an engine change.
+- The engine repository is actively shared with other FOnline projects. Treat it as external unless a task explicitly requires an engine change; commit its changes separately.
 
 ## Playing
 
@@ -85,7 +87,7 @@ Tagged releases publish long-lived downloadable packages on the [GitHub Releases
 
 On Windows, unpack the client package and run `TLA_Client.exe`. The project website is [tla.fonline.ru](https://tla.fonline.ru).
 
-Short-lived CI artifacts are also produced by GitHub Actions for branches and pull requests, but release archives are the stable distribution channel.
+Those release links describe upstream distribution. This fork's workflow definitions are archived; do not expect fresh branch/PR artifacts or infer fork publication from an upstream release.
 
 ## Building From Source
 
@@ -95,8 +97,8 @@ Building from source is the normal workflow for development, modding, local shar
 
 Minimum common tools:
 
-- Git with submodule support.
-- CMake 3.22 or newer.
+- Git with symbolic-link support for the local two-repository workspace.
+- CMake 3.31 or newer when using the version-10 preset files (the CMake project itself declares 3.22).
 - Python 3 for generation and formatting scripts.
 - A C++ toolchain for your host or target platform.
 
@@ -121,18 +123,17 @@ The engine also ships workspace preparation scripts and a broader dependency mat
 
 ### Clone
 
-Use a recursive clone so the engine submodule is present:
+Clone both forks into sibling directories with these names:
 
 ```sh
-git clone --recursive https://github.com/cvet/fonline-tla.git
-cd fonline-tla
+git clone git@github.com:qwear0/fonline.git FOSquad_Engine
+git clone git@github.com:qwear0/fonline-tla.git FOSquad
+cd FOSquad
 ```
 
-If the repository was cloned without submodules:
-
-```sh
-git submodule update --init --recursive
-```
+`Engine` resolves to `../FOSquad_Engine`; no submodule initialization is needed.
+For a reproducible build, select the engine commit recorded in `EngineRevision`.
+See [workspace setup](Docs/FOSquadWorkspace.md) for the local Linux preset, Windows symlink requirements, and the archived runner checkout strategy.
 
 ### Configure
 
@@ -166,8 +167,6 @@ Built applications are emitted under `Binaries/`, with platform-specific directo
 - `Binaries/Client-Windows-win64/`
 - `Binaries/Server-Linux-x64/`
 - `Binaries/Client-Linux-x64/`
-- `Binaries/Tests-Windows-win64/`
-- `Binaries/Tests-Linux-x64/`
 
 ## Running A Local Shard
 
@@ -211,20 +210,18 @@ For GUI server debugging instead of headless startup, use `TLA_Server` with the 
 | `ForceBakeResources` | Rebuild baked output while ignoring the incremental cache. Use when cache state is suspicious. |
 | `CompileAngelScript` | Fast AngelScript compile/API check without a full native rebuild. |
 | `TLA_Server` | GUI-capable game server. Useful for local development. |
-| `TLA_ServerHeadless` | Headless game server. Useful for production-like and CI startup checks. |
+| `TLA_ServerHeadless` | Headless game server; local startup/runtime verification without a server GUI. |
 | `TLA_Client` | Game client. |
 | `TLA_Mapper` | Map editing application. |
 | `TLA_Editor` | Content/editor application. |
 | `TLA_Baker` | Standalone resource baker. |
 | `TLA_ASCompiler` | Standalone AngelScript compiler/static checker. |
-| `TLA_UnitTests` | Engine unit tests built in this project context. |
 
 Useful command forms:
 
 ```sh
 cmake --build Build/Auto --config RelWithDebInfo --target CompileAngelScript
 cmake --build Build/Auto --config RelWithDebInfo --target TLA_ServerHeadless
-cmake --build Build/Auto --config RelWithDebInfo --target TLA_UnitTests
 ```
 
 ## VS Code Workflow
@@ -243,10 +240,8 @@ The authoritative local workflow is encoded in [.vscode/tasks.json](.vscode/task
 | `Build :: TLA_Editor` | You changed editor-facing code/content. |
 | `Build :: TLA_Baker` | You changed resource baking code. |
 | `Build :: TLA_ASCompiler` | You changed script compiler-facing code. |
-| `Build :: TLA_UnitTests` | You changed native engine-facing behavior that is covered by tests. |
 | `Prepare :: TLA_*` | Bake resources and then build the selected target. |
 | `Launch :: TLA_Server [windows]` / `[linux]` | Prepare and run the local GUI server with `LocalTest`. |
-| `Launch :: TLA_UnitTests [windows]` / `[linux]` | Prepare and run unit tests. |
 | `Generate :: GuiScreens.fos` | Regenerate script bindings from `Gui/*.fogui`. |
 | `Generate :: Version` | Update `VERSION` through `Tools/GenerateVersion/generate_version.py`. |
 | `Format :: Scripts` | Format AngelScript, native extensions, and GUI definitions. |
@@ -254,17 +249,18 @@ The authoritative local workflow is encoded in [.vscode/tasks.json](.vscode/task
 | `Format :: Main Config` | Format `TLA.fomain`. |
 | `Format :: All` | Run all formatting tasks. |
 
-Debug launch configurations are in [.vscode/launch.json](.vscode/launch.json). They include Windows and Linux server launches, headless server launches, unit-test launches, and `Attach :: FOS` for the AngelScript debugger extension.
+Debug launch configurations are in [.vscode/launch.json](.vscode/launch.json). They include Windows and Linux server launches, headless server launches, and `Attach :: FOS` for the AngelScript debugger extension.
 
 ## Repository Layout
 
 | Path | Role |
 | ---- | ---- |
-| [Engine/](Engine) | Pinned FOnline engine submodule. Keep game behavior outside this directory unless an engine change is explicitly intended. |
+| [Engine/](Engine) | Link to the independent `../FOSquad_Engine` checkout. `EngineRevision` records the published baseline. Keep game behavior outside this directory unless an engine change is explicitly intended. |
 | [Scripts/](Scripts) | AngelScript gameplay, AI, dialogs, quests, combat, world-map logic, GUI behavior, and server/client hooks. |
-| [Scripts/Json/](Scripts/Json) | JSON helpers used by script code. |
+| [Scripts/Core/](Scripts/Core) | Game-owned utility/GUI library, formerly bundled with the engine. |
+| [Scripts/Json/](Scripts/Json) | Game-owned JSON helpers used by script code. |
 | [Scripts/Content.fos](Scripts/Content.fos) | Generated content declarations. Do not hand-edit. |
-| [Scripts/GuiScreens.fos](Scripts/GuiScreens.fos) | Generated GUI screen bindings. Update through `Gui/*.fogui` and the Python generator. |
+| [Scripts/Generated/GuiScreens.fos](Scripts/Generated/GuiScreens.fos) | Generated GUI screen bindings. Update through `Gui/*.fogui` and the Python generator. |
 | [Scripts/GuiScreensExt.fos](Scripts/GuiScreensExt.fos) | Hand-written companion logic for generated GUI screens. |
 | [SourceExt/](SourceExt) | Project-local C++ extension layer registered from [CMakeLists.txt](CMakeLists.txt). |
 | [SourceExt/SHA/](SourceExt/SHA) | Small bundled SHA library used by common extension helpers. |
@@ -280,7 +276,7 @@ Debug launch configurations are in [.vscode/launch.json](.vscode/launch.json). T
 | [CMakeLists.txt](CMakeLists.txt) | TLA build options, native extension registration, package definitions, and generation stage order. |
 | [CMakePresets.json](CMakePresets.json) | Configure/build preset matrix. |
 | [.vscode/tasks.json](.vscode/tasks.json) | Canonical local build/generate/format tasks. |
-| [.github/workflows/build.yml](.github/workflows/build.yml) | CI, package, and release workflow. |
+| [.github/disabled-workflows/build.yml](.github/disabled-workflows/build.yml) | Archived, inactive CI/package/release definition. |
 | [AGENTS.md](AGENTS.md) | Maintainer and AI-agent working rules. |
 | [CLAUDE.md](CLAUDE.md) | Pointer to `AGENTS.md`. |
 | [Binaries/](Binaries) | Generated binaries. |
@@ -300,7 +296,7 @@ High-level flow:
 ```text
 Gui/*.fogui
   -> Tools/InterfaceEditor/generate_gui_screens.py
-  -> Scripts/GuiScreens.fos
+  -> Scripts/Generated/GuiScreens.fos
 
 Scripts + Texts + Dialogs + Maps + Critters + Items + Resources + TLA.fomain
   -> BakeResources / ForceBakeResources
@@ -312,16 +308,16 @@ The resource packs are defined in [TLA.fomain](TLA.fomain). The major packs are:
 
 | Pack | Inputs | Purpose |
 | ---- | ------ | ------- |
-| `Metadata` | `Scripts`, engine core scripts | Metadata generation. |
+| `Metadata` | `Scripts`, `Scripts/Core`, `Scripts/Generated`, `Scripts/Json` | Metadata generation from game-owned scripts. |
 | `Configs` | Project configuration | Server-only baked config data. |
-| `Scripts` | `Scripts`, `Scripts/Json`, engine AngelScript core scripts | Gameplay script bytecode/data. |
+| `Scripts` | `Scripts`, `Scripts/Core`, `Scripts/Generated`, `Scripts/Json` | Gameplay and game-owned library bytecode/data. |
 | `Embedded` | Engine embedded resources | Engine images/effects/raw resources. |
 | `Core` | Engine core and embedded resources | Shared engine resources. |
 | `Texts` | `Texts`, `Maps`, `Critters`, `Items`, `Dialogs` | Text packs, proto text, dialog text. |
 | `CommonData` | `Resources/CommonData` | Shared raw data. |
 | `ServerData` | `Resources/ServerData`, `Dialogs` | Server-only dialogs/images/raw data. |
 | `FOnline` | `Resources/FOnline` | Client image resources. |
-| `FOArt` | `Resources/DataPacks/fo_art*.zip` | Client legacy art resources. |
+| `FOArt` | `Resources/FOArt`, `Resources/DataPacks/fo_art*.zip` | Game palette overrides and client legacy art resources. |
 | `FOSound` | `Resources/DataPacks/fo_sound.zip` | Client sound resources. |
 | `Music` | `Resources/FOnlineMusic` | Client music resources. |
 | `Video` | `Resources/FOnlineVideo` | Client video resources. |
@@ -334,7 +330,7 @@ The resource packs are defined in [TLA.fomain](TLA.fomain). The major packs are:
 Do not hand-edit these unless the owning source is updated too:
 
 - `Scripts/Content.fos` - generated/baked content declarations.
-- `Scripts/GuiScreens.fos` - generated from `Gui/*.fogui`.
+- `Scripts/Generated/GuiScreens.fos` - generated from `Gui/*.fogui`.
 - `VERSION` - generated by `Tools/GenerateVersion/generate_version.py`.
 - `Baking/`, `Cache/`, `Binaries/`, `Build/`, `TLA-Dev/` - generated outputs.
 
@@ -370,7 +366,7 @@ Gameplay code is AngelScript (`*.fos`) with FOnline project conventions:
 - Mapper-specific logic belongs under `#if MAPPER`.
 - Startup functions use `[[ModuleInit]]` and subscribe to events from there.
 - Event handlers return `void` for implicit continuation or `EventResult` for explicit chain control.
-- `[[TimeEvent]]` and remote callbacks that run on worker threads must be marked `[[Async]]` before using async helpers, and must lock the entity cover they touch. For map-visible critter work, use `Sync::LockCritterWithMap(cr)` before reading or mutating critter/map state.
+- `Server.SingleThreadedLogic = True` runs server logic on one worker: server scripts access reachable entities directly, without `Sync::Lock*`, `Game.Sync` or server `[[Async]]` cover markers. Multithreaded server logic is unsupported by the current game scripts; surviving client async attributes are a separate contract.
 - Nullable handles are explicit: use `T?` when an engine call or dictionary lookup can return `null`, then narrow before dereferencing.
 - Generated component accessors are guarded by `Has<Component>` flags such as `HasRadio` or `HasDialogContext`; do not probe component accessors with `== null`.
 - Dialog answer links used by `.fodlg` files, such as `Answer Barter`, require globally visible `///@ Enum DialogAnswerLink ...` metadata so the dialog baker can resolve them.
@@ -396,13 +392,15 @@ TLA adds a small native extension layer in [SourceExt/](SourceExt). The files ar
 | File | Role |
 | ---- | ---- |
 | `CommonExtension.cpp` | Shared helpers, including SHA methods exposed to scripts. |
-| `ContentMigration.cpp` | TLA-specific content/data migrations. |
 | `Dialogs.h` / `Dialogs.cpp` | Runtime dialog support. |
 | `ServerExtension.cpp` | Server hooks, image checks, dialog plumbing, visibility hooks, critter busy/free stubs. |
-| `ClientExtension.cpp` | Client `Game.FormatTags` and client critter busy/free stubs. |
+| `ClientExtension.cpp` / `ClientExtension.h` | Client `Game.FormatTags`, busy/free stubs, `ClientInitHook` and `ClientExtData`. |
+| `ClientAiBridge.cpp` | Localhost client-control protocol; pairs with `Scripts/AiControl.fos` and `Tools/AiControlMcp/`. |
 | `BakerExtension.cpp` | Baker lifecycle extension hook. |
 | `DialogBaker.h` / `DialogBaker.cpp` | Dialog bake support. |
 | `SHA/*` | Bundled SHA implementation linked as a static third-party library. |
+
+Current serialized property removals/renames are declared in `Scripts/Migration.fos` as server `///@ MigrationRule` metadata. The old `SourceExt/ContentMigration.cpp` is absent and unregistered; script rules do not imply that every historical native data conversion remains supported.
 
 Engine annotations drive binding/codegen:
 
@@ -456,13 +454,13 @@ Use the narrowest verification that covers the changed surface:
 | ----------- | ------------------ |
 | AngelScript only | `Compile AngelScript`, then `Bake Resources` if the script participates in baked content. |
 | Dialogs, texts, maps, protos, resources | `Bake Resources`; inspect baker logs on failure. |
-| GUI definitions | Update `Gui/*.fogui`, regenerate `Scripts/GuiScreens.fos`, then `Bake Resources` and build/run the client if behavior changed. |
+| GUI definitions | Update `Gui/*.fogui`, regenerate `Scripts/Generated/GuiScreens.fos`, then `Bake Resources` and build/run the client if behavior changed. |
 | Server gameplay behavior | `Bake Resources`, `Build :: TLA_ServerHeadless`, then start with `LocalTest` if startup/runtime matters. |
 | Client UI/input/presentation | `Bake Resources`, `Build :: TLA_Client`, then run against a local server. |
-| Native server extension | Build the narrowest affected server target; run `TLA_UnitTests` if covered by engine tests. |
-| Native client extension | Build `TLA_Client`; add server/client runtime smoke tests if the change crosses the network boundary. |
+| Native server extension | Build the narrowest affected server target; inspect the changed behavior directly when needed. |
+| Native client extension | Build `TLA_Client`; exercise the existing server/client flow directly if the change crosses the network boundary. |
 | Baker/dialog bake support | Build `TLA_Baker`, then `Bake Resources` or `Force Bake Resources`. |
-| Engine submodule update | Bake resources, build server and client, compare `H:/lf-30` for migration patterns, run unit tests when relevant, and smoke-test server startup. |
+| Engine revision update | Bake affected resources, build server and client, and inspect startup when relevant before updating `EngineRevision`. |
 
 Baseline broad verification:
 
@@ -470,7 +468,6 @@ Baseline broad verification:
 cmake --build Build/Auto --config RelWithDebInfo --target BakeResources
 cmake --build Build/Auto --config RelWithDebInfo --target TLA_Server
 cmake --build Build/Auto --config RelWithDebInfo --target TLA_Client
-cmake --build Build/Auto --config RelWithDebInfo --target TLA_UnitTests
 ```
 
 For runtime startup:
@@ -492,7 +489,7 @@ Start at the boundary that failed, then inspect the first relevant log.
 | Server startup/runtime issue | `Build :: TLA_ServerHeadless`, then run with `LocalTest` | `TLA_ServerHeadless.log`, `TLA_Server.log` |
 | Client presentation/input issue | `Build :: TLA_Client`, then run client/server pair | `TLA_Client.log` |
 | Mapper issue | `Build :: TLA_Mapper` | `TLA_Mapper.log` |
-| Engine regression | Inspect `Engine` commits and compare `H:/lf-30` if needed | Unit-test output, engine logs |
+| Engine regression | Inspect the independent engine checkout and reproduce the affected behavior | Compiler output and application logs |
 
 Common local log files in the repository root:
 
@@ -503,27 +500,14 @@ Common local log files in the repository root:
 - `TLA_BakerLib.log`
 - `TLA_ASCompiler.log`
 - `TLA_Mapper.log`
-- `TLA_UnitTests.log`
 - `Build/_bake.log`
 - `Build/_errors.txt`
 
 ## CI And Packaging
 
-GitHub Actions are defined in [.github/workflows/build.yml](.github/workflows/build.yml). The workflow runs on pushes and pull requests to `master`.
+GitHub Actions are inactive in this source tree. The previous definition is preserved at [.github/disabled-workflows/build.yml](.github/disabled-workflows/build.yml), outside GitHub's workflow directory. It is historical: it still references removed unit suites and must not be re-enabled without an explicit request and reconciliation. Remote GitHub settings were not changed; source-side deactivation takes effect after publication.
 
-CI jobs:
-
-| Job | What it does |
-| --- | ------------ |
-| `check-formatting` | Runs clang-format 20 over `Scripts` and `SourceExt` (excluding `SourceExt/SHA`). |
-| `unit-tests` | Prepares the Linux workspace and runs engine unit tests. |
-| `compile-scripts` | Runs `CompileAngelScript` through the engine toolset. |
-| `bake-resources` | Runs `BakeResources` and uploads baked output for packaging. |
-| `windows-build` | Builds Windows client/server/editor/mapper/baker targets, including profiling variants. |
-| `linux-build` | Builds Linux client/server/editor/mapper, Android client variants, and Web client. |
-| `macos-build` | Builds macOS and iOS clients. |
-| `package` | Combines baked output and binaries into `TLA-Dev`, `TLA-Test`, and the short-lived `TLA-Release` artifact. |
-| `release` | Runs after packaging on every workflow run. On `push` to `master` it publishes the GitHub release; otherwise it performs the same metadata/artifact preflight as a dry-run and writes the planned release to the log and job summary. |
+Local package targets remain available independently of CI:
 
 Package definitions live in [CMakeLists.txt](CMakeLists.txt):
 
@@ -533,11 +517,7 @@ Package definitions live in [CMakeLists.txt](CMakeLists.txt):
 | `Test` | Windows win64 profiling client and server for `LocalTest`. |
 | `LinuxTest` | Linux x64 client, server, editor, mapper for `LocalTest`. |
 
-Successful `master` builds publish a versioned GitHub release from the repository `VERSION` file. The release job fails if `VERSION` is not `X.Y.Z` or if the matching `vX.Y.Z` tag already exists, so `VERSION` must be bumped before publishing another release.
-
-Non-release runs execute the release job in dry-run mode. Dry-run mode downloads the same `TLA-Release` artifact, validates `VERSION`, computes the release tag and previous tag, verifies the three zip assets, prints their sizes and SHA-256 hashes, and records the release plan in the workflow summary without creating a tag or GitHub release.
-
-Published release assets:
+The archived workflow describes the former release process; local builds do not currently publish a release. Historical release asset names:
 
 - `TLA-Dev.zip`
 - `TLA-Server.zip`
@@ -549,6 +529,10 @@ Project documents:
 
 - [AGENTS.md](AGENTS.md) - repository practices for maintainers and AI agents.
 - [README.md](README.md) - this project overview.
+- [Docs/README.md](Docs/README.md) - maintained game guide index.
+- [Docs/Systems.md](Docs/Systems.md) - gameplay ownership and content/generation boundaries.
+- [Docs/FOSquadWorkspace.md](Docs/FOSquadWorkspace.md) - two-repository setup and bounded compatibility evidence.
+- [Nullability.md](Nullability.md) - script/native nullable contracts and existing checks.
 - [CLAUDE.md](CLAUDE.md) - compatibility pointer to `AGENTS.md`.
 
 Engine documents:
@@ -589,13 +573,7 @@ Before opening a pull request:
    cmake --build Build/Auto --config RelWithDebInfo --target TLA_Client
    ```
 
-4. Run unit tests for native engine-facing changes:
-
-   ```sh
-   cmake --build Build/Auto --config RelWithDebInfo --target TLA_UnitTests
-   ```
-
-5. Smoke-test local startup when runtime behavior changed:
+4. Inspect local startup when runtime behavior changed:
 
    ```sh
    .\Binaries\Server-Windows-win64\TLA_ServerHeadless.exe --ApplySubConfig LocalTest
@@ -603,7 +581,7 @@ Before opening a pull request:
 
 Contribution notes:
 
-- Keep `Engine/` submodule bumps isolated and intentional.
+- Keep engine updates isolated: verify, commit and push engine code to its fork first, then record that published SHA in `EngineRevision`. After code edits follow the Russian-description commit plus fork push policy in [AGENTS.md](AGENTS.md#commit-policy); delegated workers may leave Git operations to their coordinator.
 - Do not hand-edit generated files unless the owning source is updated in the same change.
 - Keep player-facing text pack structure intact and update both English/Russian surfaces when the surrounding content expects both.
 - Add new native files to `CMakeLists.txt`.

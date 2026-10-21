@@ -6,13 +6,13 @@ Convention and runtime enforcement for nullable values across AngelScript and th
 
 > Better to not pass `null` at all than to defensively check inside and bail out.
 >
-> A parameter or return may be marked nullable **only when the function meaningfully handles both null and non-null cases**. Early-exit-on-null guards are a code smell — the contract should be non-null and the caller fixed instead.
+> A parameter or return is nullable when absence is a meaningful part of the contract. Do not add nullable inputs merely to hide invariant failures. Guarding a genuinely fallible lookup with an early return is valid; requiring a non-null value and fixing its caller is appropriate when absence is not supported.
 
 This applies symmetrically on both sides of the script-engine boundary.
 
 ## Script side: `T?` suffix
 
-AngelScript modules in [Scripts/](../Scripts/) use a Kotlin/C#-style `?` suffix on the type to mark nullability. Default is **non-nullable**.
+AngelScript modules in [Scripts/](Scripts/) use a Kotlin/C#-style `?` suffix on the type to mark nullability. Default is **non-nullable**.
 
 ```angelscript
 // Return may be null
@@ -21,7 +21,7 @@ Location? GetCritterLocation(Critter cr)
     if (cr.MapId == ZERO_IDENT) {
         return null;
     }
-    Map map = cr.GetMap();
+    Map? map = cr.GetMap();
     return map != null ? map.GetLocation() : null;
 }
 
@@ -33,7 +33,7 @@ void OnCritterUseWeapon(Critter cr, WeaponUseMode useMode, HitLocation aim, Crit
 }
 ```
 
-The `?` suffix is now **parsed natively by the AngelScript compiler** (FOnline "strong nullable" patch in [Engine/ThirdParty/AngelScript/sdk/angelscript/source/as_parser.cpp](../Engine/ThirdParty/AngelScript/sdk/angelscript/source/as_parser.cpp) and `as_compiler.cpp`). It is no longer stripped by a preprocessor — the compiler tracks nullability through type checking and emits **compile-time diagnostics** (see «Compile-time diagnostics» below). The parser distinguishes type-suffix `?` from the ternary operator `?` by scanning forward at the same nesting level: a type-suffix is followed by an identifier/`[`/`,`/`)` boundary; a ternary is followed by `:` after the truthy expression.
+The `?` suffix is now **parsed natively by the AngelScript compiler** (FOnline "strong nullable" patch in [Engine/ThirdParty/AngelScript/sdk/angelscript/source/as_parser.cpp](Engine/ThirdParty/AngelScript/sdk/angelscript/source/as_parser.cpp) and `as_compiler.cpp`). It is no longer stripped by a preprocessor — the compiler tracks nullability through type checking and emits **compile-time diagnostics** (see «Compile-time diagnostics» below). The parser distinguishes type-suffix `?` from the ternary operator `?` by scanning forward at the same nesting level: a type-suffix is followed by an identifier/`[`/`,`/`)` boundary; a ternary is followed by `:` after the truthy expression.
 
 ### Compile-time diagnostics
 
@@ -55,11 +55,11 @@ Not recognized: multi-condition conjunctions in a block head (`if (a != null && 
 
 **Reference casts.** `cast<T>(x)` is typed **non-nullable** `T@` (the "assume the cast succeeds" contract), so `cast<T>(x) != null` warns as redundant even though a failed downcast returns `null` at runtime. For the type-test idiom, spell the cast nullable: `cast<T?>(x) != null`, or `T? y = cast<T?>(x); if (y != null) { ... }`.
 
-**Formatting.** clang-format treats `?` as the conditional operator and mangles the nullable suffix (`Item? item` → `Item ? item`, `cast<Item?>(x)` → `cast < Item ? > (x)`, `T?[] a` even splits across lines). Always format via the project formatter — VS Code `Format :: *` tasks, [Tools/Formatter/format_project.py](Tools/Formatter/format_project.py), or [FormatSource.bat](FormatSource.bat) — which post-processes clang-format output to restore the suffix in both `.fos` and `.fogui`. Do **not** run `Tools/clang-format-20.exe` directly on these files; it re-mangles the suffix. The GUI generator ([Tools/InterfaceEditor/generate_gui_screens.py](Tools/InterfaceEditor/generate_gui_screens.py)) applies the same repair, so regenerated `Scripts/GuiScreens.fos` stays clean.
+**Formatting.** clang-format treats `?` as the conditional operator and mangles the nullable suffix (`Item? item` → `Item ? item`, `cast<Item?>(x)` → `cast < Item ? > (x)`, `T?[] a` even splits across lines). Always format via the project formatter — VS Code `Format :: *` tasks, [Tools/Formatter/format_project.py](Tools/Formatter/format_project.py), or [FormatSource.bat](FormatSource.bat) — which post-processes clang-format output to restore the suffix in both `.fos` and `.fogui`. Do **not** run `Tools/clang-format-20.exe` directly on these files; it re-mangles the suffix. The GUI generator ([Tools/InterfaceEditor/generate_gui_screens.py](Tools/InterfaceEditor/generate_gui_screens.py)) applies the same repair, so regenerated `Scripts/Generated/GuiScreens.fos` retains `T?` spelling in the normal formatted generation route.
 
 ### `///@ Event` and `///@ RemoteCall` declarations
 
-The same `?` suffix is supported in `///@ Event` and `///@ RemoteCall` tag declarations, and the [`MetadataBaker`](../Engine/Source/Tools/MetadataBaker.cpp) propagates the per-arg nullable bit into the baked engine metadata (`ArgDesc::Nullable` on `EntityEventDesc::Args` / `RemoteCallDesc::Args`).
+The same `?` suffix is supported in `///@ Event` and `///@ RemoteCall` tag declarations, and the [`MetadataBaker`](Engine/Source/Tools/MetadataBaker.cpp) propagates the per-arg nullable bit into the baked engine metadata (`ArgDesc::Nullable` on `EntityEventDesc::Args` / `RemoteCallDesc::Args`).
 
 ```angelscript
 ///@ Event Server Game OnCritterDamaged(Critter cr, Critter? attacker, int32 damage)
@@ -67,7 +67,7 @@ The same `?` suffix is supported in `///@ Event` and `///@ RemoteCall` tag decla
 ///@ RemoteCall Server SwitchCharacter(Critter? newCritter)
 ```
 
-The declaration is the contract. Every `[[Event]]` subscriber and every `[[ServerRemoteCall]]` / `[[ClientRemoteCall]]` / `[[AdminRemoteCall]]` implementation that matches the event/call name must use the same `?` marker on each argument. [`validate_nullable.py`](../Tools/NullableEstimate/validate_nullable.py) walks all `.fos` files, pairs declarations with their handlers by function name, and fails on any per-arg nullable mismatch.
+The declaration is the contract. Every `[[Event]]` subscriber and every `[[ServerRemoteCall]]` / `[[ClientRemoteCall]]` / `[[AdminRemoteCall]]` implementation that matches the event/call name must use the same `?` marker on each argument. [`validate_nullable.py`](Tools/NullableEstimate/validate_nullable.py) walks all `.fos` files, pairs declarations with their handlers by function name, and fails on any per-arg nullable mismatch.
 
 ```angelscript
 // Matches the OnCritterDamaged declaration above.
@@ -80,27 +80,26 @@ void OnCritterDamaged(Critter cr, Critter? attacker, int32 damage) { ... }
 void OnCritterDamaged(Critter cr, Critter attacker, int32 damage) { ... }
 ```
 
-The AngelScript compiler now parses `?` natively and emits the compile-time diagnostics above, so per-arg nullability is checked while compiling. `validate_nullable.py` still enforces declaration↔handler parity across files (the compiler only sees one translation unit at a time), and the engine's runtime null guards on entity meta-types back it up — see «Runtime enforcement» below.
+The AngelScript compiler now parses `?` natively and emits the compile-time diagnostics above, so per-arg nullability is checked while compiling. `validate_nullable.py` still enforces declaration↔handler parity across files (its source scan covers matching declarations and handlers across files), and the engine's runtime null guards on entity meta-types back it up — see «Runtime enforcement» below.
 
 ## Engine side: `ptr<T>` and `nptr<T>`
 
 Native script bindings express the contract in the type itself: `ptr<T>` is a borrowed non-null handle, while `nptr<T>` is a borrowed nullable handle. This applies to `///@ ExportMethod`, exported `///@ ExportRefType` members, script callback signatures (`FindFunc` / `CheckFunc`), exported events, and other generated script-facing surfaces. The former empty `FO_NULLABLE` macro has been removed.
 
+Current declaration excerpts from `Engine/Source/Scripting/ServerCritterScriptMethods.cpp` and
+`ServerPlayerScriptMethods.cpp` (definitions omitted):
+
 ```cpp
-///@ ExportMethod
-FO_SCRIPT_API nptr<Map> Server_Critter_GetMap(ptr<Critter> self)
-{
-    return self->GetEngine()->EntityMngr.GetMap(self->GetMapId());
-}
+///@ ExportMethod PassOwnership
+FO_SCRIPT_API FO_RETURNS_PARENT nptr<Map> Server_Critter_GetMap(ptr<Critter> self);
 
 ///@ ExportMethod
-FO_SCRIPT_API void Server_Player_SwitchCritter(ptr<Player> self, nptr<Critter> cr)
-{
-    self->GetEngine()->SwitchPlayerCritter(self, cr);
-}
-
-auto callback = server->FindFunc<bool, ptr<Critter>, nptr<Item>>(funcName);
+FO_SCRIPT_API void Server_Player_SwitchCritter(ptr<Player> self, FO_REQUIRES_COVER nptr<Critter> cr);
 ```
+
+The cover/ownership annotations express additional engine contracts; they do not change `ptr` versus
+`nptr` nullability. Callback templates use the same wrappers, for example
+`server->FindFunc<bool, ptr<Critter>, nptr<Item>>(funcName)` for a matching callback signature.
 
 Bare handle pointers (`T*`) no longer carry a nullable contract at this boundary. Codegen rejects them; use `ptr<T>` or `nptr<T>`, including inside handle containers such as `vector<ptr<Item>>`. Raw pointers can still be valid in internal C++, low-level/C ABIs, and non-script engine hooks. See [Engine/Docs/SmartPointers.md](Engine/Docs/SmartPointers.md) for the full native pointer vocabulary.
 
@@ -110,12 +109,14 @@ Runtime validation is plumbed through codegen-generated `MethodDesc::Call` lambd
 
 ```
 MethodDesc::Call(call)
-  → NativeDataProvider::CheckArgNotNull(call, i, "Server_Player_SetCritter", "cr", "Critter")   // for each non-nullable entity arg
+  → NativeDataProvider::CheckArgNotNull(call, i, "Server_Game_UnloadCritter", "cr", "Critter")   // for each non-nullable entity arg
   → native invocation
   → NativeDataProvider::CheckReturnNotNull(call, "...", "...")                                  // for non-nullable entity return
 ```
 
-Doing it at the `MethodDesc::Call` boundary means **every** caller of an `///@ ExportMethod` is covered — the AS-to-native bridge, native test harnesses, future Mono-backend dispatch, anyone. The check has no per-call lookup cost beyond a single pointer compare.
+These checks protect dispatch through the generated `MethodDesc::Call` wrapper independently of the
+script backend. They do not wrap arbitrary direct C++ calls to the native implementation. This game
+uses AngelScript; the managed backend remains disabled in its CMake configuration.
 
 Violation surface: `ScriptException` with the method name, parameter name and type, propagated to the calling AngelScript context.
 
@@ -128,9 +129,10 @@ On the C++ engine side the matching spellings are `ptr<Critter>` / `nptr<Critter
 
 The project [validate_nullable.py](Tools/NullableEstimate/validate_nullable.py) gate rejects raw pointers in `ExportMethod`/`FO_SCRIPT_API`, exported `ExportRefType` members, and `FindFunc`/`CheckFunc` template arguments before baking reaches codegen. It deliberately ignores ordinary internal raw pointers and `SetupBakersHook`/other `///@ EngineHook` declarations.
 
-**Out of scope (not implemented yet):** script-to-script call validation. AS does not natively call our bridge for direct script→script invocation; runtime enforcement there would require patching the AS interpreter (`asCContext::ExecuteNext`). In practice script-to-script null contracts are kept by:
-- the static analyzer (see [Tooling](#tooling))
-- the convention itself — every chain eventually reaches an engine call, which IS validated
+**Boundary limit:** direct script-to-script calls do not pass through `MethodDesc::Call`; this native
+wrapper does not establish their runtime validation. Compiler nullability diagnostics and source analyzers
+are separate checks with their own limits (see [Tooling](#tooling)). Do not infer a runtime null guard on
+every script invocation from a native ABI validator pass.
 
 ## TLA migration notes
 
@@ -138,10 +140,10 @@ The current engine enforces these contracts during normal runtime, not only duri
 
 - Bind nullable dictionary/engine results as nullable locals. For example, `dict.get(id, null)` must assign to `T?`, not `T`, when the key can be absent.
 - Generated component accessors are not nullable probes. Check `Has<Component>` first (`cr.HasDialogContext`, `item.HasRadio`, etc.), then use the component accessor.
-- Worker-run callbacks that touch entities need sync coverage. Mark the callback `[[Async]]`, lock the relevant entities with `Sync::Lock...`, and remember that `Game.Sync(...)` replaces the held lock set.
+- TLA runs with `Server.SingleThreadedLogic = True`: server callbacks access reachable entities directly, without `Sync::Lock*`, `Game.Sync` or server `[[Async]]` cover markers. Do not restore the removed server pattern. The reusable engine's multithreaded mode needs a separate migration; client async attributes are not server entity-cover guidance.
 - Dialog metadata participates in baking. Special answer links used by `.fodlg` files need globally visible `///@ Enum DialogAnswerLink ...` declarations, otherwise the dialog baker cannot resolve them even if AngelScript compilation succeeds.
 - The client `Chosen` accessor (`Game.Chosen`) is **non-nullable and throws** when there is no chosen critter. Guard with `HasChosen` instead of a null-check: replace `if (Chosen == null) return;` with `if (!HasChosen) return;`, and place the `HasChosen` guard *before* any `Critter chosen = Chosen;` assignment (the assignment itself throws when absent). Fallible native lookups such as `Game.GetCritter`, `Game.GetItem`, `Critter.GetItem`, and `Map.GetCritterAtScreenPos` return `nptr<T>` and surface as `T?` in script; bind and narrow them accordingly.
-- GUI screen warnings surface in the generated [Scripts/GuiScreens.fos](Scripts/GuiScreens.fos), but the fix belongs in the owning [Gui/*.fogui](Gui/) embedded code (the `?` markers live there in `Type? name` form; clang-format renders them `Type ? name` in the generated output). Edit the `.fogui`, regenerate with `Generate :: GuiScreens.fos`, then recompile — regeneration is faithful, so a fix in the source reproduces exactly.
+- GUI warnings surface in generated [Scripts/Generated/GuiScreens.fos](Scripts/Generated/GuiScreens.fos), but the fix belongs in the owning [Gui/*.fogui](Gui/) embedded code. The normal generator runs clang-format and then `fix_fos_nullable_suffix`, restoring `Type? name` and nullable casts; it does not intentionally leave `Type ? name`. `--no-format` skips that formatting/repair stage. Follow [AGENTS.md](AGENTS.md#guiscreensfos-pitfall) for matching embedded-code fixes versus full regeneration; compile after updating the authored and generated surfaces.
 
 ## Tooling
 
@@ -150,7 +152,6 @@ The active tools are documented in [Tools/NullableEstimate/README.md](Tools/Null
 | Tool | Purpose |
 |------|---------|
 | `validate_nullable.py` | Read-only gate for native `ptr<T>`/`nptr<T>` script ABI, obsolete `FO_NULLABLE`, script primitive `T?`, and Event/RemoteCall declaration-handler parity. |
-| `test_validate_nullable.py` | Focused synthetic unit tests for the native ABI gate, including its internal-pointer and `SetupBakersHook` exclusions. |
 | `apply_nullables.py` | Script-side analyzer/cleanup. `--check` verifies that its output would be unchanged. |
 | `estimate_nullables.py` | Read-only script nullability coverage report. |
 
@@ -160,12 +161,11 @@ The validator deliberately does not infer whether an API should be nullable. Aut
 
 ## Workflows
 
-The VS Code `Analyze :: Nullable Placement` task runs `validate_nullable.py`; `Analyze :: Nullable All` combines it with the script analyzer and coverage report. CI in [.github/workflows/build.yml](.github/workflows/build.yml) runs the focused unit tests, the validator, and `apply_nullables.py --check`.
+The VS Code `Analyze :: Nullable Placement` task runs `validate_nullable.py`; `Analyze :: Nullable All` combines it with the read-only script analyzer and coverage report. Unit suites were removed at the owner's request. [.github/disabled-workflows/build.yml](.github/disabled-workflows/build.yml) is an inactive archive, not a CI gate; do not restore tests or reactivate workflows to follow this guide.
 
 Manual equivalents:
 
 ```bash
-python Tools/NullableEstimate/test_validate_nullable.py
 python Tools/NullableEstimate/validate_nullable.py
 python Tools/NullableEstimate/apply_nullables.py --check
 python Tools/NullableEstimate/estimate_nullables.py
@@ -178,10 +178,11 @@ Choose the contract explicitly at the declaration:
 1. Use `T` / `ptr<T>` when the handle must exist.
 2. Use `T?` / `nptr<T>` only when absence is a real state that the function handles.
 3. Use the same wrappers in exported ref-type accessors and `FindFunc`/`CheckFunc` template signatures.
-4. Run the focused tests and `validate_nullable.py` before baking.
+4. Run `validate_nullable.py` and compile the affected scripts; bake when the changed contract participates in baked content. Native ABI changes also require the smallest affected application build. These checks do not infer nullable intent or establish unexercised runtime behavior.
 
 ## See also
 
-- [Scripts.md](Scripts.md) — overall AngelScript module organization and conventions.
-- [NativeExtensions.md](NativeExtensions.md) — `///@ ExportMethod` codegen pipeline and engine source layout.
-- [Testing.md](Testing.md) — running unit and gameplay tests that exercise the runtime check.
+- [Docs/Systems.md](Docs/Systems.md) — game module ownership and content boundaries.
+- [Docs/ScriptStyle.md](Docs/ScriptStyle.md) — AngelScript conventions.
+- [AGENTS.md](AGENTS.md#native-extensions) — native extension registration and verification policy.
+- [Engine native extensions guide](Engine/Docs/en/how-to/native-extensions.md) — reusable binding/codegen contract.

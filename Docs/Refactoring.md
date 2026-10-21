@@ -6,22 +6,24 @@ inhomogeneous (mixed idioms, dead/relic code, latent bugs). The goal is tidy, re
 code: ordered modules, clearer naming and readability, fewer stray comments (more where they help),
 and bugs fixed with the original intent restored.
 
-Scope is `Scripts/*.fos` (≈262 editable files) plus the supporting validators under
-`Tools/ScriptQuality/`. `Scripts/Content.fos` and `Scripts/GuiScreens.fos` are generated — do not
+Scope is hand-written `Scripts/*.fos` plus the supporting validators under
+`Tools/ScriptQuality/`. `Scripts/Content.fos` and `Scripts/Generated/GuiScreens.fos` are generated — do not
 hand-edit (see [AGENTS.md](../AGENTS.md)).
 
 ## Principles and constraints
 
 - **lf-30 (`H:/lf-30`) is a STYLE/idiom reference, not a source of content or names.** TLA owns its
   serialized properties (e.g. `CurrentHp`/`MaxLife`); do not rename toward lf-30 equivalents.
-- **Committed content is English** (code, comments, docs), even though working discussion is in
-  Russian. Do not mass-translate existing Russian rationale comments; translate only when already
-  editing the surrounding line.
+- **Script comments/headers are Russian** under the 2026-06-20 owner decision; translate existing
+  English comments when touching a module. Serialized names stay English and stable. Maintainer
+  Markdown and native `SourceExt/` C++ stay English; ScriptStyle retains its established Russian text.
 - **Refactor carefully — no thoughtless bulk edits.** In particular, never bulk-delete commented-out
   code: some of it is a migration breadcrumb that may still need porting. Surface, don't delete.
 - **Server holds authoritative gameplay state.** Keep behavior-preserving changes behavior-preserving;
   fix bugs deliberately, verifying each against the code (and git history where load-bearing).
-- **Do not commit/stage/push** unless explicitly asked; the repo owner reviews and commits.
+- **Commit policy:** after code edits, commit with a Russian description and push normally to the
+  configured fork per [AGENTS.md](../AGENTS.md#commit-policy), never upstream or with rewritten history.
+  Preserve unrelated dirty changes; a coordinator can own Git operations for delegated work.
 - **Every step is verified:** Compile AngelScript (0 warnings — warnings are failures) → Bake
   Resources → relevant `Build :: TLA_*`. Behavior-changing server work additionally runs
   `TLA_ServerHeadless` to `"Start server complete!"`. After moving `///@ Property` declarations use
@@ -66,7 +68,11 @@ Adversarial bug-hunting uses read-only finder agents over modules (whole-file or
 for the giants), then independent skeptic agents that try to refute each finding; only findings that
 survive majority verification are applied, after a manual re-check.
 
-## Status
+## Recorded Phase 0–4 outcomes
+
+The following results describe the completed refactoring rounds, not fresh checks of the current dirty
+workspace. Detailed execution evidence stays in [History/Refactoring-2026.md](History/Refactoring-2026.md).
+Current verification follows `AGENTS.md`; removed suites/archived workflows are not available gates.
 
 - **Phase 0 — done.** Validators in `Tools/ScriptQuality/`; full audit recorded under `Build/_audit/`
   (gitignored, local source of truth); baseline established.
@@ -133,7 +139,7 @@ The active phases above are complete. What is intentionally not changed, and why
 
 ---
 
-# Round 2 (2026-06-20) — Polish, headers, comments, bug fixes, tests
+# Round 2 (opened 2026-06-20) — Polish, headers, comments and bug fixes
 
 Reopened by the owner after the Phase 0–4 close. New goal: bring every `Scripts/*.fos`
 module to a uniformly readable, well-documented, correct state. The detailed style rules
@@ -156,36 +162,36 @@ live in [ScriptStyle.md](ScriptStyle.md); this section is the **plan and running
 
 ## Scope
 
-269 `Scripts/*.fos` + 3 `Scripts/Json/*.fos`. Generated files excluded (`Content.fos`,
-`GuiScreens.fos`). Work proceeds in domain batches, low-coupling leaves first, core
+The original round inventory was 269 `Scripts/*.fos` + 3 `Scripts/Json/*.fos`, not a current file count.
+Generated files are excluded (`Scripts/Content.fos`, `Scripts/Generated/GuiScreens.fos`); `Scripts/Core/`
+is now a game-owned library and touched modules follow the same current conventions. Work proceeds in domain batches, low-coupling leaves first, core
 (`Tla`/`Main`/`Parameters`) last — same ordering principle as round 1.
 
 ## Phases
 
-- **R2-0 — Inventory & criteria.** `ScriptStyle.md` (done). A read-only workflow builds a
-  per-module map: purpose (→ header text), domain, size, formatting/naming/structure issues,
-  suspected bugs (line refs), test-feasibility (pure helpers), dependencies. Feeds headers
-  + batching. *(Status: criteria done; inventory pending.)*
-- **R2-1 — Pilot.** 3–5 representative modules (one leaf, one NPC/quest, one client/GUI,
-  one mid-size system) taken fully through ScriptStyle.md so the owner can approve the
-  target look before fan-out. *(Status: pending.)*
-- **R2-2 — Per-domain polish batches.** Each batch, per module: confirm intent → header →
-  translate/add Russian block comments → reorganize structure (radel 4) → format → naming →
-  idiom/nullability cleanup → in-pass bug fixes → verify. Batches sized small (4–6 modules)
-  to stay under server rate limits and keep review tractable. *(Status: pending.)*
-- **R2-3 — Tests.** Per the testing decision below. *(Status: initial harness and seven suites operational;
-  expand coverage with each gameplay batch.)*
+- **R2-0 — Criteria established.** `ScriptStyle.md` and the original `Build/_audit/` inventory informed
+  the batches. Refresh source anchors for a new change; do not treat ignored reports as a portable prerequisite.
+- **R2-1 — Owner sign-off remains distinct from implementation.** Representative modules and later batches
+  were polished, but the historical journal does not establish a separate owner acceptance of the target look.
+  Request that sign-off when it blocks a new structural decision, not another mechanical pilot by default.
+- **R2-2 — Mechanical backfill completed.** The 2026-07-03 journal records headers for all non-generated
+  top-level modules, followed by Russian comment polish for the 13 giants. Current sampled headers in
+  `Main`, `ClientMain`, `GlobalmapGroup`, `Animation` and `Stdlib` agree. This is not a new exhaustive
+  census. Remaining work is per-change semantic/naming/structure review, designer decisions and owner
+  playtests of flagged fixes, not a backlog of 152 missing headers.
+- **R2-3 — Historical harness retired.** The initial harness/suites were implemented and expanded, then
+  removed by owner request. No expansion or restoration is pending under current policy.
 
-## Testing strategy — decided (2026-06-20): B, lightweight harness
+## Historical testing decision — 2026-06-20, superseded after suite removal
 
-Owner chose tier **B**. Port a compact `Testing.fos` from lf-7 down to TLA's systems
-(RegisterTest / Expect / Pass / Fail + fixtures: isolated location, spawn NPC/player/item,
-cleanup with leak check), gated by a `Testing.Enabled` setting, plus a `Launch :: Tests`
-task. Then `Test_*` suites starting with pure helpers (Reputation, Math/Flags, GameTime,
-WeaponHelpers), growing into critical server flows. The initial harness is now implemented;
-new suites remain an incremental part of each refactoring batch.
+The owner then chose tier **B**: a compact `Testing.fos` with RegisterTest / Expect / Pass / Fail,
+isolated-location/spawn/cleanup fixtures, `Testing.Enabled`, `Launch :: Tests`, and pure-helper then
+server-flow suites. That implementation and its expansion are historical evidence, not the current
+workflow. The fork later removed the harness and unit suites. Do not add/modify automated tests or
+infrastructure without an explicit request; choose existing compile/bake/validator/application checks
+and record verification limits. Missing new tests are not a defect.
 
-For the record, the tiers considered:
+For the historical record only, the alternatives considered at that decision were:
 
 - **A. Minimal** — keep relying on compile + bake + headless smoke + engine `TLA_UnitTests`;
   add `//~run`-style dev commands (like `Test.fos`) for manual checks. ~0 new infra.
@@ -199,8 +205,12 @@ For the record, the tiers considered:
 
 ## Verification & process
 
-Per ScriptStyle.md §9. Do not commit/stage/push (owner reviews). Surface contentious or
-gameplay-affecting changes in each batch report rather than applying silently.
+Use current [ScriptStyle.md §9](ScriptStyle.md#9-верификация-каждая-порция--обязательно) and `AGENTS.md`:
+compile/bake/build as the surface requires, direct behavior observation when needed, and existing
+quality/nullable checks. TLA server logic is single-threaded; do not restore removed server `Sync` or
+`[[Async]]` cover patterns. Follow the standing Russian-description commit plus fork push policy after
+code edits (or coordinator-owned Git operations in delegated work). Surface contentious or
+gameplay-affecting changes and unexercised paths explicitly in each batch report.
 
 ## Journal
 

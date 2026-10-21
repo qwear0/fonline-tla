@@ -1,9 +1,11 @@
 # AI Control Bridge (TLA)
 
 The AI control bridge lets an external tool (an MCP host / model) observe and control a real TLA
-client over a localhost TCP socket, without giving server/admin powers. One bridge connection controls
-one client; commands become ordinary client actions and are still validated server-side through the
-normal RPC flow (cooldowns, visibility, range, item ownership, dialog state).
+client over a localhost TCP socket. One bridge connection controls one client. Ordinary commands use
+normal client actions and server-side validation (cooldowns, visibility, range, ownership, dialog state).
+Explicit `qa_*` commands are different: when `AiControl.AllowQaCommands` is enabled on client and server,
+they grant privileged setup/read access, including direct property and inventory changes. Keep QA disabled
+outside disposable development/playtest runs.
 
 This is a **foundation port** adapted from the sibling project (`H:/lf-29`). The native bridge is shared
 verbatim; the script layer (`Scripts/AiControl.fos`) was rewritten against TLA's own client API. It covers
@@ -26,7 +28,7 @@ Two layers:
 embedded-client index used for multi-client port spacing comes from `Game.GetEmbeddedClientIndex()`
 (`SourceExt/ClientExtension.cpp`).
 
-The server still validates every resulting gameplay request normally; the bridge is not a server-authority bypass.
+Ordinary gameplay requests remain server-validated. QA RemoteCalls are a separately gated privileged surface, not ordinary player abilities.
 
 ## Configuration
 
@@ -45,8 +47,8 @@ Declared in `Scripts/AiControl.fos` (`///@ Setting Client ...`) with defaults in
 | `AiControl.MaxObservedEntities` | `80` | Per-snapshot cap for visible critters / map items / inventory |
 | `AiControl.SkipRosterOnLogin` | `False` | Reserved (roster not ported in v1) |
 | `AiControl.ProfileObservationThresholdMs` | `0` | Reserved (profiling not ported in v1) |
-| `AiControl.CaptureRawInputEvents` | `False` | Reserved (raw input capture not ported in v1) |
-| `AiControl.AllowQaCommands` | `False` | Gate (Common, read on client+server) for the `qa_*` setup/fixture commands. Keep off outside test harnesses. |
+| `AiControl.CaptureRawInputEvents` | `False` | Enable `input_lost` event capture; off prevents per-frame focus-loss events flooding the bounded ring |
+| `AiControl.AllowQaCommands` | `False` | Gate (Common, read on client+server) for the `qa_*` setup/fixture commands. Keep off outside disposable QA/playtest runs. |
 
 Keep the listener on loopback. It binds the local client as a remotely controllable process if exposed.
 
@@ -183,7 +185,7 @@ not normal player abilities. Use them to reach content for mechanics/quest runs.
 | `qa_teleport_global` | none | `Critter.TransferToGlobal`. Note: a no-op from the `repl1` replication/limbo start map (it has no global coordinates); use `qa_teleport_map` to reach content. |
 | `qa_set_prop` | `stringArg` (CritterProperty name), `intArg` (value), optional `x` request id | Set an int CRITTER property (`cr.SetAsInt`) — reputation/loyalty values, a prior quest stage, `CurrentHp`, limb-damage flags, etc. A successful script-side write publishes `qa_prop_set` (`{prop, value, requestId}`); a missing/delayed matching event is retried by the caller. |
 | `qa_set_game_prop` | `stringArg` (GameProperty name), `intArg` (value) | Set an int GAME property (`Game.SetAsInt`) — world/quest flags that live on the game singleton, not the critter (e.g. `DenVirginIsAway`). Many dialog demands gate on these, so `qa_set_prop` alone can't satisfy them. |
-| `qa_give_item` | `stringArg` (item proto), `intArg` (count) | Give an item (`cr.AddItem`) — for quest items the giver doesn't hand out, or starting gear. |
+| `qa_give_item` | `stringArg` (item proto), `intArg` (count) | Give item units through `ItemStacks::AddItem(cr, pid, count)` — for quest items the giver doesn't hand out, or starting gear. |
 | `qa_get_prop` | `stringArg` (CritterProperty name), optional `intArg` request id | Authoritative SERVER-side read of an int critter property. The server reads `cr.GetAsInt` and calls the client back (`AiControlReceiveQaProp`), which publishes a `qa_prop_value` event (`{prop, value, requestId}`). Needed because ~1/3 of quest flags are `Server`-scope (not `OwnerSync`) and therefore never appear in the client observation's `quests` — the only way to verify them is this round-trip. |
 | `qa_get_text` | `stringArg` (dialog id), `intArg` (string number) | Resolve a numbered NPC floating-text via `MsgStr::DialogTextKey` and return it in the command message (`text=<…>`). Debug tool for the numbered-text fix below; empty means the string isn't authored for that dialog. |
 | `qa_get_text_pack` | `intArg` (numeric id) | Resolve a row from the baked general `Text` pack for the client's active language via `TextPackKey(TextPackName::Text, …)` and return it as `text=<…>`. This verifies the runtime localization surface rather than only the authored `.fotxt` file. |
@@ -201,8 +203,9 @@ back to a correlated `qa_get_prop` when the property is absent client-side (`Ser
 `qa_set_prop` has the same correlation requirement, with the request id transported in `x` because `intArg`
 already carries the property value. `tla_quest_runner.py` waits for a matching `qa_prop_set` event and resends
 the command when no matching acknowledgement arrives. The acknowledgement is sent only after `SetAsInt`.
-Entity locking remains an explicit `Game.Sync` cover in the `[[Async]]` script callback; no called engine
-function performs implicit synchronization.
+The server callback writes directly under TLA's `Server.SingleThreadedLogic = True` profile. It takes
+no `Game.Sync`/`Sync::Lock*` cover and has no server `[[Async]]` marker. Multithreaded server logic is
+unsupported by the current game scripts; do not infer a reusable engine synchronization contract here.
 
 `qa_teleport_map` accepts `locationPid/mapProto` (e.g. `vault_city/vcity_courtyard`) to land on a specific
 sub-map of a multi-map location. The split is intentional: a synthetic combined `hstring` is not part of baked
@@ -384,14 +387,18 @@ for a single scripted run, not long iterative sessions. Use the persistent-serve
    `///@ ExportMethod` / `///@ EngineHook`). For headless smoke also build `TLA_ServerHeadless`.
 2. `Compile AngelScript` (or `Bake Resources`) — `Scripts/AiControl.fos` sees the generated client exports.
 3. `python Tools/AiControlMcp/smoke_ai_control_mcp.py --static-only` — schema/tool/resource/prompt discovery.
-4. `python -m unittest Tools/AiControlMcp/test_ai_control_screenshot.py` — path confinement, raw TGA validation,
-   blank-like detection, event metadata, and typed command payload checks.
-5. Launch a client with `AiControl.Enabled = True` (above), then
+4. Launch a client with `AiControl.Enabled = True` (above), then
    `python Tools/AiControlMcp/smoke_ai_control_mcp.py` — `tla_ping`, `tla_status`, `tla_observe`, the event
    cursor, and one harmless `tla_clear_actions` round-trip.
-6. With an in-game chosen critter, run `python Tools/AiControlMcp/tla_gui_screenshot_test.py` and inspect its
+5. With an in-game chosen critter, run `python Tools/AiControlMcp/tla_gui_screenshot_test.py` and inspect its
    manifest plus TGA files. Run `python Tools/AiControlMcp/tla_context_gui_playtest.py` for the nine contextual
    windows; use `--require-all` only after preparing every real item/map prerequisite.
+
+The former screenshot Python unit suite was removed. The static discovery smoke checks protocol/tool
+exposure, not live gameplay, screenshot correctness or path-confinement behavior. Existing live tools are
+manual application diagnostics: use disposable characters, inspect reports/images and server/client logs,
+and record the exact exercised surface. Do not create or extend automated tests/infrastructure without an
+explicit owner request; archived workflows do not run these checks for this fork.
 
 ## Playtest runner
 
@@ -624,7 +631,8 @@ the right answers to appear*, via stage `setup` and the right client language:
   owner correctly, but property boolean `false` remained text instead of integer `0`. Property booleans are now
   normalized to their integer storage spelling, and both normal talk paths are live-green.
 
-The `QUESTS` dict ships three verified flows plus a `NOTE` documenting these knobs:
+The `QUESTS` dict ships four flows plus a `NOTE` documenting these knobs (the dated runs above are
+historical verification, not a fresh pass for the current checkout):
 
 - `cassidy_letter` — accept at Arroyo, deliver across town to Vault City (`ArroyoCassidyLetter` 0 → 1 → 2).
 - `arroyo_mynoc_oil` — accept + turn-in at one giver, gated by `Intellect` and an `oil_can` item
@@ -634,8 +642,13 @@ The `QUESTS` dict ships three verified flows plus a `NOTE` documenting these kno
   (`DenSmittyFixit` 1 → 2 → 3 → 4). Shows a quest gated by both a skill and inventory items, all supplied via
   stage `setup`.
 
-Adding a quest is: pick a `Group = Quests` target, give each stage its `setup`, and run once against a Russian
-client to confirm.
+- `klam_vaccination` — accept and report Hish's vaccination task (`KlamVaccination` 0 → 1 → 2);
+  prerequisite per-brahmin flags are injected through `setup`, and the Server-scope result is read via
+  `qa_get_prop`, not assumed present in client observations.
+
+When quest-spec work is explicitly authorized, pick a `Group = Quests` target, give each stage its
+`setup`, and exercise it against a Russian client. Record injected prerequisites separately from ordinary
+gameplay transitions; shipped specs and dated success reports do not prove every quest step was played.
 
 ## Fixed: empty dialog text (key mismatch)
 
@@ -678,7 +691,7 @@ number; all of it rendered empty. NPC names via `@text Dialogs <MsgStr::NpcNameD
 the same way (the name is stored under the string key `"Name"`).
 
 Fix, in two parts:
-- **Engine** (`SourceExt/ClientExtension.cpp::FormatTags`): the `@text` tag now also accepts a three-token form
+- **Game native extension** (`SourceExt/ClientExtension.cpp::FormatTags`): the `@text` tag now also accepts a three-token form
   `@text <pack> <subkey> <key>@` → `FromPack(pack, subkey, key)` (a second key). The two-token form is
   unchanged, so every existing tag keeps its behaviour.
 - **Script**: two helpers — `MsgStr::DialogTextTag(dialogId, num)` → `@text Dialogs <dialogId> <100000000+num>@`

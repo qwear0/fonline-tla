@@ -41,7 +41,7 @@ Android.KeyPassword =
 AngelScript.OverrunReportTime = 100
 AngelScript.DebuggerEnabled = False
 AngelScript.DebuggerBindHost = 0.0.0.0
-AngelScript.MutableGlobalsAllowedNamespaces = MapTime Craft MapEntries Testing Test_ QuestRuntime Behemoth BulletinBoard Caravan CritterAnims CritterTypes DappoLostCRobot DenCooldude DenHubBank DenKliff Drugs Eli EncounterNpc EnergyBarier FixBoy GameEventCaches GameEventRacing GlobalmapGroup GoldenGlobes GuardLib HellOut Json JsonMisc KlamCowboy KlamSmily MapAtoll MapPrimalTribe MapReddingInner MapReddingMiners Maps NcrCommon NcrInvasion NcrPoliceman NcrPostman NpcBags NpcPlanes NrSalvatore NrWriKidnap Parameters Patrol PatternMedic PatternSlayer PatternSniper PatternTerm PidsGroups Poker Poster Purgatory QuestWarehouse Radio ReddingCommon ReddMines ReddWanamingo Replication ReplicationBank ReplicationHell ReplicationTrader Resources Roulette Sandbag SfCommon SfInvasion Trader V13Goris V13ZGuard V13ZSoldier VcGateGuard VcGuard VcLynnet Worldmap Sounds InputHandler UserOptions
+AngelScript.MutableGlobalsAllowedNamespaces = MapTime Craft MapEntries QuestRuntime Behemoth BulletinBoard Caravan CritterAnims CritterTypes DappoLostCRobot DenCooldude DenHubBank DenKliff Drugs Eli EncounterNpc EnergyBarier FixBoy GameEventCaches GameEventRacing GlobalmapGroup GoldenGlobes GuardLib HellOut Json JsonMisc KlamCowboy KlamSmily MapAtoll MapPrimalTribe MapReddingInner MapReddingMiners Maps NcrCommon NcrInvasion NcrPoliceman NcrPostman NpcBags NpcPlanes NrSalvatore NrWriKidnap Parameters Patrol PatternMedic PatternSlayer PatternSniper PatternTerm PidsGroups Poker Poster Purgatory QuestWarehouse Radio ReddingCommon ReddMines ReddWanamingo Replication ReplicationBank ReplicationHell ReplicationTrader Resources Roulette Sandbag SfCommon SfInvasion Trader V13Goris V13ZGuard V13ZSoldier VcGateGuard VcGuard VcLynnet Worldmap Sounds InputHandler UserOptions
 AngelScript.AttributedFunctionDirectCallAllowedNamespaces = Test_
 AngelScript.ExtraDirectCallBlockingAttributes = DialogResult DialogDemand
 
@@ -438,13 +438,6 @@ SpriteMesh.AreaSavingsWeight = 32.0
 
 Story.MainStoryLineActive = False
 
-# Скриптовый тест-харнесс (Scripts/Testing.fos, задача "Launch :: TLA_Tests"; см. Docs/Refactoring.md R2-3)
-Testing.Enabled = False
-Testing.Filter =
-Testing.StopOnFirstFailure = False
-Testing.ExitOnFinish = True
-Testing.TestTimeout = 10000
-
 Timer.DeltaTimeCap = 0
 
 View.SpritesZoomMin = 0.2
@@ -513,7 +506,7 @@ ServerNetwork.ChannelSecretKey = $TARGET_FILE{/var/tla/TLA_CHANNEL_SECRET_KEY}
 
 [ResourcePack]
 Name = Metadata
-InputDirs = Scripts Scripts/Core Scripts/Generated Scripts/Json Scripts/Tests
+InputDirs = Scripts Scripts/Core Scripts/Generated Scripts/Json
 IncludePatterns = *
 Bakers = Metadata
 
@@ -524,7 +517,7 @@ Bakers = Config
 
 [ResourcePack]
 Name = Scripts
-InputDirs = Scripts Scripts/Core Scripts/Generated Scripts/Json Scripts/Tests
+InputDirs = Scripts Scripts/Core Scripts/Generated Scripts/Json
 IncludePatterns = *
 Bakers = AngelScript
 

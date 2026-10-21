@@ -37,7 +37,7 @@ SetOptionValues(
     FO_BUILD_EDITOR ON
     FO_BUILD_ASCOMPILER ON
     FO_BUILD_BAKER ON
-    FO_UNIT_TESTS ON
+    FO_UNIT_TESTS OFF
     FO_OUTPUT_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
 # ---------------------------------------------------------------------------
@@ -87,8 +87,7 @@ AddEngineSources(
     CLIENT SourceExt/ClientAiBridge.cpp
     BAKER SourceExt/BakerExtension.cpp
     BAKER SourceExt/DialogBaker.h
-    BAKER SourceExt/DialogBaker.cpp
-    TESTS SourceExt/TestDialogs.cpp)
+    BAKER SourceExt/DialogBaker.cpp)
 
 RegisterEngineSources()
 

@@ -7,7 +7,6 @@ Nullability checks and migration helpers for TLA scripts and native script bindi
 Run from the repository root:
 
 ```bash
-python Tools/NullableEstimate/test_validate_nullable.py
 python Tools/NullableEstimate/validate_nullable.py
 ```
 
@@ -22,10 +21,17 @@ The native scan is intentionally boundary-specific. It does not report ordinary 
 
 ## Other tools
 
-- `apply_nullables.py`: script-side analysis and cleanup; pass `--check` for a read-only CI gate.
+- `apply_nullables.py`: script-side analysis and cleanup; pass `--check` for a read-only local consistency check.
 - `estimate_nullables.py`: script nullability coverage report.
 - `analyze_redundant_nullchecks.py`, `auto_mark_nullables.py`, `find_dead_nullchecks.py`: focused migration/audit helpers.
 - `apply_native_nullable.py`: legacy helper for pre-`ptr`/`nptr` engine revisions; it is not part of the current gate.
+
+The former Python unit suite has been removed. `Analyze :: Nullable Placement` invokes the validator;
+`Analyze :: Nullable All` also runs the read-only script analyzer and coverage report. GitHub workflows
+are archived, not an active gate. Do not recreate tests/infrastructure without an explicit owner request.
+For source examples, generated GUI ownership and compiler diagnostics, see [Nullability.md](../../Nullability.md).
+Native ABI edits additionally need the smallest affected application build; a validator pass alone does
+not prove runtime behavior.
 
 The author owns nullable intent. These tools do not infer a native `ptr<T>` versus `nptr<T>` contract from function bodies.
 

@@ -30,3 +30,4 @@ __pycache__
 /AS_DEBUG.lock
 /TexDump_**
 /.sass-cache
+/CMakeUserPresets.json

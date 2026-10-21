@@ -4,23 +4,25 @@ Working plan for the ten findings of the 2026-09-02 project audit. Each item sta
 rests on, the steps, and the condition that closes it. This file is a **plan**, not a journal: when an item
 is done its steps collapse to a one-line outcome. Session narrative belongs in `Docs/History/`.
 
-Order below is execution order, not severity. Items 3 and 8 come first because everything else is verified
-through the chain they define; item 9 comes next because it is what a newcomer reads; the heavy work
-(2 → 1 → 7) follows, because extracting data and cutting giant functions is only safe on top of tests.
-Items 4, 5, 6 and 10 are local and are woven in wherever they fit.
+Measurements below are the original audit's observations, not a current size/coverage inventory. Historical
+outcomes are retained as evidence of the work performed. The fork subsequently removed unit suites and
+archived CI: current work uses existing compiler/bake/build/validator/application routes under
+[AGENTS.md](../AGENTS.md), without restoring tests or CI. Remaining sequencing is data extraction (1),
+small combat slices (7), and guard design (6), each with an explicit before/after application observation
+plan; an unverified live behavior change remains blocked rather than excused by old passing counts.
 
 | # | Item | Size | Status |
 | - | ---- | ---- | ------ |
 | 8 | One aggregate verification task | S | **done** |
-| 3 | Quality gates in CI | S | **done**, harness deferred |
+| 3 | Quality gates in CI | S | historical implementation; now archived, no active CI |
 | 9 | Split the journal from the plan, add a systems map | M | **done** |
 | 4 | Record the single-threaded constraint | S | **done** |
-| 5 | Generated and test scripts into their own folders | S | **done** |
-| 6 | Fold the copied guard init back into `GuardLib` | M | re-scoped, blocked on 2 |
+| 5 | Generated and test scripts into their own folders | S | GUI move retained; test folders subsequently removed |
+| 6 | Fold the copied guard init back into `GuardLib` | M | re-scoped; blocked on behavior baseline/design review |
 | 10 | Mutable-globals allowlist becomes a boundary again | rule | **done** (rule written) |
-| 2 | Tests on the hot paths | L | **done**, two modules substituted |
+| 2 | Tests on the hot paths | L | historical completion; suites subsequently removed |
 | 1 | Tables out of code into authored data | XL | crafting done, caravans and worldmap next |
-| 7 | Cut the giant combat functions | L | two slices done, rest needs a combat fixture |
+| 7 | Cut the giant combat functions | L | two slices done; rest needs direct combat baseline/review |
 
 ---
 
@@ -29,34 +31,29 @@ Items 4, 5, 6 and 10 are local and are woven in wherever they fit.
 **Measurement.** `.vscode/tasks.json` holds 43 tasks and no aggregate; the full pre-handoff chain is
 reassembled by hand every session.
 
-**Steps.**
-1. Add `Verify :: All`, chaining through `dependsOn` in order: bake → build targets → engine unit tests →
-   script harness → validators → formatters.
-2. Keep every step an existing task where one exists, so there is one definition per step.
+**Historical implementation.** The aggregate initially included engine unit tests, the script harness and
+`Test :: Python Tools` (156 Python tests), alongside bake/build/validators/formatters.
 
-**Outcome.** `Verify :: All` chains bake → six target builds → engine unit tests → script harness →
-validators → formatters. Every step reuses an existing task except `Test :: Python Tools`, added because the
-156 tests under `Tools/` had none. Both are listed in the `AGENTS.md` task table.
+**Current outcome.** `.vscode/tasks.json` now chains bake → server/headless/client/mapper/ASCompiler builds
+→ ScriptQuality ratchet → nullable analyzers/validator → formatters. Removed suites and their tasks are not
+part of it. `Verify :: All` is optional; choose the smallest adequate existing checks for the changed surface.
 
 ---
 
 ## 3. Quality gates in CI
 
-**Measurement.** CI runs formatting, nullable contracts, engine unit tests, script compilation, baking and
-the platform builds. It does not run the script harness (72 tests), `validate_scripts --ratchet`,
-`Tools/ContentQuality` (19 tests) or the `Tools/AiControlMcp` static suite.
+**Original measurement.** At the audit baseline, CI ran formatting, nullable contracts, engine unit tests,
+script compilation, baking and platform builds, but not the script harness (72 tests),
+`validate_scripts --ratchet`, `Tools/ContentQuality` (19 tests) or the MCP static suite.
 
-**Steps.**
-1. Add a `quality-gates` job that bakes, then runs the four gates above.
-2. Reuse the ratchet baseline as-is; the job fails only on new violations.
+**Historical outcome.** A `quality-gates` job was added for `validate_scripts --ratchet` and
+`pytest Tools -q` (156 tests). Harness integration was deferred because runner binaries under
+`Workspace/output/` differed from local `Binaries/`; it was never established by that work.
 
-**Outcome.** A `quality-gates` job runs `validate_scripts --ratchet` and `pytest Tools -q` (156 tests) on
-every push and pull request.
-
-**Deferred, with the reason.** The script harness is not in CI yet: it needs a Linux server build plus a bake,
-and the binary layout under `Workspace/output/` in the runner differs from the local `Binaries/` tree. Writing
-that step blind would put an unverified job in front of everyone else's pull requests. It needs one session
-with a real runner to pin the path, and then it belongs in the same job.
+**Current disposition.** Workflows are archived in `.github/disabled-workflows/`, and unit suites are
+removed. There is no active push/PR quality gate or pending mandate to restore the harness. Run the
+surviving local validators and appropriate compile/bake/application checks; reactivation or new test
+infrastructure requires an explicit owner request.
 
 ---
 
@@ -69,11 +66,10 @@ and `Docs/SourceTree.md`; the game has no systems map at all.
 **Steps.**
 1. Move the session narrative of `Refactoring.md` into `Docs/History/`, leaving standing decisions and the
    open remainder in place.
-2. Write `Docs/Systems.md`: one screen per system — what it is, where it lives, what it talks to, what
-   covers it.
+2. Write `Docs/Systems.md`: one screen per system — what it owns, where it lives, its side and entrypoints, and its authored-content boundaries.
 3. Add `Docs/README.md` as the index, mirroring the engine's.
 
-**Outcome.** `Docs/Systems.md` maps the systems by area with side, entry point and coverage, and traces one
+**Outcome.** `Docs/Systems.md` maps systems by durable ownership, side and entrypoint, and traces one
 player action through six of them in order. `Docs/README.md` indexes the set. The `Refactoring.md` narrative
 moved to `Docs/History/Refactoring-2026.md`, taking the plan from 1352 lines to 208.
 
@@ -101,17 +97,18 @@ same beside `Server.WorkerThreads`.
 **Measurement.** 294 hand-written modules sit flat beside 27 352 lines of generated `GuiScreens.fos` and
 `Content.fos`; `Scripts/Json/` proves subdirectories bake.
 
-**Steps.**
-1. Move the generated pair to `Scripts/Generated/` and update the GUI generator's output path.
-2. Move `Test_*.fos` and `Testing.fos` to `Scripts/Tests/`.
-3. Update the tools that address these files by path.
+**Original proposed steps (not current migration instructions).** Move the generated pair and tests into
+separate folders, then update tool paths. Only the GUI move was retained as described below; there is no
+current instruction to recreate or move removed test files.
 
-**Outcome.** `Scripts/Tests/` holds the 26 suites, `Scripts/Generated/` the generated `GuiScreens.fos`, and
-the InterfaceEditor config writes there. Baking does not recurse, so both directories are listed in the
-`InputDirs` of the `Metadata` and `Scripts` resource packs — now stated in `AGENTS.md`.
+**Historical outcome.** 26 suites moved into `Scripts/Tests/`; the GUI generator moved to
+`Scripts/Generated/GuiScreens.fos`. The suites/harness and their resource inputs were subsequently removed.
+**Current layout.** Both `Metadata` and `Scripts` explicitly list `Scripts`, `Scripts/Core`,
+`Scripts/Generated` and `Scripts/Json` in `TLA.fomain`; baking does not recurse. Core is game-owned.
 
-**Left in place.** `Content.fos`: nothing in the repository or the engine writes it, so its producer is
-unidentified and a move risks a duplicate namespace when something regenerates it at the old path.
+**Left in place.** The audit did not identify a producer for `Scripts/Content.fos`; that is an unresolved
+ownership question, not proof that no external generation route exists. Keep the generated declaration
+file at its current path and do not hand-edit or move it without establishing its producer.
 
 ---
 
@@ -135,10 +132,13 @@ audit got wrong:
 for the critter, so the eight forwarders and `GuardInit` exist once. That is a design change to five live
 location subsystems with no test coverage at all.
 
-**Sequencing.** Blocked on item 2: cover guard behaviour first (appearance, alert escalation, attack,
-observation timer), then collapse. Doing it the other way round is an unverified rewrite of working content.
+**Sequencing.** Before changing subscriptions, capture guard behavior through existing application tools
+(appearance, alert escalation, attack, observation timer) and review the registry design. No new fixtures or
+test infrastructure are authorized by this plan. If direct observations cannot establish equivalence, defer
+the rewrite for owner review rather than resurrecting removed suites.
 
-**Done when.** Guard subscription has one definition, proven by tests that pass before and after.
+**Done when.** Guard subscription has one definition and the same exercised flows behave equivalently
+before/after, with configuration, observations and remaining gaps recorded.
 
 ---
 
@@ -155,13 +155,13 @@ touched; nothing sweeps it.
 
 ---
 
-## 2. Tests on the hot paths
+## 2. Hot-path test work — historical, suites removed
 
 **Measurement.** 26 test modules, 72 harness tests, covering 22 of 267 modules. 81 866 of 112 457 lines
 (73 %) sit in modules with no test module at all — including `Combat.fos` (3 216 lines), `Main.fos`
 (1 583), `GlobalmapGroup.fos` (1 744), `ChosenActions.fos` (1 342) and `Dialog.fos` (1 292).
 
-**Steps.** Not coverage for its own sake. Three to four boundary cases per module, on the paths that change
+**Original scope (completed then retired, not a current instruction).** Three to four boundary cases per module, on the paths that changed
 most often:
 1. `Combat` — hit chance and damage formulas at their boundaries.
 2. `ChosenActions` — the action-queue state transitions.
@@ -169,7 +169,7 @@ most often:
 4. `Dialog` — demand/result evaluation.
 5. `GlobalmapGroup` — group membership changes.
 
-**Outcome.** The harness went from 72 to 86 tests. Four suites landed, and two of the five planned modules
+**Historical outcome.** The harness went from 72 to 86 tests. Four suites landed, and two of the five planned modules
 were substituted after reading them:
 
 | Module | Suite | What it pins |
@@ -184,9 +184,9 @@ were substituted after reading them:
 `true`. Neither has a surface worth pinning today. `CritterState` took their place: it is the death and
 revive path `Replication` is built on, and it was equally uncovered.
 
-**Follow-on.** `Combat`'s coverage exists because `ApplyDamage`'s inline arithmetic was extracted into the
-pure `ReduceDamage` — the same move item 7 needs, done on the smallest slice. Guard behaviour still has no
-coverage, which is what blocks item 6.
+**Retained result.** `ApplyDamage`'s inline arithmetic was extracted into the pure `ReduceDamage` — the
+same move item 7 needs, done on a small slice. Those historical suites no longer provide a current safety
+net. Guard work (6) and further combat extraction (7) require an adequate direct behavior baseline.
 
 ---
 
@@ -206,16 +206,15 @@ About 10 % of hand-written script lines are content, not logic.
 `Game.ReadResource("...json")` and parse it with `Scripts/Json/`; the data lives in `Resources/ServerData/`.
 The migration follows that path rather than inventing one.
 
-**Safety net first — done.** `Test_FixBoy` now covers the table as it stands in code, so the migration is
+**Historical safety net.** Before crafting extraction, `Test_FixBoy` covered the table in code, making the migration
 verifiable rather than hoped-for: recipe ids unique and dense, every out item, resource and tool resolving
 to a real proto, resources and tools in triples and skill checks in pairs, the first recipe reproduced field
 by field, and a fingerprint over the whole table — 95 recipes, 15 090 experience, 276 resource entries,
-728 resource units, 109 tool entries, 16 409 summed skill thresholds, 29 scripted recipes. The loaded table
-must reproduce all seven.
+728 resource units, 109 tool entries, 16 409 summed skill thresholds, 29 scripted recipes. At that migration, the loaded table was required to reproduce all seven; the removed suite is not an active check.
 
 **Three obstacles, with their answers.**
 1. *Proto ids.* JSON carries the name and the loader hashes it, losing the compile-time check that
-   `Content::Item::` gives today. The per-record proto resolution test is what replaces it.
+   `Content::Item::` gives today. The loader must resolve each referenced proto; existing bake/runtime observations are needed because the historical per-record test has been removed.
 2. *Skill checks.* `CritterProperty` values must resolve from a name; the loader needs a small explicit
    map for the properties the recipes actually use.
 3. *Scripted recipes.* 29 recipes bind a callback. The loader needs a name → function registry in
@@ -224,7 +223,7 @@ must reproduce all seven.
 **Stage 1 — crafting: done.** The 95 recipes live in `Resources/ServerData/CraftRecipes.json`; a 107-line
 loader replaced the 881-line `InitFixBoy`, and `FixBoy.fos` went from 1548 lines to 877. Skill-check
 properties and the 12 recipe scripts bind by name through closed registries that throw on an unknown name.
-`Test_FixBoy` passes unchanged against the loaded table.
+The historical `Test_FixBoy` passed unchanged against the loaded table; it has since been removed.
 
 **What the net caught.** The first converter reproduced five of seven aggregates and lost 20 resource
 entries: five `AddNeedResources` calls carry their brace on the next line after clang-format, and the parser
@@ -241,15 +240,17 @@ Wider per record than crafting; the format is the work, not the volume.
 **Stage 3 — encounters (`WorldmapInit`, 9 970 lines), measured.** Tall *and* wide: `AddGroup` (1 961),
 `AddEncounter` (1 322), `Fighting` (1 190), `SetZone` (892), `CheckProperty` (827), `AddItem` (769),
 `LocationPid` (436), `AssignProperty` (432), `Special` (429), `CheckParam` (423), `AddCritter` (391),
-`Dialog` (391). Twelve-plus chained methods, so the fingerprint has to cover every one of them before a
-converter is written. This is the item that pays most — 86 % of an 11 587-line module — and the one that
+`Dialog` (391). Twelve-plus chained methods, so any future conversion needs a complete source-to-loaded-data comparison across these fields, not only a count check. This is the item that pays most — 86 % of an 11 587-line module — and the one that
 must not be rushed.
 
-**Method, proven twice.** Fingerprint the live table from the running game → write the converter →
-require it to reproduce every aggregate → only then write the loader → re-run the tests unchanged.
+**Remaining method.** Read the live table and its consumer first; record a bounded before/after data and
+application baseline using existing tools. Preserve randomized ranges, callbacks, ordering and all fields,
+not only the historical aggregates. Converter/loader implementation is future code work, not authorized by
+this documentation repair; new automated checks need an explicit owner request.
 
-**Done when.** All three tables live in `Resources/ServerData/`, their tests pass unchanged, and a designer
-can change a recipe, a route or an encounter without recompiling scripts.
+**Done when.** All three tables live in `Resources/ServerData/`, relevant references bake/resolve, exercised
+crafting/route/encounter flows match the baseline, and a designer can edit data without changing script code.
+Record unexercised paths rather than treating the old fingerprints as current evidence.
 
 ---
 
@@ -261,18 +262,18 @@ can change a recipe, a route or an encounter without recompiling scripts.
 `ChosenActions::ChosenProcess` (1 084), `Combat::ApplyDamage` (726), `NpcPlanes::ProcessAi` (547) and
 `Animation::ProcessTactics` (444).
 
-**Steps.** Only on top of item 2's tests for the same module.
+**Remaining steps.** Establish before/after observations of the affected combat flow using existing tools first.
 1. `Combat::CombatAttack` → target selection, hit resolution, damage, effects.
 2. `Combat::ApplyDamage` → per-effect application.
 3. The rest by the same pattern, one at a time.
 
-**Started.** Two pure slices are out of `ApplyDamage` and covered by `Test_Combat`: `ReduceDamage` (the
+**Historical progress.** Two pure slices were extracted from `ApplyDamage` and verified then by `Test_Combat`: `ReduceDamage` (the
 per-shot arithmetic) and `ApplyArmorModifiers` (threshold and resistance adjustment, including the finesse
 bonus that armour bypass silently cancels). `ApplyDamage` is 710 lines, `CombatAttack` still 1 393.
 
-**What the rest needs.** Everything remaining in both functions touches the world — targets, weapons,
-messages, broadcasts — so it cannot be extracted into pure helpers and tested the same way. The next slice
-needs a behavioural fixture: a map with an attacker and a target, and assertions on the resulting state.
-That fixture does not exist yet and is the real prerequisite, not more extraction.
+**What the rest needs.** Remaining code touches targets, weapons, messages and broadcasts. The earlier
+proposal for a new combat fixture is superseded by the owner's no-new-tests policy. First exercise an
+attacker/target flow through the existing client/bridge and inspect authoritative state, messages and logs.
+Defer slices that cannot be adequately verified this way; do not add a replacement harness.
 
 **Done when.** No gameplay function exceeds 250 lines, or the exceptions carry a written reason.

@@ -2,12 +2,20 @@
 
 Project front door for AI maintainers working on **FOnline: The Life After** (TLA). Read this before changing anything. Keep this file as the single source for agent-facing repository practices; `CLAUDE.md` and `.github/copilot-instructions.md` intentionally point here.
 
+## Documentation maintenance skill
+
+- Use [`fosquad-doc-maintainer`](skills/fosquad-doc-maintainer/SKILL.md) for repository orientation, documentation audits/impact checks, and changes to layout, gameplay ownership, entrypoints, script/content/native contracts, generation, build/verification workflows, documentation, skills or agent instructions. Read its `SKILL.md` before doing that work; do not rely on the skill name alone.
+- The canonical skill lives in this repository under `skills/fosquad-doc-maintainer/`. Its local installation is `~/.agents/skills/fosquad-doc-maintainer`; if it is not discovered automatically, read the canonical file directly. Resolve implementation paths against the active checkout, not the global skill installation.
+- Keep `Docs/README.md`, affected ownership/feature docs and operational instructions synchronized using the skill's bounded evidence and update policy. Follow its audit checklist after documentation edits, but do not call a focused update or skill installation a full documentation audit.
+- `Engine/` is a separate repository. For authorized engine documentation work, also read that checkout's `skills/fosquad-engine-doc-maintainer/SKILL.md`; do not silently include engine edits in a game-only task.
+- Skills do not override the testing or commit policies below. Reuse existing checks; do not import QSD-specific audit scripts, create a replacement test framework or restore removed suites to satisfy old documentation.
+
 ## What This Project Is
 
-- TLA is a multiplayer game built on top of the reusable **fonline-engine** submodule in `Engine/`.
+- This FOSquad fork uses TLA game content plus the reusable **fonline-engine** in an independent sibling repository.
 - The split is engine plus game:
-  - `Engine/` - upstream engine submodule. Treat as external unless the task explicitly requires an engine change.
-  - `Scripts/*.fos` - AngelScript gameplay, dialogs, quests, AI, GUI behavior, and server/client hooks. Hand-written gameplay code sits at the top level; `Scripts/Generated/` holds generated files, `Scripts/Tests/` the harness suites, `Scripts/Json/` the JSON helpers, `Scripts/Core/` the utility library (`Gui`, `Math`, `Time`, `Color`, `Sprite`, `Tween`, ...) that the engine used to bundle and that TLA owns since the engine went backend-neutral. Every script directory must be listed in the `InputDirs` of the `Metadata` and `Scripts` resource packs in `TLA.fomain` — baking does not recurse.
+  - `Engine` - relative symlink to `../FOSquad_Engine`. Treat as external unless the task explicitly requires an engine change. `EngineRevision` records the published engine baseline; see `Docs/FOSquadWorkspace.md`.
+  - `Scripts/*.fos` - AngelScript gameplay, dialogs, quests, AI, GUI behavior, and server/client hooks. Hand-written gameplay code sits at the top level; `Scripts/Generated/` holds generated files, `Scripts/Json/` the JSON helpers, `Scripts/Core/` the utility library (`Gui`, `Math`, `Time`, `Color`, `Sprite`, `Tween`, ...) that the engine used to bundle and that TLA owns since the engine went backend-neutral. Every script directory must be listed in the `InputDirs` of the `Metadata` and `Scripts` resource packs in `TLA.fomain` — baking does not recurse.
   - `SourceExt/*.cpp` / `SourceExt/*.h` - project-local native C++ extensions registered from `CMakeLists.txt`.
   - `Critters/`, `Items/`, `Maps/`, `Dialogs/`, `Gui/`, `Texts/`, `Resources/` - authored game content and assets.
   - `TLA.fomain` - master engine/game config and `[SubConfig]` profiles.
@@ -20,22 +28,22 @@ Project front door for AI maintainers working on **FOnline: The Life After** (TL
 
 ## Repository Orientation
 
-- `Engine/` - pinned fonline-engine submodule. Do not edit in place for game behavior; advance the SHA in coordinated chunks.
+- `Engine/` - link to the independent engine repository. Do not edit in place for game behavior; commit engine changes separately and advance `EngineRevision` in coordinated chunks.
 - `Scripts/Content.fos` - generated/baked content declarations. Do not hand-edit.
 - `Scripts/Generated/GuiScreens.fos` - generated screen bindings. Source of truth: `Gui/*.fogui` plus `Tools/InterfaceEditor/generate_gui_screens.py`. Do not hand-edit unless you also update the owning `.fogui` code as described below.
 - `Scripts/GuiScreensExt.fos` - hand-written companion to `GuiScreens.fos`; non-generated GUI logic lives here.
-- `Scripts/ItemStacks.fos` - item counts and stacking. The engine handles single item instances only (it gives `Count` and `Stackable` no meaning and never merges), so units are added, counted, destroyed, split and moved through `ItemStacks::` - never `Critter.AddItem`, `Map.AddItem`, `Item.AddItem`, `Game.MoveItem`, `Game.DestroyItem(item, count)` or `Item.Clone(count)` directly. Covered by `Scripts/Tests/Test_ItemStacks.fos`.
+- `Scripts/ItemStacks.fos` - item counts and stacking. The engine handles single item instances only (it gives `Count` and `Stackable` no meaning and never merges), so units are added, counted, destroyed, split and moved through `ItemStacks::` - never `Critter.AddItem`, `Map.AddItem`, `Item.AddItem`, `Game.MoveItem`, `Game.DestroyItem(item, count)` or `Item.Clone(count)` directly.
 - `Scripts/UserOptions.fos` - what the options screen saves to the client's local config (`LocalSettings.focfg`, applied at the next start); keys must be `Group.Name`.
 - `Scripts/Sounds.fos` - play sounds through `Sounds::Play(name)`, not `Game.PlaySound`: the engine plays only an exact resource path, and `Sounds` maps TLA's names (any-case paths, bare Fallout names such as `LEVELUP.ACM`, `NAME_1..NAME_N` series) onto the baked paths.
-- `Scripts/DayColor.fos` - the day/night tint. The engine no longer evaluates `DayColorTime` / `DayColor` itself: the client and the mapper push the tint every frame through `Map.SetDayColors`, and without it every map draws with the engine's white default, which blows roofs and other unlit sprites out to white. Covered by `Scripts/Tests/Test_DayColor.fos`.
+- `Scripts/DayColor.fos` - the day/night tint. The engine no longer evaluates `DayColorTime` / `DayColor` itself: the client and the mapper push the tint every frame through `Map.SetDayColors`, and without it every map draws with the engine's white default, which blows roofs and other unlit sprites out to white.
 - `Gui/*.fogui` - GUI definitions and embedded screen script code.
 - `SourceExt/CommonExtension.cpp` - SHA helpers shared by client/server.
 - `SourceExt/ServerExtension.cpp` - server image checks, dialog plumbing, visibility hooks, critter busy/free stubs.
 - `SourceExt/ClientExtension.cpp` / `SourceExt/ClientExtension.h` - `Game.FormatTags`, client critter busy/free stubs, `ClientInitHook` + `ClientExtData` (holds the AI control bridge state and embedded-client index).
 - `SourceExt/ClientAiBridge.cpp` - localhost TCP line protocol for the AI control bridge (client-side test/automation). Pairs with `Scripts/AiControl.fos` and `Tools/AiControlMcp/`. See [Docs/AiControl.md](Docs/AiControl.md).
 - `SourceExt/BakerExtension.cpp`, `SourceExt/DialogBaker.*`, `SourceExt/Dialogs.*` - dialog bake/runtime support.
-- `Engine/Source/Tools/AudioBaker-Acm.*` - optional Fallout ACM importer, enabled by `FO_AUDIO_ACM` in `CMakeLists.txt`: `.acm` is baked to Ogg Vorbis, effects as mono and `sound/music/` as stereo. Decoder regressions live in `Engine/Source/Tests/Test_AudioBakerAcm.cpp`; `Test_AudioBaker.cpp` covers baked output and disabled requests.
-- `SourceExt/ContentMigration.cpp` - TLA-specific content/data migrations.
+- `Engine/Source/Tools/AudioBaker-Acm.*` - optional Fallout ACM importer, enabled by `FO_AUDIO_ACM` in `CMakeLists.txt`: `.acm` is baked to Ogg Vorbis, effects as mono and `sound/music/` as stereo.
+- `Scripts/Migration.fos` - current server `///@ MigrationRule` declarations for serialized property removals/renames. No `SourceExt/ContentMigration.cpp` is registered or present; these rules are not a general replacement for every historical native data conversion.
 - `SourceExt/SHA/` - bundled SHA implementation wrapped as a static library.
 - `Tools/Formatter/format_project.py` and `FormatSource.bat` - formatting entry points. VS Code tasks use the Python formatter.
 - `Tools/InterfaceEditor/generate_gui_screens.py` - supported GUI screen generator.
@@ -44,26 +52,34 @@ Project front door for AI maintainers working on **FOnline: The Life After** (TL
 
 Adding or removing a native extension file requires updating the relevant `AddEngineSources(...)` block in `CMakeLists.txt` under `COMMON`, `SERVER`, `CLIENT`, or `BAKER`.
 
+## Verification and tests
+
+- GitHub Actions are disabled for this workspace; do not rely on CI workflows. Workflow definitions are archived under `.github/disabled-workflows/`, not executed by GitHub. Remote repository settings are not changed until the source changes are published.
+- Do not write, extend, or modify automated tests or test infrastructure unless explicitly requested by the user. This includes temporary test scripts and tests delegated to other agents. Do not routinely ask for exceptions.
+- Verify changed behavior using the least costly adequate means already available: existing checks, type checks, or direct use of the application's CLI, API, or UI. Do not recreate a test suite under the label of diagnostics or smoke checks, or build new verification infrastructure.
+- Judge observed behavior against the user's requirements, not merely successful execution or the implementation's own success messages. Report what was actually checked, the result, and any significant verification gaps.
+- The absence of new tests is not a defect and must not trigger review requests for test coverage.
+
+This policy supersedes upstream testing recommendations in imported documentation and historical evidence. The game and engine unit suites, script harness and Python unit tests were removed at the owner's request. Existing manual gameplay tools and production diagnostics are not unit-test suites.
+
 ## Build And Verify
 
-VS Code tasks in `.vscode/tasks.json` are the authoritative workflow. The same commands can be run directly from the terminal.
+VS Code tasks in `.vscode/tasks.json` provide existing build and inspection commands. Select the smallest adequate checks for the task; the aggregate `Verify :: All` is optional, not a mandatory handoff gate.
 
-Warnings are treated as failures. Keep script compilation, resource baking, native builds, tests, and smoke runs at zero warnings; fix new or existing warnings instead of hand-waving them in the handoff.
+Warnings are treated as failures. Keep script compilation, resource baking and native builds at zero warnings; report verification gaps explicitly.
 
 | Task | When to use |
 | ---- | ----------- |
-| `Verify :: All` | The full pre-handoff chain: bake, build every target, engine unit tests, script harness, validators, formatters. Run this instead of reassembling the steps by hand; CI runs the same chain. |
+| `Verify :: All` | Optional broad local chain: bake, build application targets, run script/nullable validators and formatters. It does not run unit tests. |
 | `Bake Resources` | After edits in `Scripts/`, `Dialogs/`, `Maps/`, `Items/`, `Critters/`, `Texts/`, `Gui/`, or `TLA.fomain`. |
 | `Force Bake Resources` | When incremental baking may be stale. Use sparingly. |
 | `Compile AngelScript` | Fast script syntax/API check. |
-| `Build :: TLA_Server`, `Build :: TLA_ServerHeadless`, `Build :: TLA_Client`, `Build :: TLA_Mapper`, `Build :: TLA_Baker`, `Build :: TLA_ASCompiler`, `Build :: TLA_UnitTests` | Build one target in `Build/Auto`, `RelWithDebInfo`. |
+| `Build :: TLA_Server`, `Build :: TLA_ServerHeadless`, `Build :: TLA_Client`, `Build :: TLA_Mapper`, `Build :: TLA_Baker`, `Build :: TLA_ASCompiler` | Build one target in `Build/Auto`, `RelWithDebInfo`. |
 | `Prepare :: TLA_*` | `Bake Resources` plus the corresponding build target. |
 | `Launch :: TLA_Server [windows]` / `[linux]` | Build, bake, then run the server with `LocalTest`. |
-| `Launch :: TLA_UnitTests [windows]` / `[linux]` | Build, bake, then run engine unit tests. |
 | `Generate :: GuiScreens.fos` | Regenerate `Scripts/Generated/GuiScreens.fos` from `Gui/*.fogui`. |
 | `Generate :: Version` | Update `VERSION` via `Tools/GenerateVersion/generate_version.py`; do not hand-edit `VERSION`. |
 | `Format :: Scripts`, `Format :: Prototypes`, `Format :: Main Config`, `Format :: All` | Format the relevant authored files. |
-| `Test :: Python Tools` | The tooling test suites under `Tools/` (script/content quality, nullable, AI control bridge). |
 
 Typical command equivalents:
 
@@ -80,17 +96,17 @@ Baseline verification after an engine bump or broad script/content change:
 3. `Build :: TLA_Client`
 4. If runtime startup matters, run `TLA_ServerHeadless` or `Launch :: TLA_Server [windows]` and confirm startup reaches `"Start server complete!"`.
 
-For native engine-facing changes, also build/run `TLA_UnitTests` when the touched surface is covered by engine tests.
+For native engine-facing changes, build the smallest affected application target; use a direct application interaction if build success cannot establish the requested behavior.
 
 ## Engine Update Workflow
 
-The engine moves frequently. Handle submodule bumps deliberately:
+The engine moves frequently. Handle external engine updates deliberately:
 
-1. Inspect `Engine` status and recent upstream commits first.
-2. Prefer fast-forwarding `Engine` at coherent upstream boundaries instead of a large blind jump.
-3. After each bump: `Bake Resources` -> build affected targets -> fix script/config/native fallout.
+1. Inspect `/apps/FOSquad_Engine` status and recent upstream commits first. `Engine` is a symlink, not a submodule; do not run submodule update commands.
+2. Prefer fast-forwarding the engine at coherent upstream boundaries instead of a large blind jump. Record the verified published commit in `EngineRevision`; do not invent a SHA for uncommitted engine changes.
+3. After each update: `Bake Resources` -> build affected targets -> fix script/config/native fallout. Keep game and engine commits separate.
 4. Cross-check `H:/lf-30` when upstream renames or signatures shift. It is the nearest migration reference and often has the pattern already.
-5. Do not commit, stage, or push unless the user explicitly asks. The user reviews and commits changes themselves.
+5. Follow the Commit Policy below: commit and push task-owned code changes after verification. Keep engine and game commits separate; update `EngineRevision` only to an actually published engine commit.
 
 Typical breakage points after a bump:
 
@@ -150,8 +166,8 @@ Native C++ conventions:
   pins the engine to one worker, so a script may read and mutate any entity it can reach without
   synchronizing first. The script-side `Sync` module and the `[[Async]]` markers that propagated from
   `Game.Sync` were removed with it — do not reintroduce either.
-- **The multithreaded configuration is not supported by the current scripts.** Turning
-  `Server.SingleThreadedLogic` off still passes the harness (72/72), because the resulting
+- **The multithreaded configuration is not supported by the current scripts.**
+  Before the test suites were removed, turning `Server.SingleThreadedLogic` off passed the harness (72/72), because the resulting
   `Entity access without sync` throws are recoverable at the job frontier — but it logs 794 of them and
   stops 253 time events by exception. `Server.WorkerThreads` therefore has no effect. Restoring the
   multithreaded mode means restoring entity cover across the scripts, which is a project of its own.
@@ -181,7 +197,7 @@ Native C++ conventions:
 Authored inputs:
 
 ```text
-Scripts/*.fos, Scripts/Core/*.fos, Scripts/Generated/*.fos, Scripts/Json/*.fos, Scripts/Tests/*.fos
+Scripts/*.fos, Scripts/Core/*.fos, Scripts/Generated/*.fos, Scripts/Json/*.fos
 Critters/*.focr, Items/*.foitem, Maps/*.fomap
 Dialogs/*.fodlg, Gui/*.fogui, Texts/*.fotxt
 Resources/*
@@ -234,11 +250,14 @@ Pick the boundary before reaching for a heavy interactive session:
 | Native compile/link error | Build the narrowest `TLA_*` target and inspect the first compiler error. |
 | Server startup/runtime issue | `Build :: TLA_ServerHeadless` or `Launch :: TLA_Server [windows]`, then inspect `TLA_ServerHeadless.log` / `TLA_Server.log`. |
 | Client presentation/input issue | `Build :: TLA_Client`, run the client/server pair, then inspect `TLA_Client.log`. |
-| Engine regression | Check `Engine` upstream commits, compare `H:/lf-30`, then run/build `TLA_UnitTests` when applicable. |
+| Engine regression | Inspect the independent engine checkout and the changed boundary; build the affected target and reproduce through the application when needed. |
 
 ## Commit Policy
 
-- Do not run `git commit`, `git add`, `git push`, or destructive git commands unless the user explicitly asks.
+- If there were code edits, create a commit with a description in Russian and push it. This is standing authorization for task-owned staging, commits and a normal push to the configured fork remote; do not push to upstream or rewrite published history.
+- Never commit files in folders added to `.gitignore`.
+- After publication, if it makes sense and Git status is clean, start the appropriate existing project build and report it as started, not passed, until completion is observed. This repository has no QSD `build.sh`; use the build entrypoints documented above.
+- Keep game and engine changes in separate repositories and commits. Do not include unrelated user edits in task commits, discard them, or use destructive Git operations.
 - The worktree may contain user changes. Never revert or overwrite changes you did not make.
 - If unrelated files are dirty, leave them alone. If touched files contain user changes, read them and work with them.
 - Summarize changed files, verification, and any residual risk at the end of the task.
@@ -246,7 +265,7 @@ Pick the boundary before reaching for a heavy interactive session:
 ## Quick Reference
 
 - `Docs/README.md` - documentation index.
-- `Docs/Systems.md` - map of the gameplay systems: what they are, where they live, what covers them.
+- `Docs/Systems.md` - map of gameplay ownership, sides, entrypoints and authored-content boundaries.
 - `Docs/AuditPlan.md` - the current improvement queue with the measurement behind each item.
 - `README.md` - repo-root overview.
 - `Docs/AiControl.md` - AI control bridge (client-side TCP test/automation) + the `Tools/AiControlMcp/` MCP adapter for observing/controlling a real client to test mechanics and quests.
@@ -255,5 +274,5 @@ Pick the boundary before reaching for a heavy interactive session:
 - `.vscode/tasks.json` - authoritative build/generate/format/launch tasks.
 - `.vscode/launch.json` - debugger launch profiles when present.
 - `CMakeLists.txt` - target wiring and native extension roles.
-- `.github/workflows/` - CI definitions.
+- `.github/disabled-workflows/` - archived, inactive upstream workflow definitions. Do not reactivate without the owner's request.
 - `H:/lf-30/AGENTS.md` - reference project on the same engine; copy only generic, non-project-specific practices.

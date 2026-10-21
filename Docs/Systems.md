@@ -1,132 +1,133 @@
-# Game Systems
+# Game systems and ownership
 
-The map of TLA's own gameplay code — what the systems are, where they live, what they talk to, and what
-covers them. The engine's equivalent is `Engine/Docs/Architecture.md`; this file is the layer above it.
+TLA's gameplay ownership map: where to start reading, which side owns a change, and which authored
+inputs accompany it. This is not a line-count inventory or a claim of test coverage. For repository
+rules and proportionate verification, read [AGENTS.md](../AGENTS.md); for the external engine boundary,
+read [FOSquadWorkspace.md](FOSquadWorkspace.md).
 
-Read this before opening a `.fos`. Every module also carries a Russian header block describing itself, so
-this map deliberately does not repeat those: it gives the shape, and the headers give the detail.
+## Wiring and authority
 
-## How the code is wired
+- **No includes.** Baking sees `.fos` modules from explicitly listed resource-pack directories.
+  `TLA.fomain` lists `Scripts`, `Scripts/Core`, `Scripts/Generated` and `Scripts/Json` for both
+  `Metadata` and `Scripts`; input discovery does not recurse.
+- **Game owns its libraries.** `Scripts/Core/` contains GUI and utility modules such as `Gui`,
+  `Math`, `Time`, `Color`, `Sprite` and `Tween`, formerly bundled with the engine. `Scripts/Json/`
+  is also game-owned. Neither is an engine source tree.
+- **Entrypoints.** `Main` (server), `ClientMain` (client) and `MapperMain` (mapper) route broad lifecycle
+  events. Subsystems also subscribe to their own events from `[[ModuleInit]]` functions; inspect the
+  actual subscription, not only the central dispatchers.
+- **Server authority.** Client input queues intent; server RPC handlers validate and execute gameplay
+  changes. Server events and timers also change state; not every state change originates in an RPC.
+- **Single-threaded server.** `Server.SingleThreadedLogic = True` fixes logic to one worker. Scripts
+  take no entity cover; do not restore the removed `Sync` module or server `[[Async]]` cover pattern.
+  The engine's reusable multithreaded mode is not supported by the current game scripts.
 
-- **No includes.** Baking sees every `.fos`; cross-module calls are `Namespace::Function()`. A file's
-  namespace always equals its filename. Hand-written gameplay code is at the top of `Scripts/`;
-  `Generated/`, `Tests/` and `Json/` are separate, and every directory is listed in `TLA.fomain`.
-- **Three dispatchers, many subsystems.** `Main` (server), `ClientMain` (client) and `MapperMain` (mapper)
-  subscribe to engine events in `ModuleInit` and delegate. Almost nothing else subscribes to world events
-  directly; a subsystem exposes functions and its own narrow events instead.
-- **The server is authoritative.** The client queues intent and renders; every state change that matters is
-  a `[[ServerRemoteCall]]` landing in a server module.
-- **One thread.** Since `Server.SingleThreadedLogic` was turned on, game logic runs on a single worker and
-  scripts take no entity cover. See the constraint note in [../AGENTS.md](../AGENTS.md).
+## Trace one player action
 
-## The path of one player action
+1. `ClientMain` / `Gui/Game.fogui` route input to `ChosenActions`.
+2. Client `ChosenActions` queues intent and sends the appropriate remote call.
+3. Server `ChosenActions` validates the request and delegates execution to `CritterActions`.
+4. `CritterActions` spends AP and performs pickup, item use, skills, reload or attack.
+5. `Combat` resolves attacks; `Parameters` supplies derived stats.
+6. Replicated state/events return to the client; `Animation` selects presentation animations.
 
-The most useful thing to trace first, because six systems appear in it in order:
+## System owners
 
-1. **Input.** `ClientMain` turns a click into an intent and hands it to `ChosenActions`.
-2. **Queue.** `ChosenActions` (client side) holds the action queue, regenerates action points, and sends
-   the intent on as a remote call.
-3. **Arrival.** `ChosenActions` (server side) receives it and validates the preconditions.
-4. **Execution.** `CritterActions` spends AP and performs the real-time act — pick up, move item, use skill,
-   reload, attack.
-5. **Rules.** `Combat` resolves an attack: hit chance, damage, criticals; `Parameters` supplies every
-   derived stat it reads.
-6. **Reply.** The result travels back as a broadcast and `ClientMain` animates it via `Animation`.
-
-## Systems
-
-`S` = server, `C` = client, `M` = mapper. "Covered" names the harness suite, when one exists.
+`S` = server, `C` = client, `M` = mapper. Module names below refer to `Scripts/<name>.fos` unless a
+subdirectory is explicit. Russian module headers give finer-grained scope and entrypoints.
 
 ### World, travel and locations
 
-| Module | Side | Lines | Entry point | Covered |
-| ------ | ---- | ----: | ----------- | ------- |
-| `Worldmap` | S | 11 587 | `WorldmapInit` builds the encounter tables | `Test_Worldmap` |
-| `GlobalmapGroup` | S/C | 1 745 | `ModuleInit`; `GlobalProcess`, `GroupMove` | — |
-| `GlobalMapLocations` | S/C | 220 | `ModuleInit`; known-location list per critter | — |
-| `Location` | S | 338 | `ModuleInit`; creation, garbage collection | — |
-| `Entrance` | S | 353 | `CritterTransferToMapEntry` | — |
+| Owner | Side | Responsibility / entry to inspect |
+| --- | --- | --- |
+| `Worldmap` | S | Encounter tables and world-map rules; `WorldmapInit` |
+| `GlobalmapGroup` | S/C | Group membership and travel; global processing and movement |
+| `GlobalMapLocations` | S/C | Known-location lists and synchronization |
+| `Location` | S | Location creation and garbage collection |
+| `Entrance` | S | Authored entry selection and critter transfer |
+| `Caravan` | S | Caravan routes and schedules; initialization remains a separate migration concern |
 
-Random encounters are the heaviest system in the project and are almost entirely table data; see item 1 in
-[AuditPlan.md](AuditPlan.md).
+Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), not implied complete by this map.
 
-### Combat and critter rules
+### Combat, critters and lifecycle
 
-| Module | Side | Lines | Entry point | Covered |
-| ------ | ---- | ----: | ----------- | ------- |
-| `Combat` | S | 3 217 | `CombatAttack`, `ApplyDamage` | — |
-| `Parameters` | S/C | 1 626 | `ModuleInit` registers property getters/setters | `Test_Parameters` |
-| `CritterActions` | S | 1 054 | called by `ChosenActions`; `ProcessAp` | `Test_CritterActions` |
-| `CritterState` | S | 260 | `ModuleInit`; alive/knockout/dead transitions | — |
-| `NpcPlanes` | S | 1 461 | `ModuleInit`; `ProcessAi` on critter idle | `Test_NpcPlanes` |
-| `Animation` | C | 1 248 | `ModuleInit`; `ProcessTactics` | — |
+| Owner | Side | Responsibility / entry to inspect |
+| --- | --- | --- |
+| `Combat` | S | Hit resolution, damage and effects; `CombatAttack`, `ApplyDamage` |
+| `Parameters` | S/C | Derived property getters/setters and character rules |
+| `CritterActions` | S | Authoritative actions and AP processing |
+| `CritterState` | S | Alive, knockout and dead transitions |
+| `NpcPlanes` / `Pattern*` | S | NPC plan processing and behavior patterns |
+| `Animation` | C/M | `InitAnimation` subscribes to critter animation events; Fallout/tactics selection; sounds only on C |
+| `ChosenActions` | S/C | Client action queue and server request handlers |
+| `PlayerRegistration` | S/C | Login and registration |
+| `Replication` | S | Death, respawn and permanent-death flow |
 
-`Combat` is the largest uncovered system and holds two of the project's longest functions — items 2 and 7
-in the plan point at the same module from different sides.
+See [Animation.md](Animation.md) for the native baked root-motion flow, distinct from the game animation selector.
 
-### Player intent and lifecycle
+### Interaction, items and UI
 
-| Module | Side | Lines | Entry point | Covered |
-| ------ | ---- | ----: | ----------- | ------- |
-| `ChosenActions` | S/C | 1 343 | `ModuleInit`; `ChosenProcess` | — |
-| `Main` | S | 1 584 | `ModuleInit` — the server event dispatcher | — |
-| `ClientMain` | C | 1 734 | `ModuleInit` — the client event dispatcher | — |
-| `PlayerRegistration` | S/C | 560 | `ModuleInit`; login and registration | `Test_PlayerRegistration` |
-| `Replication` | S | 519 | death, respawn, permanent death | — |
-| `MoveCursor` | C | 182 | `ModuleInit`; the move hex under the mouse | `Test_MoveCursor` |
+| Owner | Side | Responsibility / entry to inspect |
+| --- | --- | --- |
+| `Dialogs` | S/C | Dialog contexts, speech/answer transport and close flow |
+| `Dialog` / `NpcDialog` | S | Authored demand/result handlers and NPC-specific helpers |
+| `Barter` | S | Authoritative NPC barter |
+| `FixBoy` | S/C | Crafting UI and validated crafting; recipes in `Resources/ServerData/CraftRecipes.json` |
+| `ClientItems` | S/C | Inventory/container presentation and synchronization |
+| `Item` / `ItemMovement` | S | Doors, holodisks, deferred destruction and move rules |
+| `ItemStacks` | S/C | Game-owned `Count`/`Stackable`: add, count, destroy, split and move units; client count/copy helpers |
+| `MoveCursor` / `GuiScreensExt` / `DropMenuHandler` | C | Move hex, cursor cycling and held-click action menu |
+| `Gui/*.fogui` | C | Authored screens and embedded callbacks, including `Gui/Game.fogui` input |
+| `Core/Gui` and companion Core GUI modules | C | Game-owned retained GUI infrastructure |
 
-The cursor is spread over several places. The right button cycles `Gui::Cursor` (`GuiScreensExt::NextCursor`:
-move, attack when a weapon is active and no battle timeout runs, action); the left button acts by mode in
-`GameLMouseDown` of `Gui/Game.fogui`. `MoveCursor` draws the move hex in two parts around the map sprites, a
-cross on an unreachable hex and the step count while Shift is held; the `Cursor` screen (`Gui/Cursor.fogui`)
-draws the arrow cursors and, in attack mode, the hit chance from `ClientMain::ToHit`. The action cursor opens
-the `DropMenuHandler` menu over a critter or item when the left button is held (`Core/FixedDropMenu`).
+The engine handles individual item instances and never merges stacks. Use `ItemStacks::` for quantity
+operations rather than raw engine add/move/destroy/clone calls. Cursor visuals also involve
+`Gui/Cursor.fogui`; generated callbacks are not authored owners.
 
-### Interaction
+### Infrastructure and presentation
 
-| Module | Side | Lines | Entry point | Covered |
-| ------ | ---- | ----: | ----------- | ------- |
-| `Dialogs` | S/C | 951 | `RunDialog`, `SpeechAnswer`, `CloseDialog` | — |
-| `Dialog` | S | 1 293 | `DialogDemand` / `DialogResult` handlers | — |
-| `NpcDialog` | S | 376 | per-NPC dialog helpers | — |
-| `Barter` | S | 404 | `ProcessBarterNpcOffer` | `Test_Barter` |
-| `FixBoy` | S/C | 1 548 | `InitFixBoy` builds the recipes; `Rpc_CraftItem` | — |
-| `ClientItems` | S/C | 649 | `ModuleInit`; inventory and container UI | `Test_ClientItems` |
-| `Item` / `ItemMovement` | S | 244 / 312 | doors, holodisks, deferred destroy, moves | — |
+| Owner | Side | Responsibility / entry to inspect |
+| --- | --- | --- |
+| `Tla` and domain metadata modules | S/C | Shared enums/action codes and game contracts; inspect side guards per declaration |
+| `Stdlib` | S/C/M | Shared string/array conversions; server-only rolls, transfers, healing, dialog and quest helpers |
+| `Messaging` / `MsgStr` | S/C | Player messages and text-pack key construction |
+| `Sounds` | shared helpers, C playback | Map legacy/case-insensitive sound names and series to exact baked paths; call `Sounds::Play` |
+| `DayColor` | shared helpers, C/M updates | Evaluate authored day curves and push `Map.SetDayColors` each frame |
+| `UserOptions` | C | Persist player choices as qualified `Group.Name` local settings |
+| `AiControl` | S/C | Client observation/control and explicitly gated server QA commands; [AiControl.md](AiControl.md) |
+| `MapperMain` | M | Editor tabs/tools and mapper lifecycle |
+| `Migration` | S metadata | Current property remove/rename `///@ MigrationRule` declarations |
 
-`Dialogs` is the engine-facing core (contexts, demands, results); `Dialog` is the library of authored
-demand/result handlers that content calls by name. Content lives in `Dialogs/*.fodlg`.
+Without `DayColor` updates maps use the engine's white default. Without `Sounds` name resolution,
+`Game.PlaySound` requires an exact resource path. Neither behavior is implicitly engine-owned anymore.
 
-### Infrastructure
+## Authored content and generation
 
-| Module | Side | Lines | Entry point | Covered |
-| ------ | ---- | ----: | ----------- | ------- |
-| `Tla` | S/C | 670 | shared enums, action codes, small helpers | — |
-| `Stdlib` | S | 404 | string and array helpers | `Test_Stdlib` |
-| `Messaging` / `MsgStr` | S/C | 450 / 1 176 | player-facing text and text-pack keys | — |
-| `Testing` | S | 298 | the script harness; `Testing.Enabled` turns it on | — |
-| `AiControl` | S/C | 2 307 | the automation bridge; see [AiControl.md](AiControl.md) | — |
-| `MapperMain` | M | 1 824 | `ModuleInit`; editor tabs and tools | — |
+| Input | Owner / contract |
+| --- | --- |
+| `Dialogs/*.fodlg` | Location-prefixed dialogs; `Dialogs` runtime and `Dialog` demand/result consumers |
+| `Items/`, `Critters/`, `Maps/` | Prototypes, map placements and locations; inspect the consuming gameplay rule |
+| `Texts/*.russ.fotxt`, `Texts/*.engl.fotxt` | Localized packs; preserve expected bilingual keys for touched content |
+| `Gui/*.fogui` | `Tools/InterfaceEditor/generate_gui_screens.py` emits `Scripts/Generated/GuiScreens.fos` |
+| `Resources/ServerData/` | Server-owned JSON/data consumed by gameplay modules |
+| Location/quest `.fos` modules | Regional behavior, usually matching dialog/location naming prefixes |
 
-## Where the content lives
+Baking `russ engl` is not a key-parity proof. The surviving `Tools/ContentQuality/validate_scenery_params.py`
+checks map `SceneryParams`, not localization. Inspect touched keys in both language surfaces and use the
+baked application when resolution matters. Generated `Scripts/Content.fos` is not hand-maintained.
 
-| Kind | Path | Count | Convention |
-| ---- | ---- | ----: | ---------- |
-| Dialogs | `Dialogs/*.fodlg` | 859 | location prefix — `arroyo_`, `den_`, `ncr_`, `vc_`, `nr_`, `sf_`, `redd_`, `klam_`, `bh_` |
-| Items | `Items/*.foitem` | 813 | plus `Items/Static/` (3 848 scenery), `Custom/`, `Explode/`, `Flying/` |
-| Critters | `Critters/*.focr` | 531 | |
-| Maps | `Maps/*.fomap` | 275 | |
-| Texts | `Texts/*.{russ,engl}.fotxt` | 6 packs | parity guarded by `Tools/ContentQuality` |
-| GUI | `Gui/*.fogui` | 32 screens | generates `Scripts/GuiScreens.fos` |
+## Where to begin and how to verify
 
-Location and quest scripts follow the same prefixes as the dialogs — `MapModoc.fos`, `NcrPoliceman.fos`,
-`KlamCowboy.fos` — 91 modules in all. They are content, not systems: each one drives one place.
+- Damage/skills/AP: `Parameters`, then `Combat` or `CritterActions`.
+- Player abilities: both sides of `ChosenActions`, then authoritative execution.
+- Place/NPC behavior: the regional module, matching dialogs/protos, then `NpcPlanes`/`Pattern*` as needed.
+- Dialog-callable checks/effects: `Dialog`, then `.fodlg` consumers and localized text.
+- GUI fixes: owning `.fogui` and `GuiScreensExt`; preserve matching generated behavior as described in
+  [AGENTS.md](../AGENTS.md#guiscreensfos-pitfall).
+- Verification: choose compile, bake, affected target build, existing validator or direct application
+  interaction using [AGENTS.md](../AGENTS.md#build-and-verify). `Verify :: All` is optional and does not run
+  removed unit suites; archived workflows are not an active gate. No new tests/infrastructure without an
+  explicit owner request.
 
-## Where to start reading
-
-- Changing a rule (damage, skills, AP): `Parameters` first, then `Combat` or `CritterActions`.
-- Changing what a player can do: `ChosenActions` on both sides, then `CritterActions`.
-- Adding to a place: find the location module by prefix, and its dialogs by the same prefix.
-- Adding an NPC behaviour: `NpcPlanes`, then the pattern modules (`Pattern*`).
-- Adding a check or effect callable from a dialog: `Dialog`, which is the authored handler library.
-- Verifying anything: the `Verify :: All` task; see the table in [../AGENTS.md](../AGENTS.md).
+Update this map when ownership, side, entrypoint, resource inputs or generation direction changes, not when
+line counts change. Historical test counts belong in dated evidence, not in this ownership map.

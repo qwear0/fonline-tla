@@ -1,0 +1,4 @@
+interface:
+  display_name: "FOSquad Game Doc Maintainer"
+  short_description: "Source-grounded game documentation and engine boundaries"
+  default_prompt: "Use $fosquad-doc-maintainer to assess documentation impact in the FOSquad game checkout, verify source and content ownership, and update the smallest correct set of docs. Respect the owner's testing policy; distinguish this update from a full audit."

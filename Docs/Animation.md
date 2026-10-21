@@ -10,11 +10,11 @@ It covers the contract between three layers:
 - Critter view: how the walk cycle is aligned with the engine's linear hex motion in
   `CritterHexView`.
 
-Code references in this document point into the `Engine/` submodule.
+Code references point into the external `Engine/` symlink target (an independent repository, read-only for game documentation work). Game animation selection is owned by `Scripts/Animation.fos` on CLIENT/MAPPER; this page describes the native root-motion handoff, not that whole selector.
 
 ## Root motion in the baked image format
 
-`ImageBaker::FrameShot` (see `Engine/Source/Tools/ImageBaker.h`) carries per-frame metadata for an
+`ImageImport::FrameShot` (see `Engine/Source/Tools/ImageImport.h`) carries per-frame metadata for an
 animation. The two relevant fields are:
 
 - `NextX` (`int16_t`)
@@ -28,20 +28,29 @@ sprite by `sum(NextX, NextY)` over its frames). Conceptually:
 total_root_motion = sum_{i=0..N-1}( (NextX[i], NextY[i]) )  =  T
 ```
 
-The various format-specific loaders in `ImageBaker.cpp` (`LoadFofrm`, `LoadFrm`, `LoadArt`,
-`LoadSpr`, `LoadPng`, ...) all populate `NextX/NextY` from their source-specific data; FOFRM key
-names on disk (`next_x_N` / `NextX_N`) remain unchanged to preserve backward compatibility with
-existing content.
+Format-specific importers live in `Engine/Source/Tools/ImageBaker-*.cpp` and return
+`ImageImport::FrameCollection` data. `ImageBaker-Fofrm.cpp` resolves nested images through
+`ImageImport::Context::Resolve` and adds FOFRM `next_x_N` / `NextX_N` and `next_y_N` / `NextY_N`
+values to each nested frame's existing deltas. Formats without authored motion can retain zero deltas.
+The historical FOFRM key spellings remain supported; do not rename content keys.
 
-`BakeCollection` serialises each frame's two `int16_t` deltas straight into the baked sprite stream;
-the runtime layout is unchanged from previous versions.
+Source baseline for this description: the local engine worktree based on
+`aafc7fe74bb8fa35e6395e04d8c6d2a66a91831a` (the audit's `EngineRevision`), including unpublished
+changes. This is not a claim about that published commit alone. In the inspected source,
+`ImageBaker::BakeCollection` (`ImageBaker.cpp`) writes each
+non-shared frame's `NextX`, then `NextY`, as `int16_t`, and sets the parallel frame metadata
+`NextOffset`. This is a source-level description of the connected working tree, not a generic
+cross-version binary compatibility promise. It establishes neither compatibility with an older bake
+nor stability of the entire sprite resource layout. Rebuild/rebake matching outputs after an engine
+update; compare the actual writer and reader for any claimed older baseline.
 
 ## Runtime: `SpriteSheet::_sprOffset`
 
-`DefaultSpriteFactory::LoadAnimation` (see `Engine/Source/Client/DefaultSprites.cpp`) reads the
-baked deltas back into `SpriteSheet::_sprOffset` (one `ipos32` per frame, per direction).
+`DefaultSpriteFactory::LoadSprite` (`Engine/Source/Client/DefaultSprites.cpp`) calls
+`ReadSpriteResource` and assigns each non-shared frame's `NextOffset` to `SpriteSheet::_sprOffset`
+(one `ipos32` per frame, per direction); shared frames copy their referenced frame's offset.
 
-`SpriteSheet::GetSprOffset()` exposes this vector to consumers. The values mean different things
+`SpriteSheet::GetSprOffset()` (`DefaultSprites.h`) exposes a `const_span<ipos32>` to consumers. The values mean different things
 depending on the animation kind:
 
 - For non-moving animations (anything that is not `Walk` / `Run`), the runtime simply accumulates
@@ -79,7 +88,7 @@ own the actual hex transitions underneath.
 The cycle's spatial reference is an anchor:
 
 ```cpp
-raw_ptr<const SpriteSheet> _walkAnchorAnim;   // the per-direction SpriteSheet the anchor is for
+nptr<const SpriteSheet>    _walkAnchorAnim;   // the per-direction SpriteSheet the anchor is for
 ipos32                     _walkAnchorDisp;   // pos at the moment the anchor was set
 ```
 
@@ -176,7 +185,7 @@ lands naturally instead of restarting.
 ### Lifecycle
 
 - `SetMoving` and `StopMoving` clear `_walkAnchorAnim` and `_walkAnchorDisp`. A fresh movement
-  always begins with `cycle_proj = 0` and frame 0.
+  establishes a new anchor; nearest-projection frame selection still depends on the authored offsets.
 - The first `Process()` tick of a new movement (or after a direction change) re-runs the anchor
   setup as soon as it detects `cur_anim.Frames != _walkAnchorAnim`.
 - For non-walk/non-run animations and for non-moving critters, the walk-cycle branch is skipped
@@ -184,7 +193,7 @@ lands naturally instead of restarting.
 
 ## Editing notes
 
-- `_sprOffset` values are produced exclusively by the baker from `FrameShot::NextX/NextY`; runtime
+- `_sprOffset` values are produced exclusively by the baker from `ImageImport::FrameShot::NextX/NextY`; runtime
   code should not synthesise them.
 - The FOFRM file format still uses the historical `next_x_N` / `NextX_N` (lowercase and camel)
   keys. Renaming those on-disk keys would break existing content - leave them as-is.

@@ -20,8 +20,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
-      with:
-        submodules: recursive
+    - uses: ./.github/actions/checkout-engine
     - name: Install clang-format-20
       run: |
         sudo apt-get update
@@ -38,8 +37,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
-      with:
-        submodules: recursive
+    - uses: ./.github/actions/checkout-engine
     - name: Install clang-format-20
       run: |
         sudo apt-get update
@@ -54,24 +52,21 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
-      with:
-        submodules: recursive
+    - uses: ./.github/actions/checkout-engine
     - run: Engine/BuildTools/prepare-workspace.sh common-packages linux-packages
     - run: Engine/BuildTools/validate.sh unit-tests
   compile-scripts:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
-      with:
-        submodules: recursive
+    - uses: ./.github/actions/checkout-engine
     - run: Engine/BuildTools/prepare-workspace.sh common-packages linux-packages toolset
     - run: Engine/BuildTools/toolset.sh CompileAngelScript
   bake-resources:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
-      with:
-        submodules: recursive
+    - uses: ./.github/actions/checkout-engine
     - run: Engine/BuildTools/prepare-workspace.sh common-packages linux-packages toolset
     - run: Engine/BuildTools/toolset.sh BakeResources
     - run: cd Workspace/output && tar -cf Baking.tar Baking
@@ -96,8 +91,7 @@ jobs:
         - win64 server Profiling_Total
     steps:
     - uses: actions/checkout@v6
-      with:
-        submodules: recursive
+    - uses: ./.github/actions/checkout-engine
     - run: Engine/BuildTools/build.cmd ${{matrix.app}}
     - uses: actions/upload-artifact@v6
       with:
@@ -129,8 +123,7 @@ jobs:
           packages: common-packages linux-packages
     steps:
     - uses: actions/checkout@v6
-      with:
-        submodules: recursive
+    - uses: ./.github/actions/checkout-engine
     - run: Engine/BuildTools/prepare-workspace.sh ${{matrix.packages}} ${{matrix.app}}
     - run: Engine/BuildTools/build.sh ${{matrix.app}}
     - uses: actions/upload-artifact@v6
@@ -152,8 +145,7 @@ jobs:
         - ios client Release
     steps:
     - uses: actions/checkout@v6
-      with:
-        submodules: recursive
+    - uses: ./.github/actions/checkout-engine
     - run: Engine/BuildTools/build.sh ${{matrix.app}}
     - uses: actions/upload-artifact@v6
       with:
@@ -167,8 +159,7 @@ jobs:
     needs: [validate, unit-tests, compile-scripts, bake-resources, windows-build, linux-build, macos-build]
     steps:
     - uses: actions/checkout@v6
-      with:
-        submodules: recursive
+    - uses: ./.github/actions/checkout-engine
     - uses: actions/download-artifact@v7
       with:
         pattern: Binaries-win64*
