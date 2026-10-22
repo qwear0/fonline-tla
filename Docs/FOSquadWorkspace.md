@@ -10,15 +10,15 @@
   FOSquad_Engine/            # qwear0/fonline: reusable engine
 ```
 
-In the current working tree, `Engine` is a **relative symbolic link**, replacing the baseline's gitlink. This conversion is still pending publication; do not assume a fresh remote clone already contains it. The supported local layout uses an independent engine checkout, not submodule operations. This preserves the existing paths in CMake, `TLA.fomain` resource packs, formatters and editor tasks without copying engine sources or rewriting upstream build tools. Both repositories retain their own `master` branch and SSH `origin`. Run engine Git operations in `/apps/FOSquad_Engine`; `git add` in the game repository does not stage engine source changes.
+`Engine` is a **relative symbolic link**, replacing the original gitlink. The conversion is published in game commit `47c2b49e5a5a7cb045013b894d349e165fbcefe5`; fresh clones of the fork contain this layout. The supported local layout uses an independent engine checkout, not submodule operations. This preserves the existing paths in CMake, `TLA.fomain` resource packs, formatters and editor tasks without copying engine sources or rewriting upstream build tools. Both repositories retain their own `master` branch and SSH `origin`. Run engine Git operations in `/apps/FOSquad_Engine`; `git add` in the game repository does not stage engine source changes.
 
 Do not run `git submodule update` in this fork. `.gitmodules` has been removed. The symbolic link requires the sibling directory to be named `FOSquad_Engine`. On Windows, local clones require Git symbolic-link support (`core.symlinks=true`) and permission to create links (for example, Developer Mode). The archived runner checkout mechanism described below did not require Windows symlink privileges; it is not active CI.
 
 ## Recreate the workspace
 
-Once the game layout change is published, clone into a common parent directory as follows. Until then,
-the clone commands fetch published repository state, not all changes described in this dirty workspace;
-use the coordinator's published commits when available rather than silently replacing an old gitlink.
+Clone the two published forks into a common parent directory. The branches can advance independently;
+use the game's `EngineRevision` to reproduce its published engine baseline rather than assuming that
+the latest engine branch tip always matches the game.
 
 ```sh
 git clone git@github.com:qwear0/fonline.git FOSquad_Engine
@@ -99,14 +99,14 @@ Game script suites and their harness, native dialog tests and Python unit suites
 
 The test-removal work recorded successful CMake configuration and `CompileAngelScript`; these are prior results, not a rerun for subsequent documentation/integration changes. Evidence paths: `Build/configure-without-tests.log` and `Build/compile-without-tests.log`. The latter rebuilt the compiler and its native dependencies. This does not establish fresh client/server runtime behavior or a full resource bake.
 
-The engine changes are still uncommitted, so `EngineRevision` remains the last published baseline, not a claim that it includes test removal. Publish the engine change first and then update the game pin; no commit SHA has been invented.
+The engine test removal and documentation repairs are published at `fd4877d81e55a89e7734f5b4dc3fff0c1b08f419` (`2026.1.65-dev`). `EngineRevision` records that published commit; the engine working tree is no longer required to carry unpublished repairs.
 
 ## Historical compatibility evidence (before removal)
 
 Game baseline: `ec1ce12fd0f645979ca64bcb0bb0cc4def5c382c` (TLA 0.3.14).
 
 - Original submodule revision: `e1a3815ff96c7d88f47314984e9d9242e37bc585` (engine `2026.1.30-dev`).
-- Connected engine: `aafc7fe74bb8fa35e6395e04d8c6d2a66a91831a` (engine `2026.1.57-dev`), recorded in `EngineRevision`.
+- Initially connected engine: `aafc7fe74bb8fa35e6395e04d8c6d2a66a91831a` (engine `2026.1.57-dev`), the historical pin before the published repair range.
 - The original engine revision is an ancestor of the connected one; there are 29 intervening commits.
 
 The initial workspace setup, before the owner requested test removal, recorded:
@@ -140,4 +140,10 @@ For future updates:
 
 Game commit `47c2b49e5a5a7cb045013b894d349e165fbcefe5` publishes the gitlink-to-symlink conversion, unit-suite removal, agent policy and corrected game documentation to the fork. The temporary local `submodule.Engine.ignore=dirty` workaround was removed after that conversion. Fresh clones need no submodule workaround; inspect engine changes in its own repository.
 
-The documentation-repair integration reran CMake configuration and `CompileAngelScript` successfully against the local dirty engine, with no compiler warnings. `git diff --check` and the existing nullable/native ABI validator also passed. The post-push `TLA_ServerHeadless` / `TLA_Client` build completed successfully; `BakeResources` subsequently completed against the prepared `2026.1.58-dev` engine state without matched warning/error diagnostics. Logs are retained locally under `Build/DocumentationRepair/`. These checks do not establish gameplay, rendered-site or deployment acceptance. Engine publication is still pending, so the pin continues to reference the earlier actually published engine baseline.
+The documentation-repair integration reran CMake configuration and `CompileAngelScript` successfully against the local dirty engine, with no compiler warnings. `git diff --check` and the existing nullable/native ABI validator also passed. The post-push `TLA_ServerHeadless` / `TLA_Client` build completed successfully; `BakeResources` subsequently completed against the prepared `2026.1.58-dev` engine state without matched warning/error diagnostics. Logs are retained locally under `Build/DocumentationRepair/`. These checks do not establish gameplay, rendered-site or deployment acceptance. These are historical checks against the prepared tree, not a claim that a later engine revision has automatically been rebuilt.
+
+### Published engine repair baseline
+
+Engine commit `fd4877d81e55a89e7734f5b4dc3fff0c1b08f419` is published to the engine fork's `master` and recorded in `EngineRevision`. Its eight first-parent updates (`2026.1.58-dev` through `2026.1.65-dev`) were validated as a complete range against `aafc7fe74bb8fa35e6395e04d8c6d2a66a91831a`, with dated EN/RU migration notes for every step. The final sources preserve the previously checked repair; only version/changelog publication records changed during publication.
+
+Fresh engine documentation preparation, validation (411 Markdown entries), localization, description translations, snippets and API/reference/CMake/native parity checks passed on that final commit. Local publication/build evidence is under `Build/DocumentationRepair/Publication/`. HTML rendering remains unverified because Bundler (`bundle`) is unavailable; source checks do not establish site rendering or deployment. No production shard or gameplay acceptance is implied.

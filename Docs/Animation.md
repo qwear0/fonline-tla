@@ -34,12 +34,12 @@ Format-specific importers live in `Engine/Source/Tools/ImageBaker-*.cpp` and ret
 values to each nested frame's existing deltas. Formats without authored motion can retain zero deltas.
 The historical FOFRM key spellings remain supported; do not rename content keys.
 
-Source baseline for this description: the local engine worktree based on
-`aafc7fe74bb8fa35e6395e04d8c6d2a66a91831a` (the audit's `EngineRevision`), including unpublished
-changes. This is not a claim about that published commit alone. In the inspected source,
+Source baseline for this description: published engine
+`fd4877d81e55a89e7734f5b4dc3fff0c1b08f419`, recorded in `EngineRevision`. The inspected
+baker/loader sources are unchanged from the earlier audit baseline. In the inspected source,
 `ImageBaker::BakeCollection` (`ImageBaker.cpp`) writes each
 non-shared frame's `NextX`, then `NextY`, as `int16_t`, and sets the parallel frame metadata
-`NextOffset`. This is a source-level description of the connected working tree, not a generic
+`NextOffset`. This is a source-level description of the pinned source, not a generic
 cross-version binary compatibility promise. It establishes neither compatibility with an older bake
 nor stability of the entire sprite resource layout. Rebuild/rebake matching outputs after an engine
 update; compare the actual writer and reader for any claimed older baseline.
