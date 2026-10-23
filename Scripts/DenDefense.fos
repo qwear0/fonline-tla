@@ -1,0 +1,1152 @@
+// DenDefense — общий старт у Смитти и единственный владелец состояния обороны Дэна.
+// SERVER: подтверждённый вход, поколения попыток, участники, спутники, отдых, волны и вещи.
+// CLIENT: затемнение всех клиентов и показ провала без права менять серверную стадию.
+// Состояние хранится в свойствах Game/Critter/Map; загрузка сама по себе не начинает попытку.
+// Связи: PlayerRegistration, Main, Merc, NpcPlanes; диалоги den_defense_*.
+namespace DenDefense
+{
+
+///@ Property Game Client bool DenDefenseClientFrozen Mutable
+///@ Property Game Client bool DenDefenseClientShowFailure Mutable
+///@ Property Game Client int32 DenDefenseClientGeneration Mutable
+///@ Property Game Client bool DenDefenseClientResting Mutable
+///@ Property Game Client int32 DenDefenseClientRestPhase Mutable
+///@ Property Game Client nanotime DenDefenseClientBlackAt Mutable
+
+///@ RemoteCall Client DenDefenseTransition(int32 generation, int32 state)
+///@ RemoteCall Client DenDefenseRestTransition(int32 generation, int32 phase, timespan remaining)
+
+#if SERVER
+
+///@ Property Game Server int32 DenDefenseGeneration Mutable Persistent
+///@ Property Game Server ident DenDefenseMapId Mutable Persistent
+///@ Property Game Server ident DenDefensePrimaryId Mutable Persistent
+///@ Property Game Server ident DenDefenseSmittyId Mutable Persistent
+///@ Property Game Server ident[] DenDefenseCompanionIds Mutable Persistent
+///@ Property Game Server ident[] DenDefenseParticipantIds Mutable Persistent
+///@ Property Game Server int32 DenDefenseStage Mutable Persistent
+///@ Property Game Server int32 DenDefenseWave Mutable Persistent
+///@ Property Game Server int32 DenDefenseSpawned Mutable Persistent
+///@ Property Game Server int32 DenDefenseSpawnTotal Mutable Persistent
+///@ Property Game Server ident[] DenDefenseEnemyIds Mutable Persistent
+///@ Property Game Server ident[] DenDefenseEnemyHistory Mutable Persistent
+///@ Property Map Server nanotime DenDefenseNextSpawn Mutable
+///@ Property Game Server int32 DenDefenseSpawnRetries Mutable Persistent
+///@ Property Game Server int32 DenDefenseRestPhase Mutable Persistent
+///@ Property Game Server nanotime DenDefenseRestUntil Mutable
+///@ Property Game Server synctime DenDefenseDawn Mutable Persistent
+///@ Property Game Server bool DenDefenseDawnLocked Mutable Persistent
+///@ Property Game Server bool DenDefenseRestUsed Mutable Persistent
+///@ Property Game Server bool DenDefenseFailurePresented Mutable Persistent
+
+///@ Property Critter Server int32 DenDefenseGeneration Mutable Persistent
+///@ Property Critter Server int32 DenDefenseKitGeneration Mutable Persistent
+///@ Property Critter Server int32 DenDefenseRole Mutable Persistent
+///@ Property Critter Server int32 DenDefenseRewardGeneration Mutable Persistent
+///@ Property Critter Server int32 DenDefenseBrother Mutable Persistent
+///@ Property Item Server bool DenDefenseFiniteAmmo Mutable Persistent
+
+const int STAGE_WAITING = 1;
+const int STAGE_RESTING = 2;
+const int STAGE_FIGHTING = 3;
+const int STAGE_VICTORY = 4;
+const int STAGE_FAILED = 5;
+const int STAGE_STARTING = 6;
+const int ROLE_SMITTY = 1;
+const int ROLE_COMPANION = 2;
+const int ROLE_ENEMY = 3;
+
+[[ModuleInit]]
+void InitDenDefense()
+{
+    Game.OnCritterDead.Subscribe(HandleCritterDeath, EventPriority::High);
+    Game.OnStart.Subscribe(ResumeController);
+}
+
+Map? GetBaseMap()
+{
+    return Game.GetMap(Content::Map::den);
+}
+
+// До коммита логина допустим только перенос: никаких притязаний на поколение, набор или отряд.
+bool PlacePlayer(Critter cr)
+{
+    Map? map = GetBaseMap();
+    if (map == null) {
+        return false;
+    }
+
+    mpos hex = mpos(310, 150);
+    if (!Entrance::GetFreeHex(map, 6, hex)) {
+        return false;
+    }
+
+    cr.TransferToMap(map, hex, HDIR_Random);
+    if (cr.MapId != map.Id) {
+        return false;
+    }
+
+    Location::SetKnownLoc(cr, map.GetLocation());
+    return true;
+}
+
+bool IsParticipant(Critter cr)
+{
+    return cr.ControlledByPlayer && cr.DenDefenseGeneration == Game.DenDefenseGeneration && Game.DenDefenseGeneration > 0;
+}
+
+bool IsActor(Critter cr)
+{
+    return cr.DenDefenseRole != 0 && cr.DenDefenseGeneration == Game.DenDefenseGeneration && Game.DenDefenseGeneration > 0;
+}
+
+bool IsCompanion(Critter cr)
+{
+    return IsActor(cr) && cr.DenDefenseRole == ROLE_COMPANION;
+}
+
+bool IsPrimary(Critter cr)
+{
+    return IsParticipant(cr) && cr.Id == Game.DenDefensePrimaryId;
+}
+
+// Возвращаемый движком Player важен: при переподключении это не обязательно входной объект.
+// Вызов находится вне catch, который откатывает ещё не зарегистрированного персонажа.
+void OnSuccessfulLogin(Player player)
+{
+    Critter? cr = player.GetControlledCritter();
+    verify(cr != null, "Confirmed login must have a controlled critter", player);
+
+    // Загруженный мёртвый хозяин тоже означает провал: JoinAttempt не вправе его оживить в старом бое.
+    if (Game.DenDefenseGeneration > 0 && Game.DenDefenseStage != STAGE_FAILED) {
+        CheckDefenders();
+    }
+    if (Game.DenDefenseGeneration == 0 || Game.DenDefenseStage == STAGE_FAILED) {
+        try {
+            StartAttempt(cr);
+        }
+        catch {
+            Game.DenDefenseStage = STAGE_FAILED;
+            throw("Unable to initialize confirmed Den defense entry", cr.Id);
+        }
+        return;
+    }
+
+    JoinAttempt(cr);
+}
+
+void JoinAttempt(Critter cr)
+{
+    bool firstEntry = cr.DenDefenseGeneration != Game.DenDefenseGeneration;
+    if (cr.IsDead()) {
+        // Сначала оставляем вещи в месте смерти. Без карты сохраняем их до безопасного переноса.
+        if (!SpillLoot(cr)) {
+            verify(PlacePlayer(cr), "Unable to map dead participant for safe inventory spill", cr);
+            verify(SpillLoot(cr), "Unable to spill participant inventory", cr);
+        }
+        // Тело могло быть занято другим живым криттером: оживаем уже на свободном гексе базы.
+        verify(PlacePlayer(cr), "Unable to return dead participant to shared Den", cr);
+        CritterState::ToAlive(cr);
+        cr.CurrentHp = cr.MaxLife;
+        cr.CurrentAp = cr.ActionPoints * Tla::AP_DIVIDER;
+    }
+    else if (firstEntry || cr.MapId != Game.DenDefenseMapId) {
+        verify(PlacePlayer(cr), "Unable to place Den defense participant", cr);
+    }
+    if (firstEntry) {
+        cr.CurrentHp = cr.MaxLife;
+        cr.CurrentAp = cr.ActionPoints * Tla::AP_DIVIDER;
+    }
+    cr.DenDefenseGeneration = Game.DenDefenseGeneration;
+    cr.ReplicationTime = -1;
+    auto participants = Game.DenDefenseParticipantIds.clone();
+    if (!participants.exists(cr.Id)) {
+        participants.insertLast(cr.Id);
+        Game.DenDefenseParticipantIds = participants;
+    }
+    cr.PlayerClientCall.DenDefenseTransition(Game.DenDefenseGeneration, 0);
+    if (Game.DenDefenseStage == STAGE_RESTING) {
+        cr.StopMoving();
+        Dialogs::CloseDialog(cr);
+        CritterActions::CloseContainerTransfer(cr);
+        cr.PlayerClientCall.DenDefenseRestTransition(Game.DenDefenseGeneration, Game.DenDefenseRestPhase, RestRemaining());
+    }
+}
+
+void StartAttempt(Critter primary)
+{
+    Map? map = GetBaseMap();
+    verify(map != null, "Den base map is missing");
+
+    // Сначала инвалидируем предыдущих акторов; только затем запускаем вложенные события.
+    Game.DenDefenseGeneration = Game.DenDefenseGeneration + 1;
+    Game.DenDefenseStage = STAGE_STARTING;
+    Game.DenDefenseMapId = map.Id;
+    Game.DenDefensePrimaryId = primary.Id;
+    map.StopTimeEvent(Controller);
+    Game.StopTimeEvent(FinishRest);
+    Game.StopTimeEvent(StartAfterRest);
+    Game.StopTimeEvent(CloseRestDialogs);
+    Game.StopTimeEvent(PresentFailure);
+    Game.DenDefenseWave = 0;
+    Game.DenDefenseSpawned = 0;
+    Game.DenDefenseSpawnTotal = 0;
+    Game.DenDefenseRestPhase = 0;
+    Game.DenDefenseSpawnRetries = 0;
+    Game.DenDefenseRestUsed = false;
+    Game.DenDefenseFailurePresented = false;
+    Game.DenDefenseDawn = ZERO_SYNCTIME;
+    Game.DenDefenseDawnLocked = false;
+    auto oldEnemies = Game.DenDefenseEnemyHistory.clone();
+    Game.DenDefenseEnemyHistory = {};
+    Game.DenDefenseEnemyIds = {};
+    for (int i = 0; i < oldEnemies.length(); i++) {
+        Critter? old = Game.GetCritter(oldEnemies[i]);
+        if (old != null) {
+            DisposeActor(old, map);
+        }
+    }
+
+    auto oldCompanions = Game.DenDefenseCompanionIds.clone();
+    Game.DenDefenseCompanionIds = {};
+    Game.DenDefenseParticipantIds = {};
+    for (int i = 0; i < oldCompanions.length(); i++) {
+        Critter? old = Game.GetCritter(oldCompanions[i]);
+        if (old != null) {
+            DisposeActor(old, map);
+        }
+    }
+
+    // Используем единственного авторского Смитти, не создаём копию торговца.
+    Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
+    if (smitty == null) {
+        Critter[] inhabitants = map.GetCritters(CritterFindType::Npc);
+        for (int i = 0; i < inhabitants.length(); i++) {
+            if (inhabitants[i].DialogId == Content::Dialog::den_smitty) {
+                verify(smitty == null, "More than one Smitty on shared Den map");
+                smitty = inhabitants[i];
+            }
+        }
+    }
+
+    verify(smitty != null, "Authored Smitty is missing");
+    Game.DenDefenseSmittyId = smitty.Id;
+    SetupSmitty(smitty, map);
+    JoinAttempt(primary);
+
+    for (int i = 0; i < 4; i++) {
+        CreateCompanion(primary, map, i);
+    }
+
+    // Уже подключённые участники остаются второстепенными без переподключения.
+    Player[] online = Game.GetOnlinePlayers();
+    for (int i = 0; i < online.length(); i++) {
+        Critter? secondary = online[i].GetControlledCritter();
+        if (secondary != null && secondary.Id != primary.Id) {
+            JoinAttempt(secondary);
+        }
+    }
+
+    Game.DenDefenseStage = STAGE_WAITING;
+    map.StartTimeEvent(Time::Asap(), Time::Seconds(1), Controller, Game.DenDefenseGeneration);
+    Game.Log("Den defense started, generation=" + Game.DenDefenseGeneration + " primary=" + primary.Id);
+}
+
+void SetupSmitty(Critter smitty, Map map)
+{
+    smitty.StopMoving();
+    smitty.StopTimeEvent(Trader::UpdateItems);
+    smitty.StopTimeEvent(NpcBags::OnCritterIdle);
+    smitty.SetupScript(null);
+    smitty.BagId = Bags::Empty;
+    smitty.DenDefenseGeneration = Game.DenDefenseGeneration;
+    smitty.DenDefenseRole = ROLE_SMITTY;
+    smitty.ReplicationTime = -1;
+    smitty.IsGeck = true;
+    smitty.IsNoHome = true;
+    smitty.IsNoMove = true;
+    smitty.IsNoKnock = true;
+    smitty.IsNoEnemyStack = true;
+    smitty.IsNoBarter = true;
+    smitty.DialogId = "den_defense_smitty".hstr();
+    smitty.TalkDistance = 5;
+    smitty.MaxTalkers = 10;
+    NpcPlanes::DropPlanes(smitty);
+    EnemyStack::ClearEnemyStackNpc(smitty);
+    verify(SpillLoot(smitty), "Unable to safely clear Smitty inventory", smitty);
+    PlaceSmittyAtHome(smitty, map);
+    if (!smitty.IsAlive()) {
+        CritterState::ToAlive(smitty);
+    }
+    Game.DestroyItems(smitty.GetItems());
+    // Авторская модель nmpeas поддерживает пистолет, но не ружьё (CritterTypes.json).
+    Item weapon = ItemStacks::AddItem(smitty, Content::Item::_10mm_pistol, 1);
+    weapon.AmmoPid = Content::Item::_10mm_jhp;
+    weapon.AmmoCount = weapon.Weapon_MaxAmmoCount;
+    verify(CritterAnims::IsCritterStateAnim(smitty, weapon.Weapon_StateAnim), "Smitty weapon animation missing");
+    smitty.ChangeItemSlot(weapon.Id, CritterItemSlot::Main);
+    smitty.LastWeaponId = weapon.Id;
+    smitty.LastWeaponUse = 0;
+    smitty.LastWeaponNotFound = false;
+    smitty.IsUnlimitedAmmo = true;
+    ItemStacks::AddItem(smitty, Content::Item::stimpak, 2);
+    smitty.CurrentHp = smitty.MaxLife;
+    smitty.CurrentAp = smitty.ActionPoints * Tla::AP_DIVIDER;
+}
+
+void PlaceSmittyAtHome(Critter smitty, Map map)
+{
+    // Внутренняя точка мастерской за дверью 303:147, а не прежняя улица 307:148.
+    mpos hex = mpos(303, 144);
+    if (smitty.Hex != hex && !map.IsHexMovable(hex)) {
+        const mpos[] homes = {mpos(302, 144), mpos(304, 144), mpos(301, 144), mpos(303, 143), mpos(303, 145), mpos(302, 143), mpos(304, 143)};
+        for (int i = 0; i < homes.length(); i++) {
+            if (map.IsHexMovable(homes[i])) {
+                hex = homes[i];
+                break;
+            }
+        }
+    }
+    verify(smitty.MapId == map.Id && IsWorkshopHex(hex) && (smitty.Hex == hex || map.IsHexMovable(hex)), "Smitty indoor home is blocked", hex);
+    smitty.TransferToMap(map, hex, HDIR_Random);
+    smitty.HomeMapId = map.Id;
+    smitty.HomeHex = hex;
+}
+
+void CreateCompanion(Critter primary, Map map, int index)
+{
+    mpos hex = primary.Hex;
+    verify(Entrance::GetFreeHex(map, 5, hex), "No free hex for Den companion", index);
+    dict<CritterProperty, any> props = {{CritterProperty::BagId, Bags::Empty},
+                                        {CritterProperty::DialogId, "den_defense_companion".hstr()},
+                                        {CritterProperty::DenDefenseGeneration, Game.DenDefenseGeneration},
+                                        {CritterProperty::DenDefenseRole, ROLE_COMPANION},
+                                        {CritterProperty::ReplicationTime, -1}};
+    Critter companion = map.AddCritter(index % 2 == 0 ? Content::Critter::Wilder : Content::Critter::Wilder2, hex, HDIR_Random, props);
+    companion.MakePersistent(true);
+    auto ids = Game.DenDefenseCompanionIds.clone();
+    ids.insertLast(companion.Id);
+    Game.DenDefenseCompanionIds = ids;
+    verify(Merc::Merc2Player(primary, companion, true, false, 0, 3, Merc::MERC_CUSTOM, true, true), "Unable to assign Den companion", companion);
+    companion.StopTimeEvent(NpcBags::OnCritterIdle);
+    companion.IsNoEnemyStack = true;
+    companion.IsNoLoot = false;
+    companion.IsNoSteal = false;
+    companion.ReplicationTime = -1;
+    Item weapon = ItemStacks::AddItem(companion, Content::Item::crowbar, 1);
+    verify(CritterAnims::IsCritterStateAnim(companion, weapon.Weapon_StateAnim), "Companion crowbar animation missing");
+    companion.ChangeItemSlot(weapon.Id, CritterItemSlot::Main);
+    ItemStacks::AddItem(companion, Content::Item::stimpak, 2);
+}
+
+// Считаем только обычных членов группы: исключение не расширяет вместимость машины.
+int CapacityCount(Critter[] group)
+{
+    int count = 0;
+    for (int i = 0; i < group.length(); i++) {
+        if (!IsCompanion(group[i])) {
+            count++;
+        }
+    }
+    return count;
+}
+
+bool CanControlCompanion(Critter player, Critter npc)
+{
+    return IsPrimary(player) && player.IsAlive() && CanAct(player) && IsCompanion(npc) && npc.IsAlive() && npc.MercMasterId == player.Id &&
+           npc.MapId == player.MapId;
+}
+
+[[DialogDemand]]
+bool CanCommand(Critter player, Critter npc)
+{
+    return CanControlCompanion(player, npc);
+}
+
+[[DialogResult]]
+void Follow(Critter player, Critter npc)
+{
+    if (CanControlCompanion(player, npc)) {
+        npc.MercWaitForMaster = false;
+    }
+}
+
+[[DialogResult]]
+void Wait(Critter player, Critter npc)
+{
+    if (CanControlCompanion(player, npc)) {
+        npc.MercWaitForMaster = true;
+        NpcPlanes::DropPlanes(npc);
+    }
+}
+
+[[DialogResult]]
+void ToggleDefend(Critter player, Critter npc)
+{
+    if (CanControlCompanion(player, npc)) {
+        npc.MercDefendMaster = !npc.MercDefendMaster;
+    }
+}
+
+[[DialogResult]]
+void ToggleAssist(Critter player, Critter npc)
+{
+    if (CanControlCompanion(player, npc)) {
+        npc.MercAssistMaster = !npc.MercAssistMaster;
+    }
+}
+
+// При провале игроки могут только выйти и войти заново; обычные городские NPC не замораживаются.
+bool CanAct(Critter cr)
+{
+    if (Game.DenDefenseGeneration == 0) {
+        return true;
+    }
+    if (cr.ControlledByPlayer || IsActor(cr)) {
+        return Game.DenDefenseStage != STAGE_FAILED && Game.DenDefenseStage != STAGE_RESTING;
+    }
+    return true;
+}
+
+bool UsesFiniteAmmo(Critter cr)
+{
+    return IsActor(cr) && cr.DenDefenseRole == ROLE_ENEMY;
+}
+
+// Переносим только реальные оставшиеся вещи. Слитые стопки и содержимое контейнеров не копируем.
+bool SpillLoot(Critter cr)
+{
+    Map? map = cr.GetMap();
+    if (map == null) {
+        return false;
+    }
+    Item[] items = cr.GetItems();
+    for (int i = 0; i < items.length(); i++) {
+        Item item = items[i];
+        if (!item.Hidden && !item.IsGag) {
+            Item? placed = ItemStacks::MoveItem(item, item.Count, map, cr.Hex);
+            verify(placed != null && placed.Ownership == ItemOwnership::MapHex && placed.MapId == map.Id, "Inventory spill failed", cr);
+        }
+    }
+    // Вложенные обработчики переноса не должны оставить новые обычные вещи перед удалением тела.
+    auto remaining = cr.GetItems();
+    for (int i = 0; i < remaining.length(); i++) {
+        verify(remaining[i].Hidden || remaining[i].IsGag, "Inventory changed during spill", cr, remaining[i]);
+    }
+    return true;
+}
+
+void DisposeActor(Critter cr, Map base)
+{
+    cr.StopMoving();
+    NpcPlanes::DropPlanes(cr);
+    if (cr.GetMap() == null) {
+        mpos hex = mpos(310, 150);
+        verify(Entrance::GetFreeHex(base, 6, hex), "No safe map hex for obsolete actor loot", cr);
+        cr.TransferToMap(base, hex, HDIR_Random);
+    }
+    verify(SpillLoot(cr), "Refusing to delete unmapped actor and inventory", cr);
+    Game.DestroyCritter(cr);
+}
+
+// Авторские внутренние гексы: стены x=298/306, y=139/147 и крыша PLK1000/2000.
+// Дверь 303:147 и прежняя уличная позиция 307:148 намеренно не включены.
+bool IsWorkshopHex(mpos hex)
+{
+    const mpos[] inside = {mpos(299, 140), mpos(300, 140), mpos(301, 140), mpos(302, 140), mpos(303, 140), mpos(304, 140), mpos(305, 140),
+                           mpos(299, 141), mpos(300, 141), mpos(301, 141), mpos(302, 141), mpos(303, 141), mpos(304, 141), mpos(305, 141),
+                           mpos(299, 142), mpos(300, 142), mpos(301, 142), mpos(302, 142), mpos(303, 142), mpos(304, 142), mpos(305, 142),
+                           mpos(299, 143), mpos(300, 143), mpos(301, 143), mpos(302, 143), mpos(303, 143), mpos(304, 143), mpos(305, 143),
+                           mpos(299, 144), mpos(300, 144), mpos(301, 144), mpos(302, 144), mpos(303, 144), mpos(304, 144), mpos(305, 144),
+                           mpos(299, 145), mpos(300, 145), mpos(301, 145), mpos(302, 145), mpos(303, 145), mpos(304, 145), mpos(305, 145),
+                           mpos(299, 146), mpos(300, 146), mpos(301, 146), mpos(302, 146), mpos(303, 146), mpos(304, 146), mpos(305, 146)};
+    return inside.exists(hex);
+}
+
+bool IsScenarioCombat(Critter first, Critter second)
+{
+    return IsActor(first) || IsActor(second);
+}
+
+bool CanAttack(Critter attacker, Critter target)
+{
+    if (!CanAct(attacker)) {
+        return false;
+    }
+    if (!IsScenarioCombat(attacker, target)) {
+        return true;
+    }
+    if (attacker.MapId != Game.DenDefenseMapId || target.MapId != attacker.MapId) {
+        return false;
+    }
+    if ((!IsActor(attacker) && !IsParticipant(attacker)) || (!IsActor(target) && !IsParticipant(target))) {
+        return false;
+    }
+    if (IsActor(attacker)) {
+        bool attackerEnemy = attacker.DenDefenseRole == ROLE_ENEMY;
+        bool targetEnemy = IsActor(target) && target.DenDefenseRole == ROLE_ENEMY;
+        if (attackerEnemy == targetEnemy) {
+            return false;
+        }
+    }
+    if (IsActor(attacker) && attacker.DenDefenseRole == ROLE_SMITTY) {
+        return IsWorkshopHex(attacker.Hex) && IsWorkshopHex(target.Hex);
+    }
+    if (IsActor(target) && target.DenDefenseRole == ROLE_SMITTY) {
+        return IsWorkshopHex(target.Hex);
+    }
+    return true;
+}
+
+bool IsSmittyDialog(Critter player, Critter npc)
+{
+    return IsParticipant(player) && player.IsAlive() && IsActor(npc) && npc.Id == Game.DenDefenseSmittyId && npc.IsAlive() &&
+           player.MapId == Game.DenDefenseMapId && npc.MapId == player.MapId && CanAct(player);
+}
+
+bool CanRestNow(Critter player, Critter npc)
+{
+    return IsSmittyDialog(player, npc) && Game.DenDefenseStage == STAGE_WAITING && !Game.DenDefenseRestUsed &&
+           player.DenDefenseKitGeneration == Game.DenDefenseGeneration && Game.DenDefenseWave < 3;
+}
+
+[[DialogDemand]]
+bool CanRest(Critter player, Critter npc)
+{
+    return CanRestNow(player, npc);
+}
+
+[[DialogResult]]
+void Brief(Critter player, Critter npc)
+{
+    if (!IsSmittyDialog(player, npc) || player.DenDefenseKitGeneration == Game.DenDefenseGeneration) {
+        return;
+    }
+    player.DenDefenseKitGeneration = Game.DenDefenseGeneration;
+    ItemStacks::AddItem(player, Content::Item::crowbar, 1);
+    ItemStacks::AddItem(player, Content::Item::stimpak, 2);
+}
+
+bool CanClaimRewardNow(Critter player, Critter npc)
+{
+    return IsSmittyDialog(player, npc) && Game.DenDefenseStage == STAGE_VICTORY && player.DenDefenseRewardGeneration != Game.DenDefenseGeneration;
+}
+
+[[DialogDemand]]
+bool CanClaimReward(Critter player, Critter npc)
+{
+    return CanClaimRewardNow(player, npc);
+}
+
+[[DialogResult]]
+void ClaimReward(Critter player, Critter npc)
+{
+    if (!CanClaimRewardNow(player, npc)) {
+        return;
+    }
+    player.DenDefenseRewardGeneration = Game.DenDefenseGeneration;
+    ItemStacks::AddItem(player, Content::Item::car_fuel_injection, 1);
+}
+
+void StopScenarioActions()
+{
+    auto actors = Game.DenDefenseParticipantIds.clone();
+    actors.insertLast(Game.DenDefenseCompanionIds);
+    actors.insertLast(Game.DenDefenseEnemyIds);
+    actors.insertLast(Game.DenDefenseSmittyId);
+    for (int i = 0; i < actors.length(); i++) {
+        Critter? cr = Game.GetCritter(actors[i]);
+        if (cr != null) {
+            cr.StopMoving();
+            if (!cr.ControlledByPlayer) {
+                NpcPlanes::DropPlanes(cr);
+            }
+        }
+    }
+}
+
+void FadeAll(bool toBlack)
+{
+    Player[] online = Game.GetOnlinePlayers();
+    for (int i = 0; i < online.length(); i++) {
+        online[i].ClientCall.DoFadeScreen(toBlack ? ZERO_UCOLOR : ucolor(0, 0, 0, 255), toBlack ? ucolor(0, 0, 0, 255) : ZERO_UCOLOR, Time::Seconds(1));
+    }
+}
+
+[[DialogResult]]
+void Rest(Critter player, Critter npc)
+{
+    if (!CanRestNow(player, npc)) {
+        return;
+    }
+    Game.DenDefenseRestUsed = true;
+    Game.DenDefenseStage = STAGE_RESTING;
+    Game.DenDefenseRestPhase = 0;
+    Game.DenDefenseRestUntil = Game.FrameTime + Time::Seconds(1);
+    Game.DenDefenseDawn = GameTime::GetNearSynchronizedTime(0, 0, 0, 6, 0, 0);
+    Game.DenDefenseDawnLocked = false;
+    StopScenarioActions();
+    Game.StartTimeEvent(Time::Milliseconds(1), CloseRestDialogs, Game.DenDefenseGeneration);
+    BroadcastRest(0);
+    Game.StartTimeEvent(Time::Seconds(1), FinishRest, Game.DenDefenseGeneration);
+}
+
+[[TimeEvent]]
+void FinishRest(any value)
+{
+    if (int(value) != Game.DenDefenseGeneration || Game.DenDefenseStage != STAGE_RESTING) {
+        return;
+    }
+    if (!CheckDefenders()) {
+        return;
+    }
+    if (Game.DenDefenseRestPhase != 0) {
+        return;
+    }
+    if (!Game.DenDefenseDawnLocked) {
+        // Рассвет мог пройти во время затемнения или простоя сервера. До первого скачка
+        // выбираем будущий 06:00; после фиксации повторный вызов не выбирает следующие сутки.
+        if (Game.DenDefenseDawn <= Game.SynchronizedTime) {
+            Game.DenDefenseDawn = GameTime::GetNearSynchronizedTime(0, 0, 0, 6, 0, 0);
+        }
+        Game.DenDefenseDawnLocked = true;
+    }
+    GameTime::AdvanceCalendarTo(Game.DenDefenseDawn);
+    auto ids = Game.DenDefenseParticipantIds.clone();
+    ids.insertLast(Game.DenDefenseCompanionIds);
+    ids.insertLast(Game.DenDefenseSmittyId);
+    for (int i = 0; i < ids.length(); i++) {
+        Critter? cr = Game.GetCritter(ids[i]);
+        if (cr != null && !cr.IsDead()) {
+            cr.CurrentHp = cr.MaxLife;
+            cr.CurrentAp = cr.ActionPoints * Tla::AP_DIVIDER;
+        }
+    }
+    Game.DenDefenseRestPhase = 1;
+    Game.DenDefenseRestUntil = Game.FrameTime + Time::Seconds(1);
+    BroadcastRest(1);
+    Game.StartTimeEvent(Time::Seconds(1), StartAfterRest, Game.DenDefenseGeneration);
+}
+
+timespan RestRemaining()
+{
+    return Game.DenDefenseRestUntil > Game.FrameTime ? Game.DenDefenseRestUntil - Game.FrameTime : Time::Milliseconds(0);
+}
+
+void BroadcastRest(int phase)
+{
+    auto online = Game.GetOnlinePlayers();
+    for (int i = 0; i < online.length(); i++) {
+        online[i].ClientCall.DenDefenseRestTransition(Game.DenDefenseGeneration, phase, RestRemaining());
+    }
+}
+
+[[TimeEvent]]
+void CloseRestDialogs(any value)
+{
+    if (int(value) != Game.DenDefenseGeneration || Game.DenDefenseStage != STAGE_RESTING) {
+        return;
+    }
+    auto online = Game.GetOnlinePlayers();
+    for (int i = 0; i < online.length(); i++) {
+        Critter? cr = online[i].GetControlledCritter();
+        if (cr != null) {
+            Dialogs::CloseDialog(cr);
+            CritterActions::CloseContainerTransfer(cr);
+        }
+    }
+}
+
+[[TimeEvent]]
+void StartAfterRest(any value)
+{
+    if (int(value) != Game.DenDefenseGeneration || Game.DenDefenseStage != STAGE_RESTING || Game.DenDefenseRestPhase != 1) {
+        return;
+    }
+    if (!CheckDefenders()) {
+        return;
+    }
+    Map? map = Game.GetMap(Game.DenDefenseMapId);
+    verify(map != null, "Shared Den disappeared after rest");
+    Game.DenDefenseStage = STAGE_FIGHTING;
+    BroadcastRest(2);
+    Game.DenDefenseWave = Game.DenDefenseWave + 1;
+    Game.DenDefenseSpawned = 0;
+    Game.DenDefenseSpawnTotal = Game.DenDefenseWave == 1 ? 25 : (Game.DenDefenseWave == 2 ? 15 : 22);
+    Game.DenDefenseEnemyIds = {};
+    map.DenDefenseNextSpawn = Game.FrameTime + Time::Seconds(3);
+    Game.DenDefenseDawn = ZERO_SYNCTIME;
+    Game.Log("Den defense wave started, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave + " total=" + Game.DenDefenseSpawnTotal);
+}
+
+// Один регулярный контроллер; полезная нагрузка поколения блокирует старые отложенные вызовы.
+[[Event]]
+void ResumeController()
+{
+    if (Game.GetLocation(Content::Location::den) == null) {
+        Location::CreateLocation(Content::Location::den, ipos(475, 275), null);
+    }
+    Map? map = GetBaseMap();
+    verify(map != null, "Shared Den map is missing at server start");
+    map.StopTimeEvent(Controller);
+    if (Game.DenDefenseStage == STAGE_STARTING) {
+        // Незавершённая настройка не продолжается при загрузке и не выбирает нового хозяина.
+        Game.DenDefenseStage = STAGE_FAILED;
+        Game.Log("Den defense interrupted setup requires next confirmed login");
+    }
+    if (Game.DenDefenseGeneration > 0 && Game.DenDefenseStage != STAGE_FAILED) {
+        map.DenDefenseNextSpawn = Game.FrameTime + Time::Seconds(3);
+        map.StartTimeEvent(Time::Asap(), Time::Seconds(1), Controller, Game.DenDefenseGeneration);
+        if (Game.DenDefenseStage == STAGE_RESTING) {
+            Game.StopTimeEvent(FinishRest);
+            Game.StopTimeEvent(StartAfterRest);
+            Game.DenDefenseRestUntil = Game.FrameTime + Time::Seconds(1);
+            BroadcastRest(Game.DenDefenseRestPhase);
+            if (Game.DenDefenseRestPhase == 0) {
+                Game.StartTimeEvent(Time::Seconds(1), FinishRest, Game.DenDefenseGeneration);
+            }
+            else {
+                Game.StartTimeEvent(Time::Seconds(1), StartAfterRest, Game.DenDefenseGeneration);
+            }
+        }
+    }
+}
+
+[[TimeEvent]]
+void Controller(Map map, any value)
+{
+    if (map.Id != Game.DenDefenseMapId || int(value) != Game.DenDefenseGeneration || Game.DenDefenseStage == STAGE_FAILED ||
+        Game.DenDefenseStage == STAGE_STARTING) {
+        return;
+    }
+    if (Game.GetMap(Game.DenDefenseMapId) == null) {
+        FailAttempt();
+        return;
+    }
+    if (Game.DenDefenseStage == STAGE_RESTING) {
+        return;
+    }
+    if (!CheckDefenders()) {
+        return;
+    }
+    Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
+    verify(smitty != null, "Validated Smitty disappeared");
+    PatternCommon::CommonPattern helpers;
+    if (smitty.IsAlive()) {
+        helpers.TryUseStim(smitty);
+        ChooseTarget(smitty);
+    }
+    for (int i = 0; i < Game.DenDefenseCompanionIds.length(); i++) {
+        Critter? companion = Game.GetCritter(Game.DenDefenseCompanionIds[i]);
+        if (companion != null && companion.IsAlive()) {
+            helpers.TryUseStim(companion);
+        }
+    }
+    if (Game.DenDefenseStage != STAGE_FIGHTING) {
+        return;
+    }
+    if (Game.DenDefenseSpawned < Game.DenDefenseSpawnTotal && Game.FrameTime >= map.DenDefenseNextSpawn) {
+        SpawnEnemy();
+    }
+    auto enemies = Game.DenDefenseEnemyIds.clone();
+    for (int i = 0; i < enemies.length(); i++) {
+        Critter? enemy = Game.GetCritter(enemies[i]);
+        if (enemy == null || enemy.MapId != map.Id || !IsActor(enemy)) {
+            Game.Log("Den defense outstanding enemy disappeared or left its map, id=" + enemies[i]);
+            FailAttempt();
+            return;
+        }
+        if (enemy.IsDead()) {
+            ConfirmEnemyDeath(enemy);
+        }
+        else {
+            ChooseTarget(enemy);
+        }
+    }
+    if (Game.DenDefenseSpawned == Game.DenDefenseSpawnTotal && Game.DenDefenseEnemyIds.isEmpty()) {
+        CompleteWave();
+    }
+}
+
+void SpawnEnemy()
+{
+    Map? map = Game.GetMap(Game.DenDefenseMapId);
+    verify(map != null, "Shared Den disappeared during spawn");
+    // Внутренние точки трёх комнат по стенам/крышам den.fomap; дверь и улица не входят.
+    const mpos[] approaches = {mpos(268, 125),
+                               mpos(270, 125),
+                               mpos(272, 125),
+                               mpos(274, 125),
+                               mpos(276, 125),
+                               mpos(270, 123),
+                               mpos(268, 140),
+                               mpos(270, 140),
+                               mpos(272, 140),
+                               mpos(268, 142),
+                               mpos(270, 142),
+                               mpos(272, 142),
+                               mpos(278, 140),
+                               mpos(280, 140),
+                               mpos(282, 140),
+                               mpos(278, 142),
+                               mpos(280, 142),
+                               mpos(282, 142)};
+    int cursor = Game.DenDefenseSpawned;
+    mpos hex;
+    bool found = false;
+    for (int i = 0; i < 6; i++) {
+        mpos candidate = approaches[(cursor % 3) * 6 + i];
+        if (map.IsHexMovable(candidate)) {
+            hex = candidate;
+            found = true;
+            break;
+        }
+    }
+    map.DenDefenseNextSpawn = Game.FrameTime + Time::Seconds(3);
+    if (!found) {
+        Game.DenDefenseSpawnRetries = Game.DenDefenseSpawnRetries + 1;
+        if (Game.DenDefenseSpawnRetries % 5 == 1) {
+            Game.Log("Den defense spawn house occupied, cursor=" + cursor + " generation=" + Game.DenDefenseGeneration);
+        }
+        return;
+    }
+    Game.DenDefenseSpawnRetries = 0;
+    int brother = Game.DenDefenseWave == 3 && cursor >= 20 ? cursor - 19 : 0;
+    hstring proto;
+    if (Game.DenDefenseWave == 1) {
+        proto = cursor % 2 == 0 ? Content::Critter::Loser : Content::Critter::Loser2;
+    }
+    else if (Game.DenDefenseWave == 2) {
+        proto = cursor % 2 == 0 ? Content::Critter::Wilder : Content::Critter::Wilder2;
+    }
+    else {
+        const hstring[] townspeople = {Content::Critter::WeakPeasant,
+                                       Content::Critter::AveragePeasant,
+                                       Content::Critter::HomesteaderMale,
+                                       Content::Critter::HomesteaderFemale};
+        // У nmbpea есть J (ружьё), у nmbsnp — нет; оба брата должны реально стрелять.
+        proto = brother > 0 ? Content::Critter::WeakPeasant : townspeople[cursor % townspeople.length()];
+    }
+    // Готовые пакеты с обычными боевыми репликами: племя / бандиты / горожане.
+    // У прото Loser/WeakPeasant пакет 25 без речи; глобальную таблицу AiSettings не меняем.
+    int aiId = Game.DenDefenseWave == 2 ? 1 : (brother > 0 ? 13 : 14);
+    dict<CritterProperty, any> props = {{CritterProperty::BagId, Bags::Empty},
+                                        {CritterProperty::AiId, aiId},
+                                        {CritterProperty::ReplicationTime, -1},
+                                        {CritterProperty::DenDefenseGeneration, Game.DenDefenseGeneration},
+                                        {CritterProperty::DenDefenseRole, ROLE_ENEMY},
+                                        {CritterProperty::DenDefenseBrother, brother},
+                                        {CritterProperty::TeamId, Teams::Mob0}};
+    Critter enemy = map.AddCritter(proto, hex, HDIR_Random, props);
+    auto enemies = Game.DenDefenseEnemyIds.clone();
+    enemies.insertLast(enemy.Id);
+    Game.DenDefenseEnemyIds = enemies;
+    auto history = Game.DenDefenseEnemyHistory.clone();
+    history.insertLast(enemy.Id);
+    Game.DenDefenseEnemyHistory = history;
+    Game.DenDefenseSpawned = Game.DenDefenseSpawned + 1;
+    enemy.StopTimeEvent(NpcBags::OnCritterIdle);
+    enemy.IsNoHome = true;
+    enemy.IsNoEnemyStack = true;
+    enemy.IsNoLoot = false;
+    enemy.IsNoSteal = false;
+    enemy.IsUnlimitedAmmo = false;
+    enemy.IsGeck = true;
+    if (Game.DenDefenseWave == 2) {
+        if (cursor < 3) {
+            Item spear = ItemStacks::AddItem(enemy, Content::Item::spear, 1);
+            enemy.ChangeItemSlot(spear.Id, CritterItemSlot::Main);
+        }
+        const hstring[] tribalLoot = {Content::Item::meat, Content::Item::flower, Content::Item::healing_powder};
+        ItemStacks::AddItem(enemy, tribalLoot[cursor % tribalLoot.length()], 1);
+    }
+    else {
+        const hstring[] drinks = {Content::Item::beer, Content::Item::booze, Content::Item::gamma_gulp_beer, Content::Item::roentgen_rum};
+        const hstring[] junk = {Content::Item::rope, Content::Item::rubber_boots, Content::Item::mutated_fruit};
+        ItemStacks::AddItem(enemy, drinks[cursor % drinks.length()], 1);
+        ItemStacks::AddItem(enemy, junk[cursor % junk.length()], 1);
+        if (Game.DenDefenseWave == 3) {
+            ItemStacks::AddItem(enemy, Content::Item::bottle_caps, Game.Random(1, 10));
+        }
+    }
+    if (brother > 0) {
+        enemy.DialogId = (brother == 1 ? "den_defense_bobby" : "den_defense_billy").hstr();
+        Item rifle = ItemStacks::AddItem(enemy, Content::Item::springer_rifle, 1);
+        rifle.DenDefenseFiniteAmmo = true;
+        rifle.AmmoPid = Content::Item::_10mm_jhp;
+        rifle.AmmoCount = 1;
+        ItemStacks::AddItem(enemy, Content::Item::_10mm_jhp, 4);
+        verify(CritterAnims::IsCritterStateAnim(enemy, rifle.Weapon_StateAnim), "Dunton rifle animation missing");
+        enemy.ChangeItemSlot(rifle.Id, CritterItemSlot::Main);
+        enemy.LastWeaponId = rifle.Id;
+        enemy.LastWeaponUse = 0;
+        enemy.LastWeaponNotFound = false;
+        ItemStacks::AddItem(enemy, Content::Item::brass_knuckles, 1);
+    }
+    ChooseTarget(enemy);
+}
+
+// Та же политика дверей, что у MainPlanes::NpcPlaneEnd: запертые без ключа не проходим.
+bool CanPassDoor(Critter npc, Item obstacle)
+{
+    return obstacle.Type == ItemType::Door && AiSettings::AiCanOpenDoors(npc.AiId) && Lockers::IsKeyAvailable(npc, obstacle.LockerId);
+}
+
+void ChooseTarget(Critter npc)
+{
+    Map? map = npc.GetMap();
+    verify(map != null && map.Id == Game.DenDefenseMapId, "Scenario actor left Den", npc);
+    bool enemy = npc.DenDefenseRole == ROLE_ENEMY;
+    Critter? best = null;
+    int distance = 100000;
+    auto candidates = enemy ? Game.DenDefenseParticipantIds.clone() : Game.DenDefenseEnemyIds.clone();
+    if (enemy) {
+        candidates.insertLast(Game.DenDefenseCompanionIds);
+    }
+    for (int i = 0; i < candidates.length(); i++) {
+        Critter? candidate = Game.GetCritter(candidates[i]);
+        if (candidate == null || candidate.IsDead() || !CanAttack(npc, candidate) || !npc.IsSee(candidate)) {
+            continue;
+        }
+        int current = Game.GetDistance(npc, candidate);
+        int cut = 1 + npc.Multihex + candidate.Multihex;
+        if (current < distance && (!enemy || current <= cut || map.GetPathLength(npc, candidate.Hex, cut, CanPassDoor) > 0)) {
+            distance = current;
+            best = candidate;
+        }
+    }
+    // Улица, скрывшийся защитник и недоступный игрок не заменяют главную цель — мастерскую.
+    Critter? smitty = enemy ? Game.GetCritter(Game.DenDefenseSmittyId) : null;
+    if (best == null && smitty != null && smitty.IsAlive() && CanAttack(npc, smitty) && npc.IsSee(smitty)) {
+        best = smitty;
+    }
+    auto plans = NpcPlanes::GetPlanes(npc);
+    if (best != null) {
+        if (plans != null && plans[0].Type == NpcPlanes::AI_PLANE_ATTACK && plans[0].Attack_TargId == best.Id) {
+            return; // Не сбрасываем выполняющийся дочерний план открытия двери/обхода заслона.
+        }
+        npc.StopMoving();
+        NpcPlanes::DropPlanes(npc);
+        NpcPlanes::AddAttackPlane(npc, 0, best);
+    }
+    else if (smitty != null && smitty.IsAlive()) {
+        if (plans != null && plans[0].Type == NpcPlanes::AI_PLANE_WALK && plans[0].Walk_Hex == smitty.Hex) {
+            return;
+        }
+        npc.StopMoving();
+        NpcPlanes::DropPlanes(npc);
+        NpcPlanes::AddWalkPlane(npc, 0, smitty.Hex, Game.GetDirection(npc.Hex, smitty.Hex), false, 1);
+    }
+    else {
+        npc.StopMoving();
+        NpcPlanes::DropPlanes(npc);
+    }
+}
+
+// Именно фактический выстрел: не выбор оружия и не попытка перезарядки.
+void OnWeaponFired(Critter cr, AbstractItem weapon, ProtoItem? ammo)
+{
+    if (IsActor(cr) && cr.DenDefenseBrother > 0 && weapon.ProtoId == Content::Item::springer_rifle && ammo != null) {
+        Messaging::SayShoutOnHead(cr, MsgStr::DialogTextKey(cr.DialogId, Game.Random(100, 103)));
+    }
+}
+
+void CompleteWave()
+{
+    Game.DenDefenseStage = Game.DenDefenseWave == 3 ? STAGE_VICTORY : STAGE_WAITING;
+    Game.DenDefenseRestUsed = false;
+    Game.Log("Den defense wave cleared, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave);
+}
+
+// Отсутствие выгруженного хозяина не считается смертью и не передаёт лидерство.
+bool CheckDefenders()
+{
+    Critter? primary = Game.GetCritter(Game.DenDefensePrimaryId);
+    Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
+    if ((primary != null && primary.IsDead()) || smitty == null || smitty.IsDead() || smitty.MapId != Game.DenDefenseMapId) {
+        FailAttempt(primary != null && primary.IsDead());
+        return false;
+    }
+    return true;
+}
+
+void FailAttempt(bool primaryDeath = false)
+{
+    if (Game.DenDefenseStage == STAGE_FAILED) {
+        return;
+    }
+    Game.DenDefenseStage = STAGE_FAILED;
+    Game.StopTimeEvent(FinishRest);
+    Game.StopTimeEvent(StartAfterRest);
+    Map? map = Game.GetMap(Game.DenDefenseMapId);
+    if (map != null) {
+        map.StopTimeEvent(Controller);
+    }
+    StopScenarioActions();
+    BroadcastRest(2);
+    auto online = Game.GetOnlinePlayers();
+    for (int i = 0; i < online.length(); i++) {
+        online[i].ClientCall.DenDefenseTransition(Game.DenDefenseGeneration, 1);
+    }
+    if (primaryDeath) {
+        FadeAll(true);
+        Game.StartTimeEvent(Time::Seconds(1), PresentFailure, Game.DenDefenseGeneration);
+    }
+    Game.Log("Den defense failed, generation=" + Game.DenDefenseGeneration);
+}
+
+[[TimeEvent]]
+void PresentFailure(any value)
+{
+    if (int(value) != Game.DenDefenseGeneration || Game.DenDefenseStage != STAGE_FAILED || Game.DenDefenseFailurePresented) {
+        return;
+    }
+    Game.DenDefenseFailurePresented = true;
+    Player[] online = Game.GetOnlinePlayers();
+    for (int i = 0; i < online.length(); i++) {
+        online[i].ClientCall.DenDefenseTransition(Game.DenDefenseGeneration, 2);
+    }
+}
+
+[[TimeEvent]]
+void ReviveSecondary(any[] values)
+{
+    if (int(values[0]) != Game.DenDefenseGeneration || Game.DenDefenseStage == STAGE_FAILED) {
+        return;
+    }
+    Critter? cr = Game.GetCritter(ident(values[1]));
+    if (cr == null || !IsParticipant(cr) || IsPrimary(cr) || !cr.IsDead()) {
+        return;
+    }
+    if (!SpillLoot(cr)) {
+        verify(PlacePlayer(cr), "Unable to map secondary before inventory spill", cr);
+        verify(SpillLoot(cr), "Unable to spill dead secondary inventory", cr);
+    }
+    verify(PlacePlayer(cr), "Unable to revive secondary at Den base", cr);
+    CritterState::ToAlive(cr);
+    cr.CurrentHp = cr.MaxLife;
+    cr.CurrentAp = cr.ActionPoints * Tla::AP_DIVIDER;
+}
+
+[[Event]]
+void HandleCritterDeath(Critter cr, Critter? killer)
+{
+    bool keyDefender = IsPrimary(cr) || (IsActor(cr) && cr.DenDefenseRole == ROLE_SMITTY);
+    if (keyDefender) {
+        FailAttempt(IsPrimary(cr)); // Провал фиксируем до переноса вещей и любых ошибок представления.
+    }
+    if (IsParticipant(cr)) {
+        SpillLoot(cr);
+    }
+    if (!keyDefender && IsParticipant(cr)) {
+        any[] values = {Game.DenDefenseGeneration, cr.Id};
+        Game.StartTimeEvent(Time::Seconds(3), ReviveSecondary, values);
+    }
+    else if (IsActor(cr) && cr.DenDefenseRole == ROLE_ENEMY) {
+        ConfirmEnemyDeath(cr);
+    }
+}
+
+void ConfirmEnemyDeath(Critter cr)
+{
+    if (!IsActor(cr) || cr.DenDefenseRole != ROLE_ENEMY || !cr.IsDead()) {
+        return;
+    }
+    if (cr.MapId != Game.DenDefenseMapId) {
+        Game.Log("Den defense enemy died outside its map, id=" + cr.Id);
+        FailAttempt();
+        return;
+    }
+    auto enemies = Game.DenDefenseEnemyIds.clone();
+    int index = enemies.find(cr.Id);
+    if (index >= 0) {
+        enemies.removeAt(index);
+        Game.DenDefenseEnemyIds = enemies;
+    }
+}
+
+#endif
+
+#if CLIENT
+
+[[ModuleInit]]
+void InitDenDefenseClient()
+{
+    Game.OnRenderIface.Subscribe(DrawFailure, EventPriority::Lowest);
+    Game.OnDisconnected.Subscribe(ClearFailurePresentation);
+}
+
+[[ClientRemoteCall]]
+void DenDefenseTransition(int generation, int state)
+{
+    if (generation < Game.DenDefenseClientGeneration) {
+        return;
+    }
+    if (state == 0) {
+        StopFailureVideo(true);
+    }
+    Game.DenDefenseClientGeneration = generation;
+    Game.DenDefenseClientFrozen = state != 0;
+    Game.DenDefenseClientShowFailure = state == 2;
+    Game.DenDefenseClientResting = false;
+    ChosenActions::SetChosenActions({});
+    if (state == 2) {
+        Game.PlayVideo("video/TheLifeAfterHell.ogv|video/TheLifeAfterHell.ogg", true, false);
+    }
+}
+
+[[ClientRemoteCall]]
+void DenDefenseRestTransition(int generation, int phase, timespan remaining)
+{
+    if (generation < Game.DenDefenseClientGeneration) {
+        return;
+    }
+    Game.DenDefenseClientGeneration = generation;
+    Game.DenDefenseClientResting = phase != 2;
+    Game.DenDefenseClientRestPhase = phase;
+    Game.DenDefenseClientBlackAt = Game.FrameTime + remaining;
+    ChosenActions::SetChosenActions({});
+}
+
+void StopFailureVideo(bool resumeMusic)
+{
+    if (!Game.DenDefenseClientShowFailure) {
+        return;
+    }
+    Game.PlayVideo("", true, false);
+    Game.PlayMusic("", Time::Milliseconds(1));
+    if (resumeMusic && HasCurMap && CurMap.Music.length() > 0) {
+        Game.PlayMusic(CurMap.Music[0], Time::Milliseconds(1));
+    }
+}
+
+[[Event]]
+void ClearFailurePresentation()
+{
+    StopFailureVideo(false);
+    Game.DenDefenseClientResting = false;
+    Game.DenDefenseClientFrozen = false;
+    Game.DenDefenseClientShowFailure = false;
+    Game.DenDefenseClientGeneration = 0;
+}
+
+[[Event]]
+void DrawFailure()
+{
+    if (Game.DenDefenseClientResting) {
+        int remaining = Game.DenDefenseClientBlackAt > Game.FrameTime ? (Game.DenDefenseClientBlackAt - Game.FrameTime).milliseconds : 0;
+        int progress = Math::Clamp(remaining * 255 / 1000, 0, 255);
+        int alpha = Game.DenDefenseClientRestPhase == 0 ? 255 - progress : progress;
+        Effects::DrawFullscreenOverlay(ucolor(0, 0, 0, alpha));
+    }
+    if (!Game.DenDefenseClientShowFailure || Game.IsVideoPlaying() || !HasChosen || !Gui::IsScreenActive(GuiScreen::Game)) {
+        return;
+    }
+    Effects::DrawFullscreenOverlay(ucolor(0, 0, 0, 255));
+    string text = Game.GetText(MsgStr::DialogTextKey("den_defense_smitty".hstr(), 1000));
+    Game.DrawText(text, ipos(40, ScreenSize.height / 2), isize(ScreenSize.width - 80, 150), Color::White, TextFormat(FontType::Big, FontFlag(0), 0));
+}
+
+#endif
+
+}

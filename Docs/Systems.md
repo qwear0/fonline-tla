@@ -60,8 +60,10 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | `NpcPlanes` / `Pattern*` | S | NPC plan processing and behavior patterns |
 | `Animation` | C/M | `InitAnimation` subscribes to critter animation events; Fallout/tactics selection; sounds only on C |
 | `ChosenActions` | S/C | Client action queue and server request handlers |
-| `PlayerRegistration` | S/C | Login and registration |
-| `Replication` | S | Death, respawn and permanent-death flow |
+| `PlayerRegistration` | S/C | Login and registration; confirmed returned Player commits Den defense entry |
+| `DenDefense` | S/C | Shared Den generation/primary, companions, rest/waves, ground loot and failure; `OnSuccessfulLogin`, `ResumeController`; [DenDefense.md](DenDefense.md) |
+| `Merc` / `CritterAnims` | S / shared helpers | Companion ownership and weapon-animation admission; narrow Den exceptions, normal recruitment/animation policy otherwise |
+| `Replication` | S | Ordinary death/respawn/permanent-death flow; Den participants use their scenario's base resurrection instead |
 
 See [Animation.md](Animation.md) for the native baked root-motion flow, distinct from the game animation selector.
 
@@ -93,6 +95,7 @@ operations rather than raw engine add/move/destroy/clone calls. Cursor visuals a
 | `Messaging` / `MsgStr` | S/C | Player messages and text-pack key construction |
 | `Sounds` | shared helpers, C playback | Map legacy/case-insensitive sound names and series to exact baked paths; call `Sounds::Play` |
 | `DayColor` | shared helpers, C/M updates | Evaluate authored day curves and push `Map.SetDayColors` each frame |
+| `MapTime` / `GameTime` | shared helpers, S clock setter | One scaled TLA calendar, future dates and forward-only shared dawn advance; frame callbacks retain their real delays |
 | `UserOptions` | C | Persist player choices as qualified `Group.Name` local settings |
 | `AiControl` | S/C | Client observation/control and explicitly gated server QA commands; [AiControl.md](AiControl.md) |
 | `MapperMain` | M | Editor tabs/tools and mapper lifecycle |
@@ -121,6 +124,8 @@ baked application when resolution matters. Generated `Scripts/Content.fos` is no
 - Damage/skills/AP: `Parameters`, then `Combat` or `CritterActions`.
 - Player abilities: both sides of `ChosenActions`, then authoritative execution.
 - Place/NPC behavior: the regional module, matching dialogs/protos, then `NpcPlanes`/`Pattern*` as needed.
+- New-character shared start/Den defense: `PlayerRegistration` -> `DenDefense` and `Dialogs/den_defense_*`;
+  see [DenDefense.md](DenDefense.md). Gameplay acceptance and safe runtime replacement remain user-owned.
 - Dialog-callable checks/effects: `Dialog`, then `.fodlg` consumers and localized text.
 - GUI fixes: owning `.fogui` and `GuiScreensExt`; preserve matching generated behavior as described in
   [AGENTS.md](../AGENTS.md#guiscreensfos-pitfall).

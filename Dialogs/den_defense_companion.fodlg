@@ -1,0 +1,43 @@
+[Comment]
+Shared Den squad controls. No Intelligence or Charisma demands.
+
+[Dialog]
+Speech 1
+  Answer 2
+    Demand Script DenDefense::CanCommand
+  Answer Exit
+
+Speech 2
+  Answer Exit
+    Result Script DenDefense::Follow
+  Answer Exit
+    Result Script DenDefense::Wait
+  Answer Exit
+    Result Script DenDefense::ToggleDefend
+  Answer Exit
+    Result Script DenDefense::ToggleAssist
+  Answer Exit
+
+[Text russ]
+{Name}{}{Соплеменник}
+{Speech 1}{}{Мы пришли с тобой из одного племени. Что нужно?}
+{Answer 1 1}{}{Слушай мой приказ.}
+{Answer 1 2}{}{Ничего.}
+{Speech 2}{}{Я слушаю. Защита и помощь включены с самого начала; их можно переключить независимо.}
+{Answer 2 1}{}{Следуй за мной.}
+{Answer 2 2}{}{Жди здесь.}
+{Answer 2 3}{}{Переключи защиту меня от нападений.}
+{Answer 2 4}{}{Переключи помощь в моих атаках.}
+{Answer 2 5}{}{Пока без изменений.}
+
+[Text engl]
+{Name}{}{Tribesperson}
+{Speech 1}{}{We came from the same tribe. What do you need?}
+{Answer 1 1}{}{Listen to my orders.}
+{Answer 1 2}{}{Nothing.}
+{Speech 2}{}{I am listening. Defend and assist are enabled initially; you can toggle them independently.}
+{Answer 2 1}{}{Follow me.}
+{Answer 2 2}{}{Wait here.}
+{Answer 2 3}{}{Toggle defending me against attackers.}
+{Answer 2 4}{}{Toggle assisting my attacks.}
+{Answer 2 5}{}{No changes for now.}

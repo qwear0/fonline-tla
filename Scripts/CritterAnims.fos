@@ -8,7 +8,7 @@ namespace CritterAnims
 // у которой берём кадры анимаций и набор звуков (общий донор для похожих криттеров).
 // clang-format off
 
-dict<string, string> anims =
+const dict<string, string> anims =
 {
     { "harobe", "hmjmps" },
     { "hfcmbt", "hmjmps" },
@@ -133,6 +133,13 @@ bool IsCritterStateAnim(Critter cr, int weaponAnim)
 {
     auto crType = CritterTypes::GetCritterType(cr);
     if (crType != null) {
+#if SERVER
+        // Племенные спутники Дэна используют уже существующую подмену Club -> Knife
+        // из Animation::OnCritterAnimationSubstitute. Для остальных NPC допуск не меняется.
+        if (weaponAnim == CritterStateAnim::Club && DenDefense::IsCompanion(cr) && crType.HasAnim(CritterStateAnim::Knife)) {
+            return true;
+        }
+#endif
         return crType.HasAnim(weaponAnim);
     }
 

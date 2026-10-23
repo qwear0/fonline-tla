@@ -1,12 +1,13 @@
 // NpcPlanes — серверная система AI-планов NPC: приоритетная очередь поведенческих задач (misc/attack/walk/pick; патруль и курьер — в разработке).
 // Периодический тайм-эвент OnCritterIdle вызывает ProcessAi: берёт текущий план, двигает NPC по путям с трассировкой, атакует/подбирает предметы/выполняет скрипт и переключает планы по приоритету.
 // Планы хранятся в persistent-свойстве Critter.Planes; порождает события OnNpcPlaneBegin/End/Run. Опирается на EnemyStack, CritterState, Messaging, Dialogs, LineTracer. Только сторона SERVER.
+// AllNpcPlanes и счётчик id глобальны: очередь должна быть общей для вложенных событий всех NPC.
 namespace NpcPlanes
 {
 
 #if SERVER
 
-// TODO:: void FOServer::ProcessAI( Npc* npc ) from ServerNpc.cpp engine 1519
+// TODO: сверить с FOServer::ProcessAI(Npc*) из ServerNpc.cpp движка 1519.
 
 ///@ Property Critter Server int32[] Planes Mutable Persistent
 
@@ -90,7 +91,7 @@ void OnCritterInit(Critter cr, bool firstTime)
 [[TimeEvent]]
 void OnCritterIdle(Critter npc)
 {
-    if (npc.ControlledByPlayer || CritterState::IsBusy(npc)) {
+    if (npc.ControlledByPlayer || !DenDefense::CanAct(npc) || CritterState::IsBusy(npc)) {
         return;
     }
 
@@ -131,7 +132,7 @@ int ProcessAi(Critter npc)
         return 5000;
     }
 
-    // Get map
+    // Получаем карту.
     Map? map = Game.GetMap(npc.MapId);
     if (map == null) {
         return 5000;
@@ -287,6 +288,11 @@ int ProcessAi(Critter npc)
             /* Цель видима                                                    */
             Critter? targ = Game.GetCritter(plane.Attack_TargId);
 
+            if (targ != null && !DenDefense::CanAttack(npc, targ)) {
+                NextPlane(npc, REASON_TARGET_DISAPPEARED);
+                break;
+            }
+
             if (targ != null && npc.IsSee(targ)) {
                 /* Шаг 0: проверка успешного завершения плана и продолжение таймаута цели          */
 
@@ -391,6 +397,10 @@ int ProcessAi(Critter npc)
                     if (!npc.IsUnlimitedAmmo && realWeapon.Weapon_MaxAmmoCount > 0 && realWeapon.AmmoCount == 0) {
                         Item? ammo = FindAmmoForWeapon(npc, realWeapon);
                         if (ammo == null) {
+                            if (DenDefense::UsesFiniteAmmo(npc) || realWeapon.DenDefenseFiniteAmmo) {
+                                NextPlane(npc, REASON_USE_ITEM_NOT_FOUND);
+                                break;
+                            }
                             if (realWeapon.AmmoPid == EMPTY_HSTRING) {
                                 realWeapon.AmmoPid = realWeapon.Weapon_DefaultAmmoPid;
                             }
@@ -430,8 +440,8 @@ int ProcessAi(Critter npc)
                 min_dist = r1;
                 maxDist = r2;
 
-                if (r2 <= 0) // Убежать
-                {
+                // Участники волны не бегут из Дэна даже при низком шансе попадания.
+                if (r2 <= 0 && !DenDefense::UsesFiniteAmmo(npc)) {
                     NextPlane(npc, REASON_RUN_AWAY);
                     break;
                 }
@@ -1056,6 +1066,15 @@ bool AddPlane(Critter cr, NpcPlane plane)
 bool AddPlane(Critter? cr, NpcPlane plane, int reason)
 {
     if (cr != null && !cr.ControlledByPlayer) {
+        if (!DenDefense::CanAct(cr)) {
+            return false;
+        }
+        if (plane.Type == AI_PLANE_ATTACK) {
+            Critter? target = Game.GetCritter(plane.Attack_TargId);
+            if (target != null && !DenDefense::CanAttack(cr, target)) {
+                return false;
+            }
+        }
         NpcPlane[] planes = {};
         NpcPlane[]? storedPlanes = AllNpcPlanes.get(cr.Id, null);
         if (storedPlanes != null) {

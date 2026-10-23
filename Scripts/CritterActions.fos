@@ -73,6 +73,9 @@ bool IsContainerSelfMove(ident movingItemId, ident containerId)
 // При успехе списывает AP, взводит тик регенерации и брейктайм, возвращает true.
 bool ProcessAp(Critter cr, int ap)
 {
+    if (!DenDefense::CanAct(cr)) {
+        return false;
+    }
     if (cr.CurrentAp / Tla::AP_DIVIDER < int(ap)) {
         int apRegeneration = cr.ApRegenerationTime;
         if (apRegeneration == 0) {
@@ -811,6 +814,9 @@ void ReloadWeapon(Critter cr, ident weaponId, ident ammoId)
 void Attack(Critter cr, ident targetId, int mode)
 {
     Critter? target = Game.GetCritter(targetId);
+    if (target != null && !DenDefense::CanAttack(cr, target)) {
+        return;
+    }
 
     // Распаковываем режим использования и зону прицеливания из mode
     int use = mode & 0xF;

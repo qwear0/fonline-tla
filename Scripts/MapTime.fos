@@ -36,13 +36,7 @@ void InitMapTime()
 // результат в глобальные поля Game.Year..Second.
 void UpdateDateTimeImpl()
 {
-    // Точка отсчёта мира: 30 октября стартового года, начало суток.
-    nanotime time = Game.PackTime(Settings.WorldTime.StartYear, 10, 30, 0, 0, 0, 0, 0, 0);
-
-    // Ускоренное игровое время = реальное прошедшее время * множитель мира.
-    // Собираем timespan напрямую из int64: Time::Milliseconds принимает int32, и произведение
-    // переполнялось примерно через 30 часов аптайма, отматывая календарь назад на ~49.7 дней
-    time += timespan(Game.SynchronizedTime.milliseconds * Settings.WorldTime.Multiplier, Time::MillisecondsPlace);
+    nanotime time = CalendarTime(Game.SynchronizedTime);
 
     int year = 0;
     int month = 0;
@@ -65,6 +59,19 @@ void UpdateDateTimeImpl()
 #if CLIENT
     Game.GlobalDayTime = hour * 60 + minute;
 #endif
+}
+
+// Единственная точка преобразования: календарь TLA ускорен относительно синхровремени движка.
+nanotime CalendarTime(synctime time)
+{
+    return Game.PackTime(Settings.WorldTime.StartYear, 10, 30, 0, 0, 0, 0, 0, 0) +
+           timespan(time.milliseconds * Settings.WorldTime.Multiplier, Time::MillisecondsPlace);
+}
+
+synctime SynchronizedTime(nanotime calendar)
+{
+    timespan elapsed = calendar - Game.PackTime(Settings.WorldTime.StartYear, 10, 30, 0, 0, 0, 0, 0, 0);
+    return ZERO_SYNCTIME + timespan(elapsed.milliseconds / Settings.WorldTime.Multiplier, Time::MillisecondsPlace);
 }
 
 [[TimeEvent]]

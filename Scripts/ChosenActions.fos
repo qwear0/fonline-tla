@@ -50,6 +50,9 @@ void SetChosenActions(any[] actions)
 
 void SetAction(any[] action, bool append, bool toBeginning)
 {
+    if (Game.DenDefenseClientFrozen || Game.DenDefenseClientResting) {
+        return;
+    }
     verify(action.length() == 7, "Assertion failed");
 
     if (!append) {
@@ -71,7 +74,7 @@ void SetAction(any[] action, bool append, bool toBeginning)
 [[Event]]
 void ChosenProcess()
 {
-    if (!HasChosen) {
+    if (!HasChosen || Game.DenDefenseClientFrozen || Game.DenDefenseClientResting) {
         return;
     }
 
@@ -84,7 +87,7 @@ void ChosenProcess()
         // Режим скрытности
         chosen.SetAlpha(chosen.InSneakMode ? 130 : 255);
 
-        // Shoot borders (SetShootBorders removed in engine update)
+        // Границы стрельбы: SetShootBorders удалён при обновлении движка.
         // bool shootBorders = Gui::Cursor == CursorType::UseWeapon;
         // int attackDist = Parameters::GetActiveItemAttackDistance(chosen);
         // CurMap.SetShootBorders(shootBorders, attackDist);
@@ -538,7 +541,7 @@ void ChosenProcess()
             //    );
             // else
             //    needMove = !CheckDist( chosen.HexX, chosen.HexY, hx, hy, maxDist );
-            // TODO: r17 trace
+            // TODO: мигрировать трассировку r17.
             if (needMove) {
                 if (dist > maxDist) {
                     bool isRun = false; // 814 ( Settings.Movement.AlwaysRun && dist >= Settings.Movement.AlwaysRunUseDist );

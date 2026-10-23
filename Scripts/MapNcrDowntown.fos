@@ -31,9 +31,12 @@ void MapInit(Map downtown, bool firstTime)
     Game.StartTimeEvent((GameTime::GetNearSynchronizedTime(0, 0, 0, 20, 0, 0) - Game.SynchronizedTime), RepeatableEnableForceField, values);
 
     // Если карта стартует ночью — сразу включаем силовое поле, не дожидаясь вечернего тайм-события.
-    Game.UnpackSynchronizedTime(Game.SynchronizedTime, year, month, day, hour, minute, second, milisecond);
-    if (hour >= 20 || hour < 5) {
+    GameTime::UnpackCalendar(Game.SynchronizedTime, year, month, day, hour, minute, second, milisecond);
+    if (hour >= 20 || hour < 6) {
         Game.StartTimeEvent(ZERO_TIMESPAN, EnergyBarier::EnableForceField, values);
+    }
+    else {
+        Game.StartTimeEvent(ZERO_TIMESPAN, EnergyBarier::DisableForceField, values);
     }
 }
 

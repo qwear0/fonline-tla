@@ -56,17 +56,17 @@ EventResult start()
     Worldmap::WorldmapInit();
 
     // Инициализация караванов
-    // Caravan::CaravansInit(); // WIP: flaky null-deref in CaravanInfo route setup on init
+    // Caravan::CaravansInit(); // Не домигрировано: нестабильное разыменование null в настройке маршрута CaravanInfo.
 
     // Инициализация зон без PvP
     // NoPvpMaps::SetNoPvp();
 
     // Инициализация игровых событий
-    // GameEvent::DeclareEvents(); // WIP: null-deref in DeclareEvent (GameEvent.fos:391) on fresh DB
-    // GameEvent::CheckAllGameEvents(); // WIP: depends on DeclareEvents; racing event also broken
+    // GameEvent::DeclareEvents(); // Не домигрировано: разыменование null в DeclareEvent (GameEvent.fos:391) на новой базе.
+    // GameEvent::CheckAllGameEvents(); // Зависит от DeclareEvents; гонки также требуют миграции.
 
     // Доски объявлений
-    // BulletinBoard::StartMessenger(); // WIP: null-deref in Messenger.Load (BulletinBoard.fos:243) on fresh DB
+    // BulletinBoard::StartMessenger(); // Не домигрировано: разыменование null в Messenger.Load (BulletinBoard.fos:243) на новой базе.
 
     return EventResult::ContinueChain;
 }
@@ -85,16 +85,11 @@ EventResult GenerateWorld()
 {
     Game.SFImperatorMemory = 50;
 
-    int multiplier = Settings.WorldTime.Multiplier;
-    int year = 2246;
-    int month = 10;
-    int day = 30;
-    int hour = 1;
-    int minute = 0;
-    synctime time = Game.PackSynchronizedTime(year, month, day, hour, minute, 0, 0);
+    synctime time = MapTime::SynchronizedTime(Game.PackTime(Settings.WorldTime.StartYear, 10, 30, 1, 0, 0, 0, 0, 0));
     Game.SetSynchronizedTime(time);
 
     Location::CreateLocation(Content::Location::replication_1, ipos(383, 230), null);
+    Location::CreateLocation(Content::Location::den, ipos(475, 275), null);
     Location::CreateLocation(Content::Location::klamath, ipos(375, 125), null); /*||
          Location::CreateLocation( Content::Location::den, 475, 275, null ) == null 
         ||     ||
@@ -153,6 +148,12 @@ void CritterAttacked(Critter cr, Critter attacker)
         other[i].OnSomeCritterAttacked.Fire(cr, attacker);
     }
 
+    if (DenDefense::IsScenarioCombat(cr, attacker)) {
+        if (!cr.ControlledByPlayer && cr.IsAlive() && DenDefense::CanAttack(cr, attacker)) {
+            NpcPlanes::AddAttackPlane(cr, 0, attacker);
+        }
+        return; // В бой сценария не набираем городскую стражу через TeamsTable.
+    }
     if (cr.ControlledByPlayer) {
         return; // Игрокам помощь не подключается
     }
@@ -1020,7 +1021,7 @@ void CritterInit(Critter cr, bool firstTime)
         // Удаляем нулевые time-events
         //cr.RemoveTimeEvents(0);
 
-        // TRAIT_FAST_SHOT migration, delete in future
+        // Миграция TRAIT_FAST_SHOT; удалить после завершения перехода.
         if (cr.IsTraitFastShot) {
             cr.IsNoAim = true;
         }
@@ -1070,15 +1071,7 @@ bool PlacePlayerAfterInitialization(Critter cr)
 {
     verify(cr.ControlledByPlayer, "Only a player critter can use the login placement flow", cr);
 
-    if (Settings.Story.MainStoryLineActive) {
-        if (MainIntro::CheckPlayerCompleteIntro(cr)) {
-            return true;
-        }
-
-        return MainIntro::SetPlayerStoryLineLocation(cr);
-    }
-
-    return Replication::SetStartLocation(cr);
+    return DenDefense::PlacePlayer(cr);
 }
 
 // Вызывается каждый тик Settings.Critter.CritterIdleTick.
@@ -1195,7 +1188,7 @@ void CritterDead(Critter cr, Critter? killer)
 
             ItemMovement::MoveItems(toDrop, map, cr.Hex);
         }
-        else {
+        else if (!DenDefense::IsParticipant(cr)) {
             Game.DestroyItems(items);
         }
     }
@@ -1514,6 +1507,9 @@ bool OnPlayerEnter(Player player)
 [[Event]]
 EventResult OnPlayerMoveCritter(Player player, Critter cr, int& speed)
 {
+    if (!DenDefense::CanAct(cr)) {
+        return EventResult::StopChain;
+    }
     Player? crOwner = cr.GetPlayer();
     if (crOwner == null || crOwner.Id != player.Id) {
         return EventResult::StopChain;
@@ -1562,6 +1558,9 @@ EventResult OnPlayerMoveCritter(Player player, Critter cr, int& speed)
 [[Event]]
 EventResult OnPlayerDirCritter(Player player, Critter cr, mdir& dir)
 {
+    if (!DenDefense::CanAct(cr)) {
+        return EventResult::StopChain;
+    }
     Player? crOwner = cr.GetPlayer();
     if (crOwner == null || crOwner.Id != player.Id) {
         return EventResult::StopChain;

@@ -3,6 +3,7 @@
 //  регистрации (SPECIAL, tag-скиллы, трейты, возраст, пол), валидирует присланные значения,
 //  создаёт криттера и логинит через LoginPlayerToNewRecord/LoginPlayerToExistentRecord.
 // CLIENT: по событиям соединения (OnConnected и др.) шлёт RemoteCall RegisterNewPlayer/LoginExistingPlayer.
+// Клиентский RegProps глобален: запрос регистрации должен пережить асинхронное подключение.
 namespace PlayerRegistration
 {
 
@@ -321,13 +322,17 @@ void LoginExistingPlayer(Player player, string name)
     }
 
     player.SetName(name);
+    Player? loggedPlayer = null;
     try {
-        Game.LoginPlayerToExistentRecord(player, playerId);
+        loggedPlayer = Game.LoginPlayerToExistentRecord(player, playerId);
     }
     catch {
         CleanupLoadedLoginCritter(loadedByRequest);
         throw("Existing player login failed after sync preparation", playerId);
     }
+
+    verify(loggedPlayer != null, "Existing login must return its actual player", playerId);
+    DenDefense::OnSuccessfulLogin(loggedPlayer);
 }
 
 bool ValidateRegistrationProps(Player player, string name, dict<CritterProperty, int> props)
@@ -408,15 +413,15 @@ void RegisterNewPlayer(Player player, string name, dict<CritterProperty, int> pr
         critterProps[props.getKey(i)] = any(props.getValue(i));
     }
 
-    Map? startMap = Replication::GetStartReplicatorMap();
+    Map? startMap = DenDefense::GetBaseMap();
     if (startMap == null) {
-        Game.Log("Player registration rejected due to missing start replication map");
+        Game.Log("Player registration rejected due to missing shared Den map");
         player.Disconnect();
         return;
     }
 
-    // Все регистрации проходят через одну стартовую карту, поэтому резерв имени ниже виден
-    // следующему запросу, даже если оба прошли раннюю проверку.
+    // Серверная логика однопоточная: резерв имени ниже виден следующему запросу,
+    // даже если оба прошли раннюю проверку.
     if (IsPlayerNameClaimed(name)) {
         Messaging::Info(player, TextPackKey(TextPackName::Game, "" + (MsgStr::STR_NET_ACCOUNT_ALREADY)));
         player.Disconnect();
@@ -465,14 +470,18 @@ void RegisterNewPlayer(Player player, string name, dict<CritterProperty, int> pr
     cr.DisplayName = name;
     cr.IsGenerated = true;
 
+    Player? loggedPlayer = null;
     try {
-        Game.LoginPlayerToNewRecord(player);
+        loggedPlayer = Game.LoginPlayerToNewRecord(player);
     }
     catch {
         RollbackNewPlayerRegistration(name, cr, crId);
         throw("New player login failed after critter creation", crId);
     }
 
+    // Учётная запись уже подтверждена. Ошибка сценария не должна удалить её при откате.
+    verify(loggedPlayer != null, "New login must return its actual player", crId);
+    DenDefense::OnSuccessfulLogin(loggedPlayer);
     Game.Log("Player registered and entered the game");
 }
 

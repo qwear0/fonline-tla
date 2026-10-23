@@ -2,6 +2,7 @@
 // SERVER: регистрирует рецепты (InitFixBoy/MainCraft), обрабатывает вызов Rpc_CraftItem (список/просмотр/крафт), считает ресурсы, таймауты и заряды верстаков, содержит скрипты отдельных рецептов.
 // CLIENT: вызов ShowFixBoy открывает экран GuiScreen::FixBoy с данными крафта.
 // Связан с Tla (константы FIXBOY_*), MsgStr, Gui и GUI-экраном FixBoy.
+// Глобальный CraftList — общий каталог рецептов; g_PendingFixBoyData хранит ответ до появления клиентского экрана.
 namespace FixBoy
 {
 
@@ -804,7 +805,7 @@ void ProcessAdvancedCraft(any[] values)
 void Rpc_CraftItem(Player player, int state, int craftId, int p2)
 {
     Critter? cr = player.GetControlledCritter();
-    if (cr == null) {
+    if (cr == null || !DenDefense::CanAct(cr)) {
         return;
     }
 

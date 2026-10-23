@@ -300,7 +300,7 @@ void GetRepairTime(Critter player, Critter npc, string& textArgs)
     }
 
     int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0, milisecond = 0;
-    Game.UnpackSynchronizedTime(player.RepairCompleteTime[npc.Id], year, month, day, hour, minute, second, milisecond);
+    GameTime::UnpackCalendar(player.RepairCompleteTime[npc.Id], year, month, day, hour, minute, second, milisecond);
     textArgs = "|time:" + (month > 9 ? ("" + month) : ("0" + month)) + "." + year + " " + (hour > 9 ? ("" + hour) : ("0" + hour)) + ":" +
                (minute > 9 ? ("" + minute) : ("0" + minute));
 }

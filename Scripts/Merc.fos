@@ -194,6 +194,11 @@ void MercSmthAttacked(Critter merc, Critter fromCr, Critter attacker)
 
 void MercDeadImpl(Critter merc, Critter killer)
 {
+    if (DenDefense::IsCompanion(merc)) {
+        NpcPlanes::DropPlanes(merc);
+        return;
+    }
+
     DebugLog("Canceld merc");
     CancelMerc(merc);
 }
@@ -217,6 +222,11 @@ EventResult MercAttacked(Critter merc, Critter attacker)
 void MercSmthDeadImpl(Critter merc, Critter fromCr, Critter killer)
 {
     if (fromCr.Id == merc.MercMasterId) {
+        if (DenDefense::IsCompanion(merc)) {
+            NpcPlanes::DropPlanes(merc);
+            return;
+        }
+
         // пока - однозначаная отмена мерка при гибели хозяина
         CancelMerc(merc);
     }
@@ -235,7 +245,11 @@ void MercIdleImpl(Critter merc)
         return;
     }
 
-    if (merc.MercCancelTime < Game.SynchronizedTime) {
+    if (DenDefense::IsCompanion(merc) && (merc.IsDead() || Game.DenDefenseStage == DenDefense::STAGE_FAILED)) {
+        return;
+    }
+
+    if (!DenDefense::IsCompanion(merc) && merc.MercCancelTime < Game.SynchronizedTime) {
         CancelMerc(merc);
         return;
     }
@@ -326,7 +340,7 @@ void MercIdleImpl(Critter merc)
             }
 
             Critter leader = globalGroup[0];
-            if (leader.Charisma > int(globalGroup.length())) {
+            if (DenDefense::IsCompanion(merc) || leader.Charisma > DenDefense::CapacityCount(globalGroup)) {
                 merc.TransferToGlobalGroup(master);
             }
 
@@ -430,6 +444,10 @@ bool Merc2Player(Critter player, Critter merc, bool alwaysRun, bool cancelOnAtta
 // * **************************** Отмена режима мерка у нпц ***************************** *//
 void CancelMerc(Critter merc)
 {
+    if (DenDefense::IsCompanion(merc)) {
+        return;
+    }
+
     for (int i = 0; i < CritterPropertyGroup::Mercs.length(); i++) {
         merc.SetAsInt(CritterPropertyGroup::Mercs[i], 0);
     }
@@ -449,7 +467,7 @@ void CancelMerc(Critter merc)
 void ReleaseMerc(any value)
 {
     Critter? merc = Game.GetCritter(value);
-    if (merc == null || !CanReleaseMerc(merc.MercMasterId != ZERO_IDENT)) {
+    if (merc == null || DenDefense::IsCompanion(merc) || !CanReleaseMerc(merc.MercMasterId != ZERO_IDENT)) {
         return;
     }
 
@@ -671,12 +689,12 @@ bool CharismaOkImpl(Critter player, Critter npc)
     if (leader == null) {
         Critter[] grp;
         int grLen = GlobalmapGroupExtended::GetFollowGroup(player, CritterFindType::Any, grp);
-        return (grLen < player.Charisma);
+        return (DenDefense::CapacityCount(grp) < player.Charisma);
     }
 
     Critter[] grp;
     int grLen = GlobalmapGroupExtended::GetFollowGroup(leader, CritterFindType::Any, grp);
-    return (grLen < leader.Charisma);
+    return (DenDefense::CapacityCount(grp) < leader.Charisma);
 }
 
 [[DialogDemand]]

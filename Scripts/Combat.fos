@@ -113,9 +113,9 @@ void runTree(CombatRes[] combatResults, int ptr)
     }
 }
 
-// Author: Atom, cvet
+// Исходные авторы: Atom, cvet.
 // 21-08-2010 05:09
-// vanilla
+// Исходный алгоритм.
 
 class AttackStruct
 {
@@ -174,7 +174,7 @@ class AttackStruct
 
 void CombatAttack(Critter cr, Critter target, AbstractItem weapon, int weaponMode, ProtoItem? ammo)
 {
-    if (!cr.IsAlive()) {
+    if (!cr.IsAlive() || !DenDefense::CanAttack(cr, target)) {
         return;
     }
 
@@ -1517,6 +1517,9 @@ void CombatAttack(Critter cr, Critter target, AbstractItem weapon, int weaponMod
         }
     }
 
+    if (ammoRound > 0 && realWeapon != null && realWeapon.AmmoCount > 0) {
+        DenDefense::OnWeaponFired(cr, weapon, ammo);
+    }
     if (ammoRound > 0 && realWeapon != null && !cr.IsUnlimitedAmmo) {
         if (realWeapon.AmmoCount <= ammoRound) {
             realWeapon.AmmoCount = 0;
@@ -2843,7 +2846,7 @@ int RawToHit(Critter cr, Critter target, Item? weapon, int weaponUse, ProtoItem?
 
         Map? map = cr.GetMap();
         verify(map != null, "To-hit calculation requires the attacker to be on a map", cr);
-        // TODO: const question
+        // TODO: уточнить необходимость const.
         blockers = map.GetCrittersInPath(cr.Hex, target.Hex, 0.0f, dist, CritterFindType::NonDead).length();
         if (!target.IsKnockout()) {
             blockers--;
@@ -3212,7 +3215,7 @@ const int[] CriticalTable =
     3, 0x00000000,   -1,    0, 0x00000000, 6512, 5000,            3, 0x00000000,   -1,    0, 0x00000000, 6512, 5000,            3, 0x00000800,   -1,    0, 0x00000000, 6508, 5000,            3, 0x00000802,   -1,    0, 0x00000000, 6503, 5000,            4, 0x00000802,   -1,    0, 0x00000000, 6503, 5000,            4, 0x00000802,   LK,    2, 0x00000080, 6503, 6513
 };
 
-// fallout2.exe at file offset 0x1065A0 (517FA0 memory offset)
+// Таблица fallout2.exe: смещение в файле 0x1065A0 (517FA0 в памяти).
 // строка: тип оружия (список критпровалов), столбец: тяжесть критпровала
 const int[] CriticalFailureTable =
 {

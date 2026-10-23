@@ -1,0 +1,24 @@
+[Comment]
+Bobby Dunton: randomized shot-only threats, in addition to ordinary combat barks.
+
+[Dialog]
+Speech 1
+  Answer Exit
+
+[Text russ]
+{Name}{}{Бобби Дантон}
+{Speech 1}{}{Убирайся с дороги!}
+{Answer 1 1}{}{Нет.}
+{100}{}{Смитти, вылезай! Прятаться за хламом бесполезно!}
+{101}{}{Я прострелю твой сарай вместе с тобой, старый хрыч!}
+{102}{}{Эй, Смитти! Мои пули починят тебе башку!}
+{103}{}{Смитти, на этот раз братцы Дантон пришли за тобой!}
+
+[Text engl]
+{Name}{}{Bobby Dunton}
+{Speech 1}{}{Out of my way!}
+{Answer 1 1}{}{No.}
+{100}{}{Come out, Smitty! That scrap will not save you!}
+{101}{}{I will shoot through your shack and you, old bastard!}
+{102}{}{Hey, Smitty! My bullets will fix your head!}
+{103}{}{Smitty, the Dunton boys came for you this time!}

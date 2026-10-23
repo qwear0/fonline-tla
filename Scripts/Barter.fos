@@ -72,6 +72,9 @@ bool CanIncreaseOfferCount(int sourceCount, int offerCount, int addCount, bool s
 // Открывает окно бартера: помечает контейнер-трейдера и шлёт игроку его инвентарь.
 void StartNpcBarter(Critter playerCr, Critter trader)
 {
+    if (!DenDefense::CanAct(playerCr)) {
+        return;
+    }
     if (trader.IsNoBarter) {
         Messaging::Info(playerCr, TextPackKey(TextPackName::Game, "" + (MsgStr::StrBarterNoBarterMode)));
         // TODO: перевести уведомление в реплику НПЦ (breadcrumb миграции SayMsg)
@@ -144,6 +147,10 @@ bool IsActiveNpcBarter(Critter playerCr, Critter npcCr, uint transferSession)
 void ProcessBarterNpcOffer(Critter playerCr, Critter npcCr, ident[] saleItemsIds, int[] saleItemsCount, ident[] buyItemsIds, int[] buyItemsCount,
                            uint expectedTransferSession)
 {
+    if (!DenDefense::CanAct(playerCr)) {
+        SendBarterClose(playerCr);
+        return;
+    }
     if (!IsActiveNpcBarter(playerCr, npcCr, expectedTransferSession)) {
         Game.Log("Barter offer outside barter transfer. player " + playerCr.Id);
         return;

@@ -1,0 +1,24 @@
+[Comment]
+Billy Dunton: randomized shot-only threats, in addition to ordinary combat barks.
+
+[Dialog]
+Speech 1
+  Answer Exit
+
+[Text russ]
+{Name}{}{Билли Дантон}
+{Speech 1}{}{Здесь вам не место!}
+{Answer 1 1}{}{Посмотрим.}
+{100}{}{Смитти! Сейчас вся твоя мастерская станет металлоломом!}
+{101}{}{Слышишь, Смитти? Это мы стучим! Пулями!}
+{102}{}{Твой робот тебя не спасёт, Смитти!}
+{103}{}{Ну что, Смитти, кто теперь чинит дырки в твоей шкуре?}
+
+[Text engl]
+{Name}{}{Billy Dunton}
+{Speech 1}{}{You do not belong here!}
+{Answer 1 1}{}{We will see.}
+{100}{}{Smitty! Your whole workshop is about to become scrap!}
+{101}{}{Hear that, Smitty? We are knocking! With bullets!}
+{102}{}{Your robot will not save you, Smitty!}
+{103}{}{Who is going to patch the holes in your hide now, Smitty?}

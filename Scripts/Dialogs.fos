@@ -78,6 +78,9 @@ void RunDialog(Critter cr, hstring dialogId, bool ignoreDistance)
 // затем разворачиваем первую видимую реплику с ответами и собираем контекст диалога.
 void RunDialog(Critter cr, hstring dialogId, Critter? talker, bool ignoreDistance)
 {
+    if (!DenDefense::CanAct(cr)) {
+        return;
+    }
     if (!cr.HasDialogContext) {
         throw("Critter can't start dialog", cr, dialogId);
     }
@@ -168,6 +171,10 @@ void SpeechAnswer(Player player, int answerIndex)
         throw("SpeechAnswer - Critter is not talking", player);
     }
 
+    if (!DenDefense::CanAct(cr)) {
+        CloseDialog(cr);
+        return;
+    }
     Critter? talker = Game.GetCritter(cr.DialogContext.TalkerId);
     // Специальные индексы ответа
     switch (answerIndex) {

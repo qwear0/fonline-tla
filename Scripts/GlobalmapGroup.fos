@@ -1,6 +1,7 @@
 // GlobalmapGroup — управление группами путешественников на глобальной карте: движение по миру, столкновения (энкаунтеры), вход в локации и командование группой.
 // SERVER: авторитетная логика перемещения и следования, приглашение/высадка спутников, обработка команд глобальной карты и генерация встреч (GlobalProcess, GroupMove, ProcessGlobalMapCommand).
 // CLIENT: локальное состояние движущейся группы для отрисовки маршрута на карте и отправка команд лидера на сервер через удалённые вызовы (RemoteCall).
+// AllGlobalGroups и CurrentGroup глобальны: это общий реестр поездок сервера и текущий снимок клиента.
 namespace GlobalmapGroup
 {
 
@@ -508,7 +509,7 @@ void GlobalProcess(int processType, Critter cr, Item? car, float& curX, float& c
             Critter[] group = GlobalmapGroupExtended::GetGlobalGroup(cr);
             // Проверка харизмы
             Critter leader = group[0];
-            if (int(group.length()) > leader.Charisma + leader.PerkMagneticPersonality) {
+            if (DenDefense::CapacityCount(group) > leader.Charisma + leader.PerkMagneticPersonality) {
                 Messaging::Info(leader, TextPackKey(TextPackName::Game, "" + (MsgStr::StrCritBadCharisma)));
                 speed = 0.0f; // Остановка
                 return;
@@ -552,7 +553,7 @@ void GlobalProcess(int processType, Critter cr, Item? car, float& curX, float& c
 
         // Проверка харизмы
         Critter leader = group[0];
-        if (int(group.length()) > leader.Charisma + leader.PerkMagneticPersonality) {
+        if (DenDefense::CapacityCount(group) > leader.Charisma + leader.PerkMagneticPersonality) {
             Messaging::Info(leader, TextPackKey(TextPackName::Game, "" + (MsgStr::StrCritBadCharisma)));
             if (car != null) {
                 CheckForLocationWithoutParking(cr, car, curX, curY);
@@ -1466,7 +1467,7 @@ bool CheckEntrance(Location loc, Critter[] arr, int entrance) // 5 hits
 void ProcessGlobalMapCommandImpl(Player player, int command, any param1, any param2)
 {
     Critter? cl = player.GetControlledCritter();
-    if (cl == null) {
+    if (cl == null || !DenDefense::CanAct(cl)) {
         return;
     }
 

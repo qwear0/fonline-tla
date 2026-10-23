@@ -19,9 +19,12 @@ void MapInit(Map bazaar, bool firstTime)
     values.insertLast(any(loc.Id));
     Game.StartTimeEvent((GameTime::GetNearSynchronizedTime(0, 0, 0, 6, 0, 0) - Game.SynchronizedTime), RepeatDisableForceField, values);
     Game.StartTimeEvent((GameTime::GetNearSynchronizedTime(0, 0, 0, 20, 0, 0) - Game.SynchronizedTime), RepeatEnableForceField, values);
-    Game.UnpackSynchronizedTime(Game.SynchronizedTime, year, month, day, hour, minute, second, milisecond);
-    if (hour >= 20 || hour < 5) {
+    GameTime::UnpackCalendar(Game.SynchronizedTime, year, month, day, hour, minute, second, milisecond);
+    if (hour >= 20 || hour < 6) {
         Game.StartTimeEvent(ZERO_TIMESPAN, EnergyBarier::EnableForceField, values);
+    }
+    else {
+        Game.StartTimeEvent(ZERO_TIMESPAN, EnergyBarier::DisableForceField, values);
     }
 }
 
