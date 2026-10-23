@@ -498,6 +498,15 @@ bool CanAttack(Critter attacker, Critter target)
     return true;
 }
 
+// Проверяем фактическую жертву промаха, очереди или взрыва; самоурон и среда не являются атакой другой цели.
+bool CanDamage(Critter? attacker, Critter target)
+{
+    if (attacker == null || attacker.Id == target.Id) {
+        return true;
+    }
+    return CanAttack(attacker, target);
+}
+
 bool IsSmittyDialog(Critter player, Critter npc)
 {
     return IsParticipant(player) && player.IsAlive() && IsActor(npc) && npc.Id == Game.DenDefenseSmittyId && npc.IsAlive() &&
@@ -550,6 +559,7 @@ void ClaimReward(Critter player, Critter npc)
 
 void StopScenarioActions()
 {
+    GlobalmapGroup::StopScenarioTravel();
     auto actors = Game.DenDefenseParticipantIds.clone();
     actors.insertLast(Game.DenDefenseCompanionIds);
     actors.insertLast(Game.DenDefenseEnemyIds);

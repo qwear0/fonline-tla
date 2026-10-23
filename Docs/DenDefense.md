@@ -76,7 +76,11 @@ or a server pause, it is reselected before the first clock advance. The target i
 calling the setter, so a resumed/partly completed rest cannot advance by an extra day. Every online
 client, even outside Den, receives phase/remaining-time state. A mid-rest entrant joins that same
 transition; disconnect/failure/reset clears its local blackout. Both fade phases block client intent
-and authoritative server actions; black pixels are not authorization.
+and authoritative server actions; black pixels are not authorization. Rest and failure also stop any
+global-map group containing an action-frozen member, regardless of its leader. `GlobalmapGroup` clears
+the route and pending encounter, synchronizes the stopped state and blocks autonomous travel/encounter
+processing before callbacks, fuel consumption or encounter selection. Unfreezing does not resume the
+old route or pending encounter; travel requires a new command.
 
 [`MapTime.fos`](../Scripts/MapTime.fos) owns scaled-calendar conversion using `WorldTime.StartYear`,
 October 30 and `WorldTime.Multiplier`. [`GameTime.fos`](../Scripts/GameTime.fos) uses it for date readers,
@@ -108,8 +112,11 @@ policy. Scenario attackers do not flee because of the ordinary minimum-hit-chanc
 
 Smitty stays inside an explicit workshop hex set (door `303:147` excluded), cannot pursue or be knocked
 outside, and uses a model-compatible 10mm pistol. Admission **and actual attack execution** reject
-outside targets, including a target that leaves after acquisition. Ordinary city faction help is not
-recruited into scenario fights.
+outside targets, including a target that leaves after acquisition. `Combat.ApplyDamage` checks
+`DenDefense.CanDamage` for each actual recipient before attack events or damage/status changes, so
+miss redirection, bursts and explosions cannot bypass scenario faction/workshop restrictions. Explicit
+self-damage and environmental damage without an attacker retain their existing behavior. Ordinary
+city faction help is not recruited into scenario fights.
 
 `NpcPlanes` and `ItemMovement` prevent synthetic ammo refill for attackers/tagged brother rifles.
 Normal weapon selection rejects an exhausted rifle and falls back to knuckles/unarmed. Both brothers

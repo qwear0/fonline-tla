@@ -880,6 +880,36 @@ GlobalMapGroup GetGlobalMapGroup(Critter cr)
     return AllGlobalGroups[tripId];
 }
 
+// Замораживаем всю поездку, даже если участник сценария не является лидером.
+// Отменяем встречу и маршрут: после снятия запрета нужен новый приказ на движение.
+bool StopIfScenarioFrozen(GlobalMapGroup group)
+{
+    for (int i = 0; i < group.CritMove.length(); i++) {
+        if (!DenDefense::CanAct(group.CritMove[i])) {
+            bool changed = group.Speed != 0.0f || group.ToX != group.CurX || group.ToY != group.CurY || group.EncounterDescriptor != 0;
+            group.Stop();
+            group.IsSetMove = true;
+            group.EncounterDescriptor = 0;
+            group.EncounterTick = ZERO_NANOTIME;
+            group.EncounterForce = false;
+            group.ProcessLastTick = Game.GetPrecisionTime();
+            if (changed) {
+                group.SendGlobalData(GM_INFO_GROUP_PARAM);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+void StopScenarioTravel()
+{
+    auto groups = AllGlobalGroups.getValues();
+    for (int i = 0; i < groups.length(); i++) {
+        StopIfScenarioFrozen(groups[i]);
+    }
+}
+
 bool SameCritterGroup(Critter[] left, Critter[] right)
 {
     if (left.length() != right.length()) {
@@ -957,7 +987,7 @@ void GroupStartMove(Critter cr)
 
 void ProcessGroup(Critter cr, GlobalMapGroup? group, int type) // 13 hits
 {
-    if (group == null) {
+    if (group == null || StopIfScenarioFrozen(group)) {
         return;
     }
 
@@ -1339,6 +1369,10 @@ int DistSqrt(int x1, int y1, int x2, int y2)
 
 void GroupSetMove(GlobalMapGroup group, float to_x, float to_y, float speed) // 6 hits
 {
+    if (StopIfScenarioFrozen(group)) {
+        return;
+    }
+
     int dist = DistSqrt(int(to_x), int(to_y), int(group.CurX), int(group.CurY));
 
     if (speed <= 0.0f || dist == 0) {
@@ -1366,6 +1400,10 @@ void GroupSetMove(GlobalMapGroup group, float to_x, float to_y, float speed) // 
 
 void GroupMove(GlobalMapGroup group) // 3hits
 {
+    if (StopIfScenarioFrozen(group)) {
+        return;
+    }
+
     auto tick = Game.GetPrecisionTime();
     Critter rule = group.Rule;
 
@@ -1418,6 +1456,10 @@ void GroupMove(GlobalMapGroup group) // 3hits
 
 void InviteGroup(GlobalMapGroup group, int combat_mode) // 5hits
 {
+    if (StopIfScenarioFrozen(group)) {
+        return;
+    }
+
     int encounter_descriptor = group.EncounterDescriptor;
     group.EncounterDescriptor = 0;
 

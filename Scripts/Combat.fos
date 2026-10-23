@@ -1588,7 +1588,7 @@ void ApplyDamage(AttackStruct attack, Critter target, int rounds, bool isCritica
     bool targetIsPlayer = target.ControlledByPlayer;
     bool attackerIsPlayer = (attacker != null ? attacker.ControlledByPlayer : false);
 
-    if (target.IsDead() || map == null) {
+    if (target.IsDead() || map == null || !DenDefense::CanDamage(attacker, target)) {
         return;
     }
 
