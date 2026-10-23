@@ -488,6 +488,17 @@ Timer.DeltaTimeCap = 100
 Name = LocalTest
 ServerNetwork.LoginTimeout = 0
 
+# Локальная упакованная раздача: штатный апдейтер использует игровое TCP-соединение.
+# Наследует открытый ключ разработки и Memory; этот профиль не для публичного сервера.
+
+[SubConfig]
+Name = LAN
+ClientNetwork.ServerHost = 192.168.1.168
+ClientNetwork.WebSocketHost = 192.168.1.168
+ClientNetwork.UseUdp = False
+Network.ServerPort = 4008
+ServerNetwork.LoginTimeout = 0
+
 [SubConfig]
 Name = PublicGame
 ClientNetwork.ServerHost = 111.222.111.222

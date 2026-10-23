@@ -170,7 +170,7 @@ Built applications are emitted under `Binaries/`, with platform-specific directo
 
 ## Running A Local Shard
 
-The `LocalTest` subconfig is the intended local development profile. It keeps the client on `localhost` and uses the default project port (`4008`); at the moment it intentionally has no overrides beyond the base config.
+The `LocalTest` subconfig is the intended local development profile. It keeps the client on `localhost`, uses the default project port (`4008`) and disables the login timeout. The packaged `LAN` profile is described in [Windows LAN client updates](Docs/ClientUpdates.md).
 
 Build and bake first:
 
@@ -437,7 +437,8 @@ Subconfigs:
 | Subconfig | Purpose |
 | --------- | ------- |
 | `Unpackaged` | Development-oriented unpackaged startup. Disables music, adds artificial lag, enables render debug, and adjusts timeout/debug settings. |
-| `LocalTest` | Local development shard used by launch tasks. Currently empty, so it keeps the base localhost/default-port settings. |
+| `LocalTest` | Local development shard used by launch tasks. Keeps the base localhost/default-port settings and disables the login timeout. |
+| `LAN` | Packaged Windows client/Linux server on `192.168.1.168:4008`, with built-in resource/DLL updates; development keys and Memory storage only. |
 | `PublicGame` | Public-game profile with a public port and server UI collapse behavior. |
 
 Apply a subconfig at runtime with:
@@ -516,6 +517,13 @@ Package definitions live in [CMakeLists.txt](CMakeLists.txt):
 | `Dev` | Windows win64 server, client, mapper, editor, baker for `LocalTest`. |
 | `Test` | Windows win64 profiling client and server for `LocalTest`. |
 | `LinuxTest` | Linux x64 client, server, editor, mapper for `LocalTest`. |
+| `LAN` | Windows win64 client and Linux x64 server/headless server, including the Windows updater payload, for `LAN`. |
+
+After building/baking both platforms, assemble the LAN distribution with
+`cmake --build Build/Auto --config RelWithDebInfo --target MakePackage-LAN`.
+Players run `FOnlineTLA.exe` directly; the packaged server supplies resources and
+native DLLs over the game connection. See [Windows LAN client updates](Docs/ClientUpdates.md)
+for activation, native-version boundaries and the required approval before stopping a Memory session.
 
 The archived workflow describes the former release process; local builds do not currently publish a release. Historical release asset names:
 
@@ -532,6 +540,7 @@ Project documents:
 - [Docs/README.md](Docs/README.md) - maintained game guide index.
 - [Docs/Systems.md](Docs/Systems.md) - gameplay ownership and content/generation boundaries.
 - [Docs/FOSquadWorkspace.md](Docs/FOSquadWorkspace.md) - two-repository setup and bounded compatibility evidence.
+- [Docs/ClientUpdates.md](Docs/ClientUpdates.md) - Windows LAN resource/DLL updates, packaging and Memory-safe activation.
 - [Nullability.md](Nullability.md) - script/native nullable contracts and existing checks.
 - [CLAUDE.md](CLAUDE.md) - compatibility pointer to `AGENTS.md`.
 

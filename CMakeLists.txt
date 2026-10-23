@@ -113,6 +113,13 @@ DefinePackage(LinuxTest
     BINARY Server Linux x64 Raw
     BINARY Mapper Linux x64 Raw)
 
+# The packaged server owns resource and native-runtime delivery over the game connection.
+# Keep the Windows client in the same package so missing update DLLs fail packaging.
+DefinePackage(LAN
+    CONFIG LAN
+    BINARY Client Windows win64 Raw
+    BINARY Server Linux x64 Headless+Raw)
+
 # ---------------------------------------------------------------------------
 # Per-target post-build steps (BakerLib runtime sync) need the targets to
 # already exist, so they go into a Finalize-Pre hook. Without TLA_BakerLib.dll

@@ -22,6 +22,7 @@ After an Engine update, rebuild and rebake matching client/server outputs before
 | Document | What it answers |
 | -------- | --------------- |
 | [FOSquadWorkspace.md](FOSquadWorkspace.md) | Two-repository setup, engine baseline versus local state, build commands and bounded historical evidence. |
+| [ClientUpdates.md](ClientUpdates.md) | Built-in Windows resource/DLL updates over LAN, matching client/server packaging and Memory-safe activation. |
 | [Systems.md](Systems.md) | Durable gameplay ownership, sides, entrypoints and authored-content boundaries. Read before opening a `.fos`. |
 | [ScriptStyle.md](ScriptStyle.md) | How a `.fos` module is written: header block, comments, naming, structure. |
 | [Animation.md](Animation.md) | Baked root-motion import, sprite loading and native 2D walk-cycle alignment. |
