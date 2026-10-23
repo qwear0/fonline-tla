@@ -7004,8 +7004,6 @@ namespace Inventory
         {
             SetPosition(155, 287);
             SetSize(90, 60);
-            SetDraggable(true);
-            SetBackgroundImage("art/intrface/dummy.png", SpriteLayout::Zoom);
         }
 
         void OnLMousePressed() override
@@ -7023,7 +7021,7 @@ namespace Inventory
         void OnDrawItem(Item item, Gui::Object cell, int cellIndex) override
         {
             SetDraggable(true);
-            ::GuiScreensExt::NeedSprite(BackgroundImage).Load(item.PicInv);
+            SetBackgroundImage(item.PicInv, SpriteLayout::Zoom);
         }
     };
 

@@ -127,7 +127,7 @@ void OnSuccessfulLogin(Player player)
         }
         catch {
             Game.DenDefenseStage = STAGE_FAILED;
-            throw("Unable to initialize confirmed Den defense entry", cr.Id);
+            throw("Unable to initialize confirmed Den defense entry", cr.Id, GetExceptionInfo());
         }
         return;
     }
@@ -264,7 +264,6 @@ void SetupSmitty(Critter smitty, Map map)
     smitty.ReplicationTime = -1;
     smitty.IsGeck = true;
     smitty.IsNoHome = true;
-    smitty.IsNoMove = true;
     smitty.IsNoKnock = true;
     smitty.IsNoEnemyStack = true;
     smitty.IsNoBarter = true;
@@ -317,7 +316,7 @@ void CreateCompanion(Critter primary, Map map, int index)
 {
     mpos hex = primary.Hex;
     verify(Entrance::GetFreeHex(map, 5, hex), "No free hex for Den companion", index);
-    dict<CritterProperty, any> props = {{CritterProperty::BagId, Bags::Empty},
+    dict<CritterProperty, any> props = {{CritterProperty::BagId, int(Bags::Empty)},
                                         {CritterProperty::DialogId, "den_defense_companion".hstr()},
                                         {CritterProperty::DenDefenseGeneration, Game.DenDefenseGeneration},
                                         {CritterProperty::DenDefenseRole, ROLE_COMPANION},
@@ -741,7 +740,7 @@ void Controller(Map map, any value)
     }
     Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
     verify(smitty != null, "Validated Smitty disappeared");
-    PatternCommon::CommonPattern helpers;
+    PatternCommon::CommonPattern helpers = PatternCommon::CommonPattern();
     if (smitty.IsAlive()) {
         helpers.TryUseStim(smitty);
         ChooseTarget(smitty);
@@ -840,13 +839,13 @@ void SpawnEnemy()
     // Готовые пакеты с обычными боевыми репликами: племя / бандиты / горожане.
     // У прото Loser/WeakPeasant пакет 25 без речи; глобальную таблицу AiSettings не меняем.
     int aiId = Game.DenDefenseWave == 2 ? 1 : (brother > 0 ? 13 : 14);
-    dict<CritterProperty, any> props = {{CritterProperty::BagId, Bags::Empty},
+    dict<CritterProperty, any> props = {{CritterProperty::BagId, int(Bags::Empty)},
                                         {CritterProperty::AiId, aiId},
                                         {CritterProperty::ReplicationTime, -1},
                                         {CritterProperty::DenDefenseGeneration, Game.DenDefenseGeneration},
                                         {CritterProperty::DenDefenseRole, ROLE_ENEMY},
                                         {CritterProperty::DenDefenseBrother, brother},
-                                        {CritterProperty::TeamId, Teams::Mob0}};
+                                        {CritterProperty::TeamId, int(Teams::Mob0)}};
     Critter enemy = map.AddCritter(proto, hex, HDIR_Random, props);
     auto enemies = Game.DenDefenseEnemyIds.clone();
     enemies.insertLast(enemy.Id);

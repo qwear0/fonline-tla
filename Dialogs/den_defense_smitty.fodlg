@@ -10,7 +10,7 @@ Speech 1
     Result Script DenDefense::Rest
   Answer 3
     Demand Script DenDefense::CanClaimReward
-  Answer Exit
+  Answer Exit*
 
 Speech 2
   Answer 1
@@ -20,34 +20,34 @@ Speech 3
   Answer Exit
     Demand Script DenDefense::CanClaimReward
     Result Script DenDefense::ClaimReward
-  Answer Exit
+  Answer Exit*
 
 [Text russ]
 {Name}{}{Смитти}
 {Speech 1}{}{Деревню вашего племени уничтожили. Пятеро выживших добрались до Дэна, а за ними могут прийти другие. Я — Смитти. Моя мастерская станет вашей базой. Утром нас атакуют.}
-{Answer 1 1}{}{Расскажи об обороне и дай припасы.}
-{Answer 1 2}{}{Отдохнём до следующего рассвета и встретим следующую волну.}
-{Answer 1 3}{}{Мы всех остановили?}
-{Answer 1 4}{}{Я осмотрюсь.}
+{Speech 1 Answer 2}{}{Расскажи об обороне и дай припасы.}
+{Speech 1 Answer Exit}{}{Отдохнём до следующего рассвета и встретим следующую волну.}
+{Speech 1 Answer 3}{}{Мы всех остановили?}
+{Speech 1 Answer Exit*}{}{Я осмотрюсь.}
 {Speech 2}{}{Я выдаю каждому участнику лом и два стимпака один раз за попытку. Четверо соплеменников подчиняются только тому, кто первым привёл их сюда. Прикажи им следовать, ждать, защищать тебя или помогать в атаках. Я прикрываю только мастерскую изнутри. Между волнами можно отдохнуть до 06:00: живые восстановят силы, но погибшие спутники не вернутся и запасы не пополнятся. После отдыха начнётся следующая атака.}
-{Answer 2 1}{}{Вернёмся к обороне.}
-{Answer 2 2}{}{Понятно.}
+{Speech 2 Answer 1}{}{Вернёмся к обороне.}
+{Speech 2 Answer Exit}{}{Понятно.}
 {Speech 3}{}{Все три волны уничтожены. Дэн выстоял. Спасибо! Каждому защитнику причитается топливный регулятор.}
-{Answer 3 1}{}{Заберу свой регулятор.}
-{Answer 3 2}{}{Заберу позже.}
+{Speech 3 Answer Exit}{}{Заберу свой регулятор.}
+{Speech 3 Answer Exit*}{}{Заберу позже.}
 {1000}{}{Оборона провалена. Выйдите и войдите снова, чтобы начать новую попытку.}
 
 [Text engl]
 {Name}{}{Smitty}
 {Speech 1}{}{Your tribe's village was destroyed. Five survivors reached the Den, and others may follow. I am Smitty. My workshop will be your base. We will be attacked in the morning.}
-{Answer 1 1}{}{Explain the defense and give me supplies.}
-{Answer 1 2}{}{Let us rest until the next dawn and face the next wave.}
-{Answer 1 3}{}{Did we stop them all?}
-{Answer 1 4}{}{I will look around.}
+{Speech 1 Answer 2}{}{Explain the defense and give me supplies.}
+{Speech 1 Answer Exit}{}{Let us rest until the next dawn and face the next wave.}
+{Speech 1 Answer 3}{}{Did we stop them all?}
+{Speech 1 Answer Exit*}{}{I will look around.}
 {Speech 2}{}{I give each participant a crowbar and two stimpaks once per attempt. The four tribespeople obey only the survivor who first led them here. Tell them to follow, wait, defend you or assist your attacks. I cover only the workshop interior. You may rest between waves until 06:00: the living recover, but fallen companions stay dead and supplies are not replenished. The next attack begins after resting.}
-{Answer 2 1}{}{Back to the defense.}
-{Answer 2 2}{}{Understood.}
+{Speech 2 Answer 1}{}{Back to the defense.}
+{Speech 2 Answer Exit}{}{Understood.}
 {Speech 3}{}{All three waves are defeated. The Den held. Thank you! Each defender has earned a fuel regulator.}
-{Answer 3 1}{}{I will take my regulator.}
-{Answer 3 2}{}{I will claim it later.}
+{Speech 3 Answer Exit}{}{I will take my regulator.}
+{Speech 3 Answer Exit*}{}{I will claim it later.}
 {1000}{}{Defense failed. Log out and log in again to begin a new attempt.}

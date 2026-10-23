@@ -10,34 +10,34 @@ Speech 1
 Speech 2
   Answer Exit
     Result Script DenDefense::Follow
-  Answer Exit
+  Answer Exit*
     Result Script DenDefense::Wait
-  Answer Exit
+  Answer Exit**
     Result Script DenDefense::ToggleDefend
-  Answer Exit
+  Answer Exit***
     Result Script DenDefense::ToggleAssist
-  Answer Exit
+  Answer Exit****
 
 [Text russ]
 {Name}{}{Соплеменник}
 {Speech 1}{}{Мы пришли с тобой из одного племени. Что нужно?}
-{Answer 1 1}{}{Слушай мой приказ.}
-{Answer 1 2}{}{Ничего.}
+{Speech 1 Answer 2}{}{Слушай мой приказ.}
+{Speech 1 Answer Exit}{}{Ничего.}
 {Speech 2}{}{Я слушаю. Защита и помощь включены с самого начала; их можно переключить независимо.}
-{Answer 2 1}{}{Следуй за мной.}
-{Answer 2 2}{}{Жди здесь.}
-{Answer 2 3}{}{Переключи защиту меня от нападений.}
-{Answer 2 4}{}{Переключи помощь в моих атаках.}
-{Answer 2 5}{}{Пока без изменений.}
+{Speech 2 Answer Exit}{}{Следуй за мной.}
+{Speech 2 Answer Exit*}{}{Жди здесь.}
+{Speech 2 Answer Exit**}{}{Переключи защиту меня от нападений.}
+{Speech 2 Answer Exit***}{}{Переключи помощь в моих атаках.}
+{Speech 2 Answer Exit****}{}{Пока без изменений.}
 
 [Text engl]
 {Name}{}{Tribesperson}
 {Speech 1}{}{We came from the same tribe. What do you need?}
-{Answer 1 1}{}{Listen to my orders.}
-{Answer 1 2}{}{Nothing.}
+{Speech 1 Answer 2}{}{Listen to my orders.}
+{Speech 1 Answer Exit}{}{Nothing.}
 {Speech 2}{}{I am listening. Defend and assist are enabled initially; you can toggle them independently.}
-{Answer 2 1}{}{Follow me.}
-{Answer 2 2}{}{Wait here.}
-{Answer 2 3}{}{Toggle defending me against attackers.}
-{Answer 2 4}{}{Toggle assisting my attacks.}
-{Answer 2 5}{}{No changes for now.}
+{Speech 2 Answer Exit}{}{Follow me.}
+{Speech 2 Answer Exit*}{}{Wait here.}
+{Speech 2 Answer Exit**}{}{Toggle defending me against attackers.}
+{Speech 2 Answer Exit***}{}{Toggle assisting my attacks.}
+{Speech 2 Answer Exit****}{}{No changes for now.}

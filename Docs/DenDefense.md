@@ -16,6 +16,17 @@ reset. Smitty's former trader/dialog behavior is intentionally replaced for this
 - [`den_defense_smitty.fodlg`](../Dialogs/den_defense_smitty.fodlg) owns briefing, supplies, rest and
   final claims. [`den_defense_companion.fodlg`](../Dialogs/den_defense_companion.fodlg) owns orders.
   Neither requires a minimum Intelligence/Charisma. Russian and English text are authored together.
+  Client approach and server dialog validation use the NPC's `TalkDistance` plus the initiator's
+  `Multihex`, not the player's own talk radius; Smitty's five-hex radius must work on both sides.
+  Answer text keys use `{Speech <id> Answer <link>}` in both languages, matching `Dialogs.cpp`;
+  repeated links within a speech use `Exit*`, `Exit**`, etc. in both structure and text keys.
+  Ordinal `{Answer <speech> <index>}` keys do not resolve and can disconnect a talking client.
+- [`Parameters.fos`](../Scripts/Parameters.fos), `CritterGetIsNoMove`, keeps the current generation's
+  Smitty stationary on the server. `IsNoMove` is a computed getter without a setter; scenario setup
+  must not assign it. Initialization failures retain `GetExceptionInfo()` in the outer login error.
+- Actor creation passes `BagId` and `TeamId` as integers in `dict<CritterProperty, any>`; boxing their
+  enum values directly serializes names rather than the numeric values these properties require.
+  The controller constructs its `PatternCommon::CommonPattern` helper before calling it.
 - `Scripts` and `Dialogs` are already resource-pack inputs in `TLA.fomain`; no new engine capability,
   generated-content edit or resource-pack directory is needed.
 

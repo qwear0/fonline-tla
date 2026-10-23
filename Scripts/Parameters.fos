@@ -627,7 +627,7 @@ int CheckPlayerName(string name)
     return 0;
 }
 
-hstring[] UnarmedWeapons = {
+const hstring[] UnarmedWeapons = {
     EMPTY_HSTRING, // Content::Item::default_weapon,
     Content::Item::unarmed_strong_punch,
     Content::Item::unarmed_hammer_punch,
@@ -1123,6 +1123,12 @@ int CritterGetLuck(Critter cr)
 [[PropertyGetter]]
 bool CritterGetIsNoMove(Critter cr)
 {
+#if SERVER
+    // Смитти неподвижен только в текущей попытке; виртуальное свойство не имеет сеттера.
+    if (DenDefense::IsActor(cr) && cr.DenDefenseRole == DenDefense::ROLE_SMITTY) {
+        return true;
+    }
+#endif
     return cr.IsNoMoveBase;
 }
 
