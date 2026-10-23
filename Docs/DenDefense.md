@@ -45,10 +45,14 @@ run as secondaries; living inventories, builds, experience and levels are retain
 | Victory | Stop waves; each participant may claim one `car_fuel_injection` |
 | Failed | Stop progression, actions, revival and claims; **only the next successful login** starts a new generation and selects its primary |
 
-Primary **or** Smitty death fails the run, including after Victory. Secondary death does not fail it:
-that character returns alive at the base after a three-real-second callback (or confirmed re-entry
-if unloaded). Dead companions stay dead until reset. Disconnecting, ordinary Active/Victory login,
-loading the server and completing/skipping a movie do not select another primary.
+Primary death fails the run, including after Victory. Smitty's death does **not** fail/freeze the run,
+show a movie, revive him or trigger a reset on login. An already active wave can finish, but no living
+Smitty means no briefing, next rest/wave or reward dialog. Death during Resting cancels that rest and
+clears the blackout without starting another wave. Secondary death does not fail the run: that
+character returns alive at the base after a three-real-second callback (or confirmed re-entry if
+unloaded). Dead companions stay dead until reset. Disconnecting, ordinary Active/Victory login,
+loading the server and completing/skipping a movie do not select another primary. A replacement
+generation after primary death still sets up Smitty and the squad anew.
 
 `Game` properties persist generation, IDs, stage, wave cursor, outstanding/history IDs and rest target/
 phase. Critter markers persist participation and once-per-generation kit/reward claims. Frame-time
@@ -115,9 +119,13 @@ client `MapTime`/`DayColor` follow synchronized time for lighting.
 | 2 | 15 tribals: exactly three spears, twelve unarmed; meat/flowers/healing powder |
 | 3 | 20 unarmed townspeople and Bobby/Billy Dunton; each brother has brass knuckles and a single-shot `springer_rifle` with **one loaded + four spare rounds**; money/alcohol/miscellaneous loot |
 
-The map controller admits at most one enemy per three real seconds, alternating explicit authored
-indoor candidate sets. A blocked house retries the same cursor and logs periodically; it is not a kill.
-Visible reachable participants/companions distract attackers; otherwise they walk toward Smitty.
+The first enemy is admitted when the dawn transition finishes; subsequent admissions are spaced by
+three real seconds. Each wave reinstalls the map controller. Spawn selection rotates explicit indoor
+candidate sets in the nearby western houses and checks a route toward the workshop through openable,
+unlocked doors. An occupied/unreachable room falls through to the other rooms, never to street hexes
+or forced unlocking. If all candidates are blocked, the same cursor retries and logs periodically;
+this is not a kill. Visible reachable participants/companions distract attackers; otherwise they
+walk toward living Smitty.
 Stale/invisible distractions return to that objective. Door path checks match existing key/open-door
 policy. Scenario attackers do not flee because of the ordinary minimum-hit-chance heuristic.
 
@@ -127,7 +135,16 @@ outside targets, including a target that leaves after acquisition. `Combat.Apply
 `DenDefense.CanDamage` for each actual recipient before attack events or damage/status changes, so
 miss redirection, bursts and explosions cannot bypass scenario faction/workshop restrictions. Explicit
 self-damage and environmental damage without an attacker retain their existing behavior. Ordinary
-city faction help is not recruited into scenario fights.
+city faction help is not recruited into scenario fights. Smitty remembers player/companion aggression
+and retaliates while the aggressor is inside the workshop; the controller retains those targets as
+well as wave enemies. A new generation clears his aggression memory.
+
+[`MsgStr.fos`](../Scripts/MsgStr.fos) resolves NPC names from `[Dialogs, dialogId, Name]`, falling back
+to `[Critters, protoId]`, not numeric hash sums. Its client setter refreshes the displayed name when a
+visible NPC changes `DialogId`; combat messages consume that displayed name. Both localized Smitty
+names remain authored in his dialog. [`Animation.fos`](../Scripts/Animation.fos) separates one-shot
+Fallout death playback from a final-frame corpse idle, avoiding repeated falling/twitching without
+reviving or moving the corpse.
 
 `NpcPlanes` and `ItemMovement` prevent synthetic ammo refill for attackers/tagged brother rifles.
 Normal weapon selection rejects an exhausted rifle and falls back to knuckles/unarmed. Both brothers
@@ -141,8 +158,8 @@ outstanding actor fails diagnostically instead of awarding a false victory.
 
 ## Failure presentation and verification limits
 
-All online participants are action-frozen on failure. Smitty-only failure adds **no popup/movie**.
-Primary death additionally fades all online clients and plays `video/TheLifeAfterHell.ogv` with its
+All online participants are action-frozen on actual failure; Smitty's death alone is not failure.
+Primary death fades all online clients and plays `video/TheLifeAfterHell.ogv` with its
 matching `.ogg`; skip/completion leaves Failed intact. This existing cinematic is a **provisional
 selection**, not a confirmed village-destruction scene. A replacement run/disconnect stops its stale
 presentation. Text uses the localized Smitty dialog pack.

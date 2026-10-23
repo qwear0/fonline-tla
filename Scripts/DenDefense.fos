@@ -60,6 +60,7 @@ const int ROLE_ENEMY = 3;
 void InitDenDefense()
 {
     Game.OnCritterDead.Subscribe(HandleCritterDeath, EventPriority::High);
+    Game.OnCritterAttacked.Subscribe(HandleCritterAttack, EventPriority::High);
     Game.OnStart.Subscribe(ResumeController);
 }
 
@@ -271,7 +272,7 @@ void SetupSmitty(Critter smitty, Map map)
     smitty.TalkDistance = 5;
     smitty.MaxTalkers = 10;
     NpcPlanes::DropPlanes(smitty);
-    EnemyStack::ClearEnemyStackNpc(smitty);
+    EnemyStack::ClearEnemyStack(smitty);
     verify(SpillLoot(smitty), "Unable to safely clear Smitty inventory", smitty);
     PlaceSmittyAtHome(smitty, map);
     if (!smitty.IsAlive()) {
@@ -484,7 +485,8 @@ bool CanAttack(Critter attacker, Critter target)
     if (IsActor(attacker)) {
         bool attackerEnemy = attacker.DenDefenseRole == ROLE_ENEMY;
         bool targetEnemy = IsActor(target) && target.DenDefenseRole == ROLE_ENEMY;
-        if (attackerEnemy == targetEnemy) {
+        bool smittyRetaliates = attacker.DenDefenseRole == ROLE_SMITTY && EnemyStack::CheckEnemyInStack(attacker, target.Id);
+        if (attackerEnemy == targetEnemy && !smittyRetaliates) {
             return false;
         }
     }
@@ -606,7 +608,7 @@ void FinishRest(any value)
     if (int(value) != Game.DenDefenseGeneration || Game.DenDefenseStage != STAGE_RESTING) {
         return;
     }
-    if (!CheckDefenders()) {
+    if (!CheckDefenders() || CancelRestWithoutSmitty()) {
         return;
     }
     if (Game.DenDefenseRestPhase != 0) {
@@ -672,7 +674,7 @@ void StartAfterRest(any value)
     if (int(value) != Game.DenDefenseGeneration || Game.DenDefenseStage != STAGE_RESTING || Game.DenDefenseRestPhase != 1) {
         return;
     }
-    if (!CheckDefenders()) {
+    if (!CheckDefenders() || CancelRestWithoutSmitty()) {
         return;
     }
     Map? map = Game.GetMap(Game.DenDefenseMapId);
@@ -686,6 +688,10 @@ void StartAfterRest(any value)
     map.DenDefenseNextSpawn = Game.FrameTime + Time::Seconds(3);
     Game.DenDefenseDawn = ZERO_SYNCTIME;
     Game.Log("Den defense wave started, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave + " total=" + Game.DenDefenseSpawnTotal);
+    // Первого атакующего выпускаем сразу после рассвета, остальных — по таймеру карты.
+    map.StopTimeEvent(Controller);
+    map.StartTimeEvent(Time::Seconds(1), Time::Seconds(1), Controller, Game.DenDefenseGeneration);
+    SpawnEnemy();
 }
 
 // Один регулярный контроллер; полезная нагрузка поколения блокирует старые отложенные вызовы.
@@ -803,9 +809,13 @@ void SpawnEnemy()
     int cursor = Game.DenDefenseSpawned;
     mpos hex;
     bool found = false;
-    for (int i = 0; i < 6; i++) {
-        mpos candidate = approaches[(cursor % 3) * 6 + i];
-        if (map.IsHexMovable(candidate)) {
+    Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
+    verify(smitty != null, "Smitty disappeared during spawn");
+    // Занятая комната или запертая дверь Лары 278:147 не задерживает всю волну.
+    // Не выходим на улицу и не открываем чужие замки: перебираем остальные дома.
+    for (int i = 0; i < approaches.length(); i++) {
+        mpos candidate = approaches[((cursor % 3) * 6 + i) % approaches.length()];
+        if (map.IsHexMovable(candidate) && map.GetPathLength(candidate, smitty.Hex, 1 + smitty.Multihex, CanLeaveSpawnHouse) > 0) {
             hex = candidate;
             found = true;
             break;
@@ -815,7 +825,7 @@ void SpawnEnemy()
     if (!found) {
         Game.DenDefenseSpawnRetries = Game.DenDefenseSpawnRetries + 1;
         if (Game.DenDefenseSpawnRetries % 5 == 1) {
-            Game.Log("Den defense spawn house occupied, cursor=" + cursor + " generation=" + Game.DenDefenseGeneration);
+            Game.Log("Den defense spawn houses occupied or unreachable, cursor=" + cursor + " generation=" + Game.DenDefenseGeneration);
         }
         return;
     }
@@ -847,6 +857,9 @@ void SpawnEnemy()
                                         {CritterProperty::DenDefenseBrother, brother},
                                         {CritterProperty::TeamId, int(Teams::Mob0)}};
     Critter enemy = map.AddCritter(proto, hex, HDIR_Random, props);
+    if (cursor == 0) {
+        Game.Log("Den defense first enemy spawned, wave=" + Game.DenDefenseWave + " id=" + enemy.Id + " hex=" + hex.x + ":" + hex.y);
+    }
     auto enemies = Game.DenDefenseEnemyIds.clone();
     enemies.insertLast(enemy.Id);
     Game.DenDefenseEnemyIds = enemies;
@@ -895,6 +908,12 @@ void SpawnEnemy()
     ChooseTarget(enemy);
 }
 
+// До создания NPC ключей у него нет; все пакеты ИИ волн умеют открывать двери.
+bool CanLeaveSpawnHouse(Item obstacle)
+{
+    return obstacle.Type == ItemType::Door && !obstacle.Locker_NoOpen && obstacle.LockerId == 0;
+}
+
 // Та же политика дверей, что у MainPlanes::NpcPlaneEnd: запертые без ключа не проходим.
 bool CanPassDoor(Critter npc, Item obstacle)
 {
@@ -911,6 +930,10 @@ void ChooseTarget(Critter npc)
     auto candidates = enemy ? Game.DenDefenseParticipantIds.clone() : Game.DenDefenseEnemyIds.clone();
     if (enemy) {
         candidates.insertLast(Game.DenDefenseCompanionIds);
+    }
+    else if (npc.DenDefenseRole == ROLE_SMITTY) {
+        // Помним напавшего игрока/спутника: обычный тик обороны не стирает ответную атаку.
+        candidates.insertLast(npc.EnemyStack);
     }
     for (int i = 0; i < candidates.length(); i++) {
         Critter? candidate = Game.GetCritter(candidates[i]);
@@ -946,7 +969,8 @@ void ChooseTarget(Critter npc)
         NpcPlanes::DropPlanes(npc);
         NpcPlanes::AddWalkPlane(npc, 0, smitty.Hex, Game.GetDirection(npc.Hex, smitty.Hex), false, 1);
     }
-    else {
+    else if (plans != null && plans[0].Type == NpcPlanes::AI_PLANE_ATTACK) {
+        // Нет боевой цели — снимаем только боевую задачу, не обрывая следование хозяину.
         npc.StopMoving();
         NpcPlanes::DropPlanes(npc);
     }
@@ -967,12 +991,12 @@ void CompleteWave()
     Game.Log("Den defense wave cleared, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave);
 }
 
-// Отсутствие выгруженного хозяина не считается смертью и не передаёт лидерство.
+// Выгруженный хозяин не передаёт лидерство; смерть Смитти оставляет мир доступным.
 bool CheckDefenders()
 {
     Critter? primary = Game.GetCritter(Game.DenDefensePrimaryId);
     Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
-    if ((primary != null && primary.IsDead()) || smitty == null || smitty.IsDead() || smitty.MapId != Game.DenDefenseMapId) {
+    if ((primary != null && primary.IsDead()) || smitty == null || smitty.MapId != Game.DenDefenseMapId) {
         FailAttempt(primary != null && primary.IsDead());
         return false;
     }
@@ -1037,12 +1061,45 @@ void ReviveSecondary(any[] values)
     cr.CurrentAp = cr.ActionPoints * Tla::AP_DIVIDER;
 }
 
+// Смерть Смитти не замораживает мир и не начинает новую попытку при следующем входе.
+// Если она случилась во время отдыха, снимаем затемнение без запуска следующей волны.
+bool CancelRestWithoutSmitty()
+{
+    Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
+    if (Game.DenDefenseStage != STAGE_RESTING || smitty == null || !smitty.IsDead()) {
+        return false;
+    }
+    Game.StopTimeEvent(FinishRest);
+    Game.StopTimeEvent(StartAfterRest);
+    Game.StopTimeEvent(CloseRestDialogs);
+    Game.DenDefenseStage = STAGE_WAITING;
+    Game.DenDefenseRestUntil = ZERO_NANOTIME;
+    Game.DenDefenseDawn = ZERO_SYNCTIME;
+    Game.DenDefenseDawnLocked = false;
+    BroadcastRest(2);
+    return true;
+}
+
+[[Event]]
+void HandleCritterAttack(Critter cr, Critter attacker)
+{
+    if (IsActor(cr) && cr.DenDefenseRole == ROLE_SMITTY && cr.IsAlive() && CanAct(cr) && cr.MapId == attacker.MapId &&
+        (IsParticipant(attacker) || IsCompanion(attacker))) {
+        EnemyStack::AddEnemyToStack(cr, attacker.Id);
+    }
+}
+
 [[Event]]
 void HandleCritterDeath(Critter cr, Critter? killer)
 {
-    bool keyDefender = IsPrimary(cr) || (IsActor(cr) && cr.DenDefenseRole == ROLE_SMITTY);
+    bool keyDefender = IsPrimary(cr);
     if (keyDefender) {
-        FailAttempt(IsPrimary(cr)); // Провал фиксируем до переноса вещей и любых ошибок представления.
+        FailAttempt(true); // Провал фиксируем до переноса вещей и любых ошибок представления.
+    }
+    if (IsActor(cr) && cr.DenDefenseRole == ROLE_SMITTY) {
+        cr.StopMoving();
+        NpcPlanes::DropPlanes(cr);
+        CancelRestWithoutSmitty();
     }
     if (IsParticipant(cr)) {
         SpillLoot(cr);

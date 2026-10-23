@@ -12,6 +12,15 @@ It covers the contract between three layers:
 
 Code references point into the external `Engine/` symlink target (an independent repository, read-only for game documentation work). Game animation selection is owned by `Scripts/Animation.fos` on CLIENT/MAPPER; this page describes the native root-motion handoff, not that whole selector.
 
+## Fallout corpse idle (game script)
+
+`Scripts/Animation.fos::OnCritterAnimationInit` marks only implicit dead idle requests for Fallout
+models with `AnimHelpers::STATE_ANIM_CORPSE_IDLE`. The marker selects a separate resource-cache key;
+explicit death actions retain their full animation. The Fallout resolver reduces this idle to the
+last frame and, for a two-part death, selects its final pose directly instead of merging the fall
+again. This prevents the client's looping 2D idle from replaying death on a corpse, including Smitty.
+The marker is a transient game animation-selection bit, not a new saved property or an engine edit.
+
 ## Root motion in the baked image format
 
 `ImageImport::FrameShot` (see `Engine/Source/Tools/ImageImport.h`) carries per-frame metadata for an

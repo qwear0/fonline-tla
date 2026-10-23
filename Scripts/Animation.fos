@@ -59,6 +59,11 @@ void OnCritterAnimationInit(Critter cr, CritterStateAnim& stateAnim, CritterActi
 
     if (actionAnim == CritterActionAnim::None) {
         actionAnim = GetIdleActionAnim(cr);
+        if (cr.IsDead() && cr.ModelName.str.startsWith("art/critters/")) {
+            // После одноразового падения idle обязан содержать только последний кадр,
+            // иначе клиент снова прокручивает смерть и труп бесконечно дёргается.
+            stateAnim = CritterStateAnim(stateAnim | AnimHelpers::STATE_ANIM_CORPSE_IDLE);
+        }
     }
 }
 
@@ -810,7 +815,8 @@ EventResult OnCritterAnimationSubstitute(hstring modelNameBase, CritterStateAnim
 bool OnCritterAnimationFalloutImpl(hstring modelName, CritterStateAnim stateAnim, CritterActionAnim actionAnim, int& fStateAnim, int& fActionAnim,
                                    int& fStateAnimEx, int& fActionAnimEx, uint& flags)
 {
-    // По-прежнему интересуют только биты оружия
+    bool corpseIdle = (stateAnim & AnimHelpers::STATE_ANIM_CORPSE_IDLE) != 0;
+    // Для выбора Fallout-стойки интересуют только биты оружия.
     stateAnim = CritterStateAnim(stateAnim & AnimHelpers::STATE_ANIM_WEAPON_MASK);
 
     // Оружие -> Fallout-индекс state
@@ -1141,6 +1147,17 @@ bool OnCritterAnimationFalloutImpl(hstring modelName, CritterStateAnim stateAnim
         return false;
     }
 
+    if (corpseIdle) {
+        // Ветка с Ex склеивает две анимации и не применяет флаги кадров.
+        // Берём непосредственно её финальную позу, сохраняя обычную смерть целиком.
+        if (fStateAnimEx != 0 && fActionAnimEx != 0) {
+            fStateAnim = fStateAnimEx;
+            fActionAnim = fActionAnimEx;
+            fStateAnimEx = 0;
+            fActionAnimEx = 0;
+        }
+        flags = uint(AnimHelpers::ANIM_FLAG_LAST_FRAME);
+    }
     return true;
 }
 

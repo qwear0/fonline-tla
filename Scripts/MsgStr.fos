@@ -1152,14 +1152,30 @@ int InternalCrtypeTextId(int num)
 }
 
 #if CLIENT
+
+[[ModuleInit]]
+void InitNpcNames()
+{
+    Game.AddPropertySetter(CritterProperty::DialogId, CritterSetDialogId);
+}
+
+// Сценарий меняет диалог уже видимого Смитти: имя обновляем и без повторного входа на карту.
+void CritterSetDialogId(Critter cr, hstring& dialogId)
+{
+    if (!cr.ControlledByPlayer) {
+        string name = NpcName(dialogId, cr.ProtoId);
+        cr.SetName(cr.TextArgs != "" ? Game.FormatTags(name, cr.TextArgs) : name);
+    }
+}
+
 string NpcName(hstring dlg, hstring pid)
 {
-    if (dlg != EMPTY_HSTRING && Game.IsTextPresent(TextPackKey(TextPackName::Dialogs, "" + (dlg.uhash + 10)))) {
-        return Game.GetText(TextPackKey(TextPackName::Dialogs, "" + (dlg.uhash + 10)));
+    // Имена из {Name} хранятся под парой ключей диалога, а не под суммой хэшей.
+    TextPackKey dialogName = TextPackKey(TextPackName::Dialogs, dlg, "Name");
+    if (dlg != EMPTY_HSTRING && Game.IsTextPresent(dialogName)) {
+        return Game.GetText(dialogName);
     }
-    else {
-        return Game.GetText(TextPackKey(TextPackName::Critters, "" + (pid.uhash)));
-    }
+    return Game.GetText(TextPackKey(TextPackName::Critters, pid));
 }
 
 string NpcDesc(hstring dlg, hstring pid)
@@ -1173,3 +1189,4 @@ string NpcDesc(hstring dlg, hstring pid)
 }
 #endif
 }
+

@@ -28,6 +28,10 @@ const int STATE_ANIM_CROUCH = 0x0100;
 
 const int STATE_ANIM_PRONE = 0x0200;
 
+// Только клиентский выбор Fallout-анимации: неподвижный последний кадр трупа.
+// Отдельный ключ кэша не обрезает проигрываемую при смерти action-анимацию.
+const int STATE_ANIM_CORPSE_IDLE = 0x0400;
+
 // Упаковка индекса цвета в соответствующие биты слова StateAnim
 int StateAnimSkinColor(int index)
 {
