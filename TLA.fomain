@@ -493,6 +493,8 @@ ServerNetwork.LoginTimeout = 0
 
 [SubConfig]
 Name = LAN
+# Исправление клиентского переноса слотов требует обновления DLL даже без смены схемы метаданных.
+Network.ForceCompatibilityVersion = tla-lan-20261023-equipment
 ClientNetwork.ServerHost = 192.168.1.168
 ClientNetwork.WebSocketHost = 192.168.1.168
 ClientNetwork.UseUdp = False

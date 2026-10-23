@@ -285,9 +285,27 @@ void MercIdleImpl(Critter merc)
                     }
                 }
 
-                if (dist > merc.MercMasterDist) {
-                    if (!merc.MercWaitForMaster) {
-                        NpcPlanes::AddWalkPlane(merc, 0, hex, GetDir(merc, master), ShouldMercAlwaysRun(merc), 1);
+                if (!merc.MercWaitForMaster) {
+                    // Один обновляемый план вместо очереди устаревших позиций хозяина.
+                    NpcPlanes::NpcPlane[]? followPlanes = NpcPlanes::GetPlanes(merc, "MercFollow".hstr());
+                    if (followPlanes != null) {
+                        NpcPlanes::NpcPlane follow = followPlanes[0];
+                        if (follow.Walk_Hex != master.Hex || follow.Run != ShouldMercAlwaysRun(merc)) {
+                            follow.Walk_Hex = master.Hex;
+                            follow.Walk_Dir = GetDir(merc, master).hex.value;
+                            follow.Run = ShouldMercAlwaysRun(merc);
+                            follow.IsMove = false;
+                        }
+                    }
+                    else if (dist > merc.MercMasterDist) {
+                        NpcPlanes::AddWalkPlane(merc,
+                                                0,
+                                                "MercFollow".hstr(),
+                                                0,
+                                                master.Hex,
+                                                GetDir(merc, master),
+                                                ShouldMercAlwaysRun(merc),
+                                                merc.MercMasterDist);
                     }
                 }
             }

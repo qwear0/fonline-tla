@@ -745,7 +745,7 @@ void UseMainItem()
     }
 
     AbstractItem item = CritterItem::GetActive(chosen);
-    int mode = item.Mode;
+    int mode = CritterItem::GetActiveMode(chosen);
     int use = WeaponHelpers::WeaponModeUse(mode);
     int aim = WeaponHelpers::WeaponModeAim(mode);
     Item? realItem = cast<Item?>(item);
@@ -783,7 +783,7 @@ void SwitchMainItemMode(bool next)
     Critter chosen = Chosen;
 
     AbstractItem item = CritterItem::GetActive(chosen);
-    if (item.ProtoId == "default_weapon".hstr() || item.ProtoId == "") {
+    if (cast<Item?>(item) == null) {
         SwitchUnarmedWeapon(chosen, next);
     }
     else {
@@ -1531,7 +1531,7 @@ int GetItemAttackDistance(Critter cr, AbstractItem? item, int mode)
 int GetActiveItemAttackDistance(Critter cr)
 {
     AbstractItem item = CritterItem::GetActive(cr);
-    return GetItemAttackDistance(cr, item, item.Mode);
+    return GetItemAttackDistance(cr, item, CritterItem::GetActiveMode(cr));
 }
 
 int GetCritterAttackDistance(Critter cr, AbstractItem? item, int mode)

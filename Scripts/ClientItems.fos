@@ -63,6 +63,17 @@ uint PendingContainerSession = 0;
 void InitClientItems()
 {
     Game.OnReceiveItems.Subscribe(OnReceiveItems);
+    Game.OnCritterAction.Subscribe(OnCritterAction);
+}
+
+// Слоты меняются отдельным сетевым сообщением, а не новым снимком коллекции.
+// К моменту события движок уже применил перенос и обмен предметов.
+[[Event]]
+void OnCritterAction(bool localCall, Critter cr, CritterAction action, int actionExt, AbstractItem? item)
+{
+    if (cr.IsChosen && (action == CritterAction::MoveItem || action == CritterAction::SwapItems)) {
+        RefreshItemViews();
+    }
 }
 
 // Перерисовывает все ItemView, которые используют клиентские теневые коллекции. Внутренний

@@ -1160,6 +1160,7 @@ void InitNpcNames()
 }
 
 // Сценарий меняет диалог уже видимого Смитти: имя обновляем и без повторного входа на карту.
+[[PropertySetter]]
 void CritterSetDialogId(Critter cr, hstring& dialogId)
 {
     if (!cr.ControlledByPlayer) {
@@ -1189,4 +1190,3 @@ string NpcDesc(hstring dlg, hstring pid)
 }
 #endif
 }
-

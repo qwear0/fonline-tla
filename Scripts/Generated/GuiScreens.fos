@@ -3080,17 +3080,55 @@ namespace Game
     {
         void OnConstruct() override
         {
+            SetHasOnDraw(true);
             SetSize(188, 67);
             SetNotHittable(true);
         }
 
-        void OnDrawItem(Item item, Gui::Object cell, int cellIndex) override
+        void OnDraw() override
         {
-            hstring picInv;
-            if (true) {
-                picInv = item.PicInv;
+            // Пустая рука не вызывает OnDrawItem: всю панель обновляем независимо от предмета.
+            if (!HasChosen) {
+                return;
             }
-            SetBackgroundImage(picInv, SpriteLayout::Zoom);
+
+            Critter chosen = Chosen;
+            Item? weapon = chosen.GetItem(ItemProperty::CritterSlot, CritterItemSlot::Main);
+            AbstractItem activeItem = ::CritterItem::GetActive(chosen);
+            int mode = ::CritterItem::GetActiveMode(chosen);
+            int use = ::WeaponHelpers::WeaponModeUse(mode);
+            SetBackgroundImage(weapon != null ? weapon.PicInv : EMPTY_HSTRING, SpriteLayout::Zoom);
+            ::GuiScreensExt::NeedText(FindText("AmmoCount")).SetText(weapon != null && weapon.Type == ItemType::Weapon ? "" + weapon.AmmoCount : "");
+            ::GuiScreensExt::NeedText(FindText("DeteriorationValue")).SetText(weapon != null && weapon.Deteriorable ? weapon.Deterioration + "%" : "");
+
+            hstring usePic;
+            if (activeItem.Type == ItemType::Weapon) {
+                if (use == ::WeaponHelpers::USE_RELOAD) {
+                    usePic = "art/intrface/RELOAD.FRM".hstr();
+                }
+                else if (use == ::WeaponHelpers::USE_USE) {
+                    usePic = "art/intrface/USEON.FRM".hstr();
+                }
+                else if (use < ::WeaponHelpers::MAX_USES) {
+                    usePic = ::WeaponHelpers::WeaponPicUse(activeItem, use);
+                }
+            }
+            if (usePic == EMPTY_HSTRING && activeItem.IsCanUseOnSmth) {
+                usePic = "art/intrface/USEON.FRM".hstr();
+            }
+            if (usePic == EMPTY_HSTRING && activeItem.IsCanUse) {
+                usePic = "art/intrface/uset.frm".hstr();
+            }
+            Gui::Panel usePanel = ::GuiScreensExt::NeedPanel(FindPanel("UsePic"));
+            Sprite::Sprite useSprite = ::GuiScreensExt::NeedSprite(usePanel.BackgroundImage);
+            useSprite.Load(usePic);
+            usePanel.SetPosition(180 - useSprite.Size.width, usePanel.Pos.y);
+
+            int apCost = ::Parameters::GetItemUseApCost(chosen, activeItem, mode);
+            ::GuiScreensExt::NeedPanel(FindPanel("ApCost")).SetActive(apCost > 0);
+            ::GuiScreensExt::NeedText(FindText("ApCostValue")).SetText(apCost > 0 ? "" + apCost : "");
+            ::GuiScreensExt::NeedSprite(::GuiScreensExt::NeedPanel(FindPanel("AimPic")).BackgroundImage).Hidden =
+                (::WeaponHelpers::WeaponModeAim(mode) == HitLocations::LocationNone);
         }
     };
 
@@ -3102,11 +3140,6 @@ namespace Game
             SetNotHittable(true);
             SetTextFont(FontType::Special);
         }
-
-        void OnDrawItem(Item item, Gui::Object cell, int cellIndex) override
-        {
-            SetText(item.Type == ItemType::Weapon ? "" + item.AmmoCount : "");
-        }
     };
 
     class DeteriorationValue : Gui::Text
@@ -3116,11 +3149,6 @@ namespace Game
             SetPosition(7, 24);
             SetNotHittable(true);
             SetTextFont(FontType::Special);
-        }
-
-        void OnDrawItem(Item item, Gui::Object cell, int cellIndex) override
-        {
-            SetText(item.Deteriorable ? item.Deterioration + "%" : "");
         }
     };
 
@@ -3134,47 +3162,6 @@ namespace Game
             SetNotHittable(true);
             SetBackgroundImage("art/intrface/ap_pic.png");
         }
-
-        void OnDrawItem(Item item, Gui::Object cell, int cellIndex) override
-        {
-            hstring usePic;
-
-            if (!HasChosen) {
-                return;
-            }
-            Critter chosen = Chosen;
-
-            Item? useItem;
-            @useItem = item;
-            if (useItem == null) {
-                @useItem = chosen.GetItem(ItemProperty::CritterSlot, CritterItemSlot::Main);
-            }
-            ProtoItem? proto = ::CritterItem::GetSlotItemProto(chosen);
-            int mode = (useItem == null ? chosen.HandsItemMode : useItem.Mode);
-            if (proto != null) {
-                int use = ::WeaponHelpers::WeaponModeUse(mode);
-                if (proto.Type == ItemType::Weapon) {
-                    if (use == ::WeaponHelpers::USE_RELOAD) {
-                        usePic = "art/intrface/RELOAD.FRM".hstr();
-                    }
-                    else if (use == ::WeaponHelpers::USE_USE) {
-                        usePic = "art/intrface/USEON.FRM".hstr();
-                    }
-                    else if (use < ::WeaponHelpers::MAX_USES) {
-                        usePic = ::WeaponHelpers::WeaponPicUse(proto, use);
-                    }
-                }
-                if (usePic == EMPTY_HSTRING && proto.IsCanUseOnSmth) {
-                    usePic = "art/intrface/USEON.FRM".hstr();
-                }
-                if (usePic == EMPTY_HSTRING && proto.IsCanUse) {
-                    usePic = "art/intrface/uset.frm".hstr();
-                }
-            }
-
-            ::GuiScreensExt::NeedSprite(BackgroundImage).Load(usePic);
-            SetPosition(180 - ::GuiScreensExt::NeedSprite(BackgroundImage).Size.width, Pos.y);
-        }
     };
 
     class ApCost : Gui::Panel
@@ -3183,26 +3170,6 @@ namespace Game
         {
             SetPosition(10, 44);
             SetNotHittable(true);
-        }
-
-        void OnDrawItem(Item item, Gui::Object cell, int cellIndex) override
-        {
-            int apCost = 0;
-            if (item.Ownership == ItemOwnership::CritterInventory) {
-                apCost = ::Parameters::GetItemUseApCost(Game.GetCritter(item.CritterId), item, item.Mode);
-            }
-            else if (false) {
-                if (HasChosen) {
-                    Critter chosen = Chosen;
-                    auto item2 = ::CritterItem::GetSlotItemProto(chosen);
-                    apCost = ::Parameters::GetItemUseApCost(chosen, item2, chosen.HandsItemMode);
-                }
-            }
-
-            SetActive(apCost > 0);
-            if (apCost > 0) {
-                ::GuiScreensExt::NeedText(FindText("ApCostValue")).SetText("" + apCost);
-            }
         }
     };
 
@@ -3233,19 +3200,6 @@ namespace Game
             SetSize(18, 18);
             SetNotHittable(true);
             SetBackgroundImage("art/intrface/aim_pic.png");
-        }
-
-        void OnDrawItem(Item item, Gui::Object cell, int cellIndex) override
-        {
-            uint8 mode = 0;
-            if (true) {
-                mode = item.Mode;
-            }
-            else if (HasChosen) {
-                mode = Chosen.HandsItemMode;
-            }
-
-            ::GuiScreensExt::NeedSprite(BackgroundImage).Hidden = (::WeaponHelpers::WeaponModeAim(mode) == HitLocations::LocationNone);
         }
     };
 

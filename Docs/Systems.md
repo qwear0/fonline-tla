@@ -82,6 +82,16 @@ See [Animation.md](Animation.md) for the native baked root-motion flow, distinct
 | `Gui/*.fogui` | C | Authored screens and embedded callbacks, including `Gui/Game.fogui` input |
 | `Core/Gui` and companion Core GUI modules | C | Game-owned retained GUI infrastructure |
 
+`CritterItem::GetActive` resolves the selected `HandsProtoItemId` when a hand is empty;
+`GetActiveMode` reads `HandsItemMode` rather than the immutable prototype's `Mode`.
+`Gui/Game.fogui` redraws the main-hand plate from `OnDraw`, including empty-hand attacks,
+AP cost and aiming. `ClientItems::OnCritterAction` refreshes cached inventory cells after
+authoritative slot moves; the engine must apply slots before raising that event.
+
+Merc following keeps one `MercFollow` walk plan and retargets it to the master's latest
+hex with `MercMasterDist` as the stop radius. It does not queue historical player positions.
+Unchanged active walk routes are not restarted every AI tick; attack plans retain priority.
+
 The engine handles individual item instances and never merges stacks. Use `ItemStacks::` for quantity
 operations rather than raw engine add/move/destroy/clone calls. Cursor visuals also involve
 `Gui/Cursor.fogui`; generated callbacks are not authored owners.
@@ -100,6 +110,10 @@ operations rather than raw engine add/move/destroy/clone calls. Cursor visuals a
 | `AiControl` | S/C | Client observation/control and explicitly gated server QA commands; [AiControl.md](AiControl.md) |
 | `MapperMain` | M | Editor tabs/tools and mapper lifecycle |
 | `Migration` | S metadata | Current property remove/rename `///@ MigrationRule` declarations |
+
+`Items/Custom/base_tile.foitem` owns the shared Fallout tile offset `-24 26` for floors
+and roofs; roof height remains `Geometry.MapRoofElevation` in `TLA.fomain`. Do not shift
+individual city maps to compensate for a missing base-tile offset.
 
 Without `DayColor` updates maps use the engine's white default. Without `Sounds` name resolution,
 `Game.PlaySound` requires an exact resource path. Neither behavior is implicitly engine-owned anymore.

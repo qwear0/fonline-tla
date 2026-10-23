@@ -72,7 +72,10 @@ whose generated compatibility remains unchanged, deliberately advance
 (for example to a unique release tag), then rebake/repackage together. If used, that
 override becomes a release contract: advance it for every subsequent native release,
 including generated-contract changes; never leave incompatible builds on the same tag.
-Leave it empty when the generated compatibility version is sufficient. The host/runtime
+The current LAN release uses `tla-lan-20261023-equipment` to deliver the native equipment-slot
+refresh fix even though its metadata and packet schema are unchanged. Advance this tag for
+every later LAN native release; do not reuse it for a different native runtime. Other profiles
+leave the override empty when the generated compatibility version is sufficient. The host/runtime
 ABI and updater-protocol boundaries still apply and may require a fresh distribution.
 
 If the LAN address changes, update the `LAN` subconfig, rebake and repackage both

@@ -522,8 +522,7 @@ void ChosenProcess()
             int maxDist = 0;
             if (isAttack) {
                 AbstractItem weap = CritterItem::GetActive(chosen);
-                // TODO: проверить, что работает для рукопашных ударов.
-                maxDist = Parameters::GetCritterAttackDistance(chosen, weap, weap.Mode);
+                maxDist = Parameters::GetCritterAttackDistance(chosen, weap, CritterItem::GetActiveMode(chosen));
             }
             else {
                 maxDist = 1 + chosen.Multihex;

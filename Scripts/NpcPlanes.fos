@@ -1,6 +1,6 @@
 // NpcPlanes — серверная система AI-планов NPC: приоритетная очередь поведенческих задач (misc/attack/walk/pick; патруль и курьер — в разработке).
 // Периодический тайм-эвент OnCritterIdle вызывает ProcessAi: берёт текущий план, двигает NPC по путям с трассировкой, атакует/подбирает предметы/выполняет скрипт и переключает планы по приоритету.
-// Планы хранятся в persistent-свойстве Critter.Planes; порождает события OnNpcPlaneBegin/End/Run. Опирается на EnemyStack, CritterState, Messaging, Dialogs, LineTracer. Только сторона SERVER.
+// Планы хранятся в AllNpcPlanes в памяти сервера; порождает события OnNpcPlaneBegin/End/Run. Опирается на EnemyStack, CritterState, Messaging, Dialogs, LineTracer. Только сторона SERVER.
 // AllNpcPlanes и счётчик id глобальны: очередь должна быть общей для вложенных событий всех NPC.
 namespace NpcPlanes
 {
@@ -598,6 +598,9 @@ int ProcessAi(Critter npc)
             }
 
             if (Game.GetDistance(npc.Hex, plane.Walk_Hex) <= plane.Walk_Cut) {
+                if (npc.GetMovingState() == MovingState::InProgress) {
+                    npc.StopMoving();
+                }
                 if (plane.Walk_Dir < 6) {
                     npc.SetDir(mdir(hdir(plane.Walk_Dir)));
                 }
@@ -613,9 +616,18 @@ int ProcessAi(Critter npc)
                     break;
                 }
 
-                npc.MoveToHex(plane.Walk_Hex, plane.Walk_Cut, plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, null);
-                plane.IsMove = true;
-                SavePlan(npc, plane);
+                // Не начинаем тот же маршрут заново на каждом тике; смена цели,
+                // радиуса или скорости (включая травму ноги) требует нового маршрута.
+                int speed = plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed;
+                if (!plane.IsMove || npc.GetMovingState() != MovingState::InProgress || plane.Walk_MovingHex != plane.Walk_Hex ||
+                    plane.Walk_MovingCut != plane.Walk_Cut || plane.Walk_MovingSpeed != speed) {
+                    npc.MoveToHex(plane.Walk_Hex, plane.Walk_Cut, speed, null);
+                    plane.Walk_MovingHex = plane.Walk_Hex;
+                    plane.Walk_MovingCut = plane.Walk_Cut;
+                    plane.Walk_MovingSpeed = speed;
+                    plane.IsMove = true;
+                    SavePlan(npc, plane);
+                }
             }
         } break;
         /* ========================   Pick   ================================== */
@@ -735,6 +747,10 @@ class NpcPlane
     mpos Walk_Hex;
     int Walk_Dir;
     int Walk_Cut;
+    // Параметры уже запущенного маршрута; планы хранятся только в памяти сервера.
+    mpos Walk_MovingHex;
+    int Walk_MovingCut;
+    int Walk_MovingSpeed;
     mpos Pick_Hex;
     hstring Pick_Pid;
     ident Pick_UseItemId;
