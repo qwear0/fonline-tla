@@ -64,9 +64,7 @@ This policy supersedes upstream testing recommendations in imported documentatio
 
 ## Build And Verify
 
-Before building, verifying, packaging or restarting a server, read [Docs/FastBuild.md](Docs/FastBuild.md) and select its smallest adequate route; use [Docs/ClientUpdates.md](Docs/ClientUpdates.md) for LAN activation and storage safety.
-
-Follow [Docs/DiskCleanup.md](Docs/DiskCleanup.md) for generated-output and backup retention. Keep one reusable working bake; remove finished task-owned bulky staging copies after retaining compact evidence. Never treat Git-ignored files, active packages/logs, persistent storage or unrelated task artifacts as blanket deletion targets.
+Before building, verifying, packaging, restarting a server or cleaning build outputs, read [Docs/Build.md](Docs/Build.md) for the minimum adequate workflow and retention policy; use [Docs/ClientUpdates.md](Docs/ClientUpdates.md) for detailed LAN activation and storage safety.
 
 VS Code tasks in `.vscode/tasks.json` provide existing build and inspection commands. Select the smallest adequate checks for the task; the aggregate `Verify :: All` is optional, not a mandatory handoff gate.
 

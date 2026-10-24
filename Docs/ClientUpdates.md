@@ -26,7 +26,7 @@ See the engine's [runtime/updater contract](../Engine/Docs/en/explanation/runtim
 
 ## Build and assemble
 
-Start with [FastBuild.md](FastBuild.md) to select the minimum adequate work. Resource-only updates can
+Start with [Build.md](Build.md) to select the minimum adequate work. Resource-only updates can
 reuse verified unchanged native outputs and package the server/feed alone; a separate Windows client
 distribution is not needed for every restart. When native outputs need rebuilding, build matching
 sources/configuration in both native build trees before packaging. For the local Linux build and an
@@ -79,7 +79,7 @@ For redistribution, archive the complete client root including its DLL, PDBs and
    updater asks for a restart, close/relaunch the **client** to load the new DLL.
    This does not restart the server or erase its SQLite DB.
 
-After successful activation, follow [DiskCleanup.md](DiskCleanup.md) for staging cleanup and rollback
+After successful activation, follow [Build.md](Build.md#retention-and-cleanup) for staging cleanup and rollback
 retention. Do not retain a full staging copy as the only verification evidence or delete an active feed/log.
 
 A changed DLL hash alone does not enter native-update mode. For a native-only release
