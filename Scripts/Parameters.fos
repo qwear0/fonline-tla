@@ -92,43 +92,50 @@ void ProcessSkillsUp(Player player, any[] params)
         }
 
         int skillPoints = params[i + 1];
-        while (skillPoints > 0) {
-            int skillValue = cr.GetAsInt(skill);
-            if (skillValue >= Settings.Player.SkillMaxValue) {
-                break;
-            }
+        SpendSkillPoints(cr, skill, skillPoints);
+    }
+}
 
-            int needPoints = 1;
-            if (skillValue > Settings.Player.SkillModAdd6) {
-                needPoints = 6;
-            }
-            else if (skillValue > Settings.Player.SkillModAdd5) {
-                needPoints = 5;
-            }
-            else if (skillValue > Settings.Player.SkillModAdd4) {
-                needPoints = 4;
-            }
-            else if (skillValue > Settings.Player.SkillModAdd3) {
-                needPoints = 3;
-            }
-            else if (skillValue > Settings.Player.SkillModAdd2) {
-                needPoints = 2;
-            }
-
-            if (cr.UnspentSkillPoints < needPoints) {
-                break;
-            }
-
-            skillValue++;
-
-            if (IsTagSkill(cr, skill) && skillValue < Settings.Player.SkillMaxValue) {
-                skillValue++;
-            }
-
-            cr.UnspentSkillPoints = cr.UnspentSkillPoints - needPoints;
-            cr.SetAsInt(skill, skillValue);
-            skillPoints--;
+// Общая покупка повышений навыка: игроки и стартовые NPC используют одинаковую стоимость.
+void SpendSkillPoints(Critter cr, CritterProperty skill, int skillPoints)
+{
+    verify(CritterPropertyGroup::Skills.find(skill) != -1, "Invalid skill for point spending", skill);
+    while (skillPoints > 0) {
+        int skillValue = cr.GetAsInt(skill);
+        if (skillValue >= Settings.Player.SkillMaxValue) {
+            break;
         }
+
+        int needPoints = 1;
+        if (skillValue > Settings.Player.SkillModAdd6) {
+            needPoints = 6;
+        }
+        else if (skillValue > Settings.Player.SkillModAdd5) {
+            needPoints = 5;
+        }
+        else if (skillValue > Settings.Player.SkillModAdd4) {
+            needPoints = 4;
+        }
+        else if (skillValue > Settings.Player.SkillModAdd3) {
+            needPoints = 3;
+        }
+        else if (skillValue > Settings.Player.SkillModAdd2) {
+            needPoints = 2;
+        }
+
+        if (cr.UnspentSkillPoints < needPoints) {
+            break;
+        }
+
+        skillValue++;
+
+        if (IsTagSkill(cr, skill) && skillValue < Settings.Player.SkillMaxValue) {
+            skillValue++;
+        }
+
+        cr.UnspentSkillPoints = cr.UnspentSkillPoints - needPoints;
+        cr.SetAsInt(skill, skillValue);
+        skillPoints--;
     }
 }
 

@@ -271,6 +271,9 @@ void StartAttempt(Critter primary)
     verify(smitty != null, "Authored Smitty is missing");
     Game.DenDefenseSmittyId = smitty.Id;
     SetupSmitty(smitty, map);
+    Item[] doors = map.GetItemsInRadius(mpos(303, 147), 0, Content::Item::door_2361);
+    verify(doors.length() == 1, "Smitty workshop door is missing or ambiguous");
+    Lockers::SwitchLocker(doors[0], true);
     JoinAttempt(primary);
 
     for (int i = 0; i < 4; i++) {
@@ -359,23 +362,28 @@ void CreateCompanion(Critter primary, Map map, int index)
                                         {CritterProperty::DialogId, "den_defense_companion".hstr()},
                                         {CritterProperty::DenDefenseGeneration, Game.DenDefenseGeneration},
                                         {CritterProperty::DenDefenseRole, ROLE_COMPANION},
-                                        {CritterProperty::ReplicationTime, -1}};
-    Critter companion = map.AddCritter(index % 2 == 0 ? Content::Critter::Wilder : Content::Critter::Wilder2, hex, HDIR_Random, props);
+                                        {CritterProperty::ReplicationTime, -1},
+                                        // Итоговые ОЖ 103/91: ещё +50% к прежним 69/61, с округлением вниз.
+                                        {CritterProperty::MaxLifeBase, index % 2 == 0 ? 70 : 58}};
+    Critter companion = map.AddCritter("DenDefenseCompanion".hstr(), hex, HDIR_Random, props);
     companion.MakePersistent(true);
     auto ids = Game.DenDefenseCompanionIds.clone();
     ids.insertLast(companion.Id);
     Game.DenDefenseCompanionIds = ids;
     verify(Merc::Merc2Player(primary, companion, true, false, 0, 3, Merc::MERC_CUSTOM, true, true), "Unable to assign Den companion", companion);
-    ScaleSpawnHealth(companion, 150);
+    // Два повышения уровня по обычной формуле; тратим всё доступное на тегнутое холодное оружие.
+    companion.UnspentSkillPoints = (companion.Level - 1) * (5 + companion.IntellectBase * 2);
+    Parameters::SpendSkillPoints(companion, CritterProperty::SkillMeleeWeapons, companion.UnspentSkillPoints);
     companion.StopTimeEvent(NpcBags::OnCritterIdle);
     companion.IsNoEnemyStack = true;
     companion.IsNoLoot = false;
     companion.IsNoSteal = false;
     companion.ReplicationTime = -1;
-    Item weapon = ItemStacks::AddItem(companion, Content::Item::crowbar, 1);
-    verify(CritterAnims::IsCritterStateAnim(companion, weapon.Weapon_StateAnim), "Companion crowbar animation missing");
+    const hstring[] weapons = {Content::Item::sledgehammer, Content::Item::combat_knife, Content::Item::crowbar, Content::Item::club};
+    Item weapon = ItemStacks::AddItem(companion, weapons[index], 1);
+    verify(CritterAnims::IsCritterStateAnim(companion, weapon.Weapon_StateAnim), "Companion weapon animation missing");
     companion.ChangeItemSlot(weapon.Id, CritterItemSlot::Main);
-    ItemStacks::AddItem(companion, Content::Item::stimpak, 2);
+    ItemStacks::AddItem(companion, Content::Item::stimpak, 5);
 }
 
 // Считаем только обычных членов группы: исключение не расширяет вместимость машины.
@@ -574,6 +582,7 @@ void Brief(Critter player, Critter npc)
     player.DenDefenseKitGeneration = Game.DenDefenseGeneration;
     ItemStacks::AddItem(player, Content::Item::crowbar, 1);
     ItemStacks::AddItem(player, Content::Item::stimpak, 2);
+    ItemStacks::AddItem(player, Content::Item::leather_jacket, 1);
 }
 
 bool CanClaimRewardNow(Critter player, Critter npc)

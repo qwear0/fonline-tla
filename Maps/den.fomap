@@ -9739,11 +9739,12 @@ Hex = 303 142
 $Id = 4294964063
 $Proto = door_2361
 Hex = 303 147
-IsGag = True
-LightThru = False
-NoBlock = False
+IsGag = False
+LightThru = True
+NoBlock = True
 Offset = -1 3
-ShootThru = False
+Opened = True
+ShootThru = True
 
 [$Name/Item]
 $Id = 4294964058

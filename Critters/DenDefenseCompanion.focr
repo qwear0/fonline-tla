@@ -1,0 +1,25 @@
+[ProtoCritter]
+$Name = DenDefenseCompanion
+$Parent = hmlmax
+
+StrengthBase = 8
+PerceptionBase = 4
+EnduranceBase = 5
+CharismaBase = 4
+IntellectBase = 5
+AgilityBase = 10
+LuckBase = 4
+MaxLifeBase = 70
+DamageType = 1
+Age = 25
+AiId = 1
+Experience = 3000
+EmpResistanceBase = 500
+TagSkill1 = SkillMeleeWeapons
+TagSkill2 = SkillFirstAid
+TagSkill3 = SkillSmallGuns
+Level = 3
+IsNoBarter = True
+
+$Text russ = "Соплеменник"
+$Text engl = "Tribesman"

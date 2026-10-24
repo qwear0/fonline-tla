@@ -5,7 +5,8 @@
 Owner: [`Scripts/DenDefense.fos`](../Scripts/DenDefense.fos), server-authoritative scenario with
 client-only rest fades and failure input blocking. It uses the existing shared `den` location/map and its
 original Smitty, not a private base or a replacement city. Ordinary inhabitants and map items are not
-reset. Smitty's former trader/dialog behavior is intentionally replaced for this scenario.
+reset, except that Smitty's workshop door at `303:147` starts open and is reopened for each new attempt.
+Smitty's former trader/dialog behavior is intentionally replaced for this scenario.
 
 - [`PlayerRegistration.fos`](../Scripts/PlayerRegistration.fos) calls `OnSuccessfulLogin` with the
   **returned** `Player`, after successful registration/existing-account login and outside rollback
@@ -63,25 +64,33 @@ no existing serialized identifier is removed/renamed and no migration rule/engin
 
 ## Supplies, companions and ground loot
 
-- Briefing gives each participant **one crowbar and two stimpaks once per generation**. Joining alone
+- Briefing gives each participant **one crowbar, one leather jacket and two stimpaks once per generation**. Joining alone
   does not grant them. Any briefed participant may request eligible rest; every participant may claim
   their final reward. Only the primary may issue follow/wait/defend/assist orders.
 - Participant and companion placement searches nearby hex rings, rejects occupied hexes and requires
   a route to the workshop through openable unlocked doors. A locally free pocket between cars is not
   a valid spawn; failure to find a connected hex aborts placement instead of trapping an actor.
-- Each of the four companions starts with one crowbar and two actual consumable stimpaks.
-  Their maximum and starting HP are 150% of the normal prototype-derived maximum, applied once at
-  creation; rest and reconnects do not compound the increase.
+- Each companion uses [`Critters/DenDefenseCompanion.focr`](../Critters/DenDefenseCompanion.focr):
+  the long-haired leather-jacket model `hmlmax`, level 3 / 3,000 XP and SPECIAL `8/4/5/4/5/10/4`
+  (40 points, the five remaining stats split as evenly as integers allow). Tagged skills are Melee
+  Weapons, First Aid and Small Guns. All affordable level-up points go through
+  `Parameters::SpendSkillPoints` into Melee Weapons using the same tag bonus and cost bands as players:
+  30 earned points yield 118% melee, with one point left because the next increase costs two;
+  First Aid starts at 38% and Small Guns at 65%.
+  Each starts with **five consumable stimpaks** and exactly one equipped weapon, in squad order:
+  **sledgehammer, combat knife, crowbar, club**. Smitty does not equip or resupply companions.
+  Maximum/starting HP are **103/91/103/91**, another 50% over the previous 69/61/69/61 with integer
+  truncation. These values apply once at creation; rest and reconnects do not compound the increase.
   [`Merc.fos`](../Scripts/Merc.fos) retains ownership through death and exempts these companions from
   ordinary dismissal/expiry. Scenario-only Charisma counting in `Merc`/`GlobalmapGroup` does not enlarge
   vehicle seating or exempt unrelated recruits.
 - Ordinary and super stimpaks declare both `IsCanUse` (inventory self-use) and `IsCanUseOnSmth`
   (use on another critter). `CritterActions.UseItemOn` checks these capabilities before dispatching
   to `Main.CritterUseItem` -> `Drugs.UseDrug` / `UseDrugOn`; one unit is consumed through `ItemStacks`.
-- The tribal models lack Club frames. The server's narrow companion exception in
-  [`CritterAnims.fos`](../Scripts/CritterAnims.fos) admits the existing `Animation` Club-to-Knife fallback
-  for these companions; it does not allow other NPCs to use unsupported weapons. Visual suitability
-  still needs in-client acceptance.
+- The `hmlmax` model supports Knife, Club and Hammer frames for all four starting weapons.
+  The narrow companion-only Club-to-Knife fallback in [`CritterAnims.fos`](../Scripts/CritterAnims.fos)
+  remains for older tribal companions; it does not admit unsupported weapons for unrelated NPCs.
+  Visual suitability still needs in-client acceptance.
 - There are **no inventory snapshots or special retained-inventory resurrection**. Participant death
   spills ordinary, non-hidden, non-gag belongings onto the actual map. If no map is available, items
   remain until a safe mapped spill. Nested containers move intact; quantities use `ItemStacks`.

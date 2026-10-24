@@ -29,7 +29,7 @@ Speech 3
 {Speech 1 Answer Exit}{}{Отдохнём до следующего рассвета и встретим следующую волну.}
 {Speech 1 Answer 3}{}{Мы всех остановили?}
 {Speech 1 Answer Exit*}{}{Я осмотрюсь.}
-{Speech 2}{}{Я выдаю каждому участнику лом и два стимпака один раз за попытку. Четверо соплеменников подчиняются только тому, кто первым привёл их сюда. Прикажи им следовать, ждать, защищать тебя или помогать в атаках. Я прикрываю только мастерскую изнутри. Между волнами можно отдохнуть до 06:00: живые восстановят силы, но погибшие спутники не вернутся и запасы не пополнятся. После отдыха начнётся следующая атака.}
+{Speech 2}{}{Я выдаю каждому участнику лом, кожаную куртку и два стимпака один раз за попытку. Четверо соплеменников уже пришли со своим оружием и пятью стимпаками у каждого — я их не экипирую. Они подчиняются только тому, кто первым привёл их сюда. Прикажи им следовать, ждать, защищать тебя или помогать в атаках. Я прикрываю только мастерскую изнутри. Между волнами можно отдохнуть до 06:00: живые восстановят силы, но погибшие спутники не вернутся и запасы не пополнятся. После отдыха начнётся следующая атака.}
 {Speech 2 Answer 1}{}{Вернёмся к обороне.}
 {Speech 2 Answer Exit}{}{Понятно.}
 {Speech 3}{}{Все три волны уничтожены. Дэн выстоял. Спасибо! Каждому защитнику причитается топливный регулятор.}
@@ -44,7 +44,7 @@ Speech 3
 {Speech 1 Answer Exit}{}{Let us rest until the next dawn and face the next wave.}
 {Speech 1 Answer 3}{}{Did we stop them all?}
 {Speech 1 Answer Exit*}{}{I will look around.}
-{Speech 2}{}{I give each participant a crowbar and two stimpaks once per attempt. The four tribespeople obey only the survivor who first led them here. Tell them to follow, wait, defend you or assist your attacks. I cover only the workshop interior. You may rest between waves until 06:00: the living recover, but fallen companions stay dead and supplies are not replenished. The next attack begins after resting.}
+{Speech 2}{}{I give each participant a crowbar, a leather jacket and two stimpaks once per attempt. The four tribespeople already have their own weapons and five stimpaks each; I do not equip them. They obey only the survivor who first led them here. Tell them to follow, wait, defend you or assist your attacks. I cover only the workshop interior. You may rest between waves until 06:00: the living recover, but fallen companions stay dead and supplies are not replenished. The next attack begins after resting.}
 {Speech 2 Answer 1}{}{Back to the defense.}
 {Speech 2 Answer Exit}{}{Understood.}
 {Speech 3}{}{All three waves are defeated. The Den held. Thank you! Each defender has earned a fuel regulator.}
