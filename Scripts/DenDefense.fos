@@ -2,7 +2,7 @@
 // SERVER: подтверждённый вход, поколения попыток, участники, спутники, отдых, волны и вещи.
 // CLIENT: затемнение отдыха и блокировка действий при провале без ролика и скрытия тела.
 // Состояние хранится в свойствах Game/Critter/Map; загрузка сама по себе не начинает попытку.
-// Связи: PlayerRegistration, Main, Merc, NpcPlanes; диалоги den_defense_*.
+// Связи: PlayerRegistration, Main, Merc, DenCleanup, NpcPlanes; диалоги den_defense_*.
 namespace DenDefense
 {
 
@@ -229,6 +229,7 @@ void StartAttempt(Critter primary)
     Game.DenDefenseMapId = map.Id;
     Game.DenDefensePrimaryId = primary.Id;
     map.StopTimeEvent(Controller);
+    map.StopTimeEvent(SpawnTick);
     Game.StopTimeEvent(FinishRest);
     Game.StopTimeEvent(StartAfterRest);
     Game.StopTimeEvent(CloseRestDialogs);
@@ -276,6 +277,7 @@ void StartAttempt(Critter primary)
     verify(smitty != null, "Authored Smitty is missing");
     Game.DenDefenseSmittyId = smitty.Id;
     SetupSmitty(smitty, map);
+    DenCleanup::Setup(map);
     Item[] doors = map.GetItemsInRadius(mpos(303, 147), 0, Content::Item::door_2361);
     verify(doors.length() == 1, "Smitty workshop door is missing or ambiguous");
     Lockers::SwitchLocker(doors[0], true);
@@ -319,7 +321,7 @@ void SetupSmitty(Critter smitty, Map map)
     smitty.MaxTalkers = 10;
     NpcPlanes::DropPlanes(smitty);
     EnemyStack::ClearEnemyStack(smitty);
-    verify(SpillLoot(smitty), "Unable to safely clear Smitty inventory", smitty);
+    DenCleanup::StoreItems(smitty.GetItems(), map);
     PlaceSmittyAtHome(smitty, map);
     if (!smitty.IsAlive()) {
         CritterState::ToAlive(smitty);
@@ -788,9 +790,9 @@ void StartAfterRest(any value)
     BroadcastRest(2);
     Game.DenDefenseWave = Game.DenDefenseWave + 1;
     Game.DenDefenseSpawned = 0;
-    Game.DenDefenseSpawnTotal = Game.DenDefenseWave == 1 ? 25 : (Game.DenDefenseWave == 2 ? 15 : 22);
+    Game.DenDefenseSpawnTotal = Game.DenDefenseWave == 1 ? 50 : (Game.DenDefenseWave == 2 ? 30 : 44);
     Game.DenDefenseEnemyIds = {};
-    map.DenDefenseNextSpawn = Game.FrameTime + Time::Seconds(3);
+    map.StopTimeEvent(SpawnTick);
     Game.DenDefenseDawn = ZERO_SYNCTIME;
     Game.Log("Den defense wave started, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave + " total=" + Game.DenDefenseSpawnTotal);
     // Первого атакующего выпускаем сразу после утреннего отдыха, остальных — по таймеру карты.
@@ -811,6 +813,7 @@ void ResumeController()
     // Движок создаёт локации временными; сохраняем базу вместе с её картой и содержимым.
     map.GetLocation().MakePersistent(true);
     map.StopTimeEvent(Controller);
+    map.StopTimeEvent(SpawnTick);
     Game.StopTimeEvent(CloseRestDialogs);
     Game.StopTimeEvent(FinishRest);
     Game.StopTimeEvent(StartAfterRest);
@@ -865,9 +868,6 @@ void Controller(Map map, any value)
     if (Game.DenDefenseStage != STAGE_FIGHTING) {
         return;
     }
-    if (Game.DenDefenseSpawned < Game.DenDefenseSpawnTotal && Game.FrameTime >= map.DenDefenseNextSpawn) {
-        SpawnEnemy();
-    }
     auto enemies = Game.DenDefenseEnemyIds.clone();
     for (int i = 0; i < enemies.length(); i++) {
         Critter? enemy = Game.GetCritter(enemies[i]);
@@ -888,29 +888,27 @@ void Controller(Map map, any value)
     }
 }
 
+// Отдельный таймер не округляет случайные миллисекундные интервалы до тика контроллера.
+[[TimeEvent]]
+void SpawnTick(Map map, any value)
+{
+    if (int(value) == Game.DenDefenseGeneration && map.Id == Game.DenDefenseMapId && Game.DenDefenseStage == STAGE_FIGHTING &&
+        Game.DenDefenseSpawned < Game.DenDefenseSpawnTotal) {
+        SpawnEnemy();
+    }
+}
+
 void SpawnEnemy()
 {
     Map? map = Game.GetMap(Game.DenDefenseMapId);
     verify(map != null, "Shared Den disappeared during spawn");
-    // Внутренние точки трёх комнат по стенам/крышам den.fomap; дверь и улица не входят.
-    const mpos[] approaches = {mpos(268, 125),
-                               mpos(270, 125),
-                               mpos(272, 125),
-                               mpos(274, 125),
-                               mpos(276, 125),
-                               mpos(270, 123),
-                               mpos(268, 140),
-                               mpos(270, 140),
-                               mpos(272, 140),
-                               mpos(268, 142),
-                               mpos(270, 142),
-                               mpos(272, 142),
-                               mpos(278, 140),
-                               mpos(280, 140),
-                               mpos(282, 140),
-                               mpos(278, 142),
-                               mpos(280, 142),
-                               mpos(282, 142)};
+    // Внутренние точки прежних домов, склада под мастерской, дома у бункера и восточного дома.
+    // Занятые гексы, стены и запертые выходы отсекаем до создания NPC.
+    const mpos[] approaches = {mpos(268, 125), mpos(270, 125), mpos(272, 125), mpos(274, 125), mpos(276, 125), mpos(270, 123), mpos(268, 140), mpos(270, 140),
+                               mpos(272, 140), mpos(268, 142), mpos(270, 142), mpos(272, 142), mpos(278, 140), mpos(280, 140), mpos(282, 140), mpos(278, 142),
+                               mpos(280, 142), mpos(282, 142), mpos(316, 188), mpos(320, 188), mpos(324, 190), mpos(328, 194), mpos(318, 198), mpos(324, 202),
+                               mpos(260, 172), mpos(262, 172), mpos(264, 174), mpos(260, 176), mpos(262, 178), mpos(264, 180), mpos(242, 160), mpos(246, 160),
+                               mpos(250, 160), mpos(242, 168), mpos(246, 166), mpos(250, 166)};
     int cursor = Game.DenDefenseSpawned;
     mpos hex;
     bool found = false;
@@ -918,16 +916,23 @@ void SpawnEnemy()
     verify(smitty != null, "Smitty disappeared during spawn");
     // Занятая комната или запертая дверь Лары 278:147 не задерживает всю волну.
     // Не выходим на улицу и не открываем чужие замки: перебираем остальные дома.
+    // Выбираем равновероятный гекс среди всех доступных, а не первый в постоянном обходе.
+    int available = 0;
     for (int i = 0; i < approaches.length(); i++) {
-        mpos candidate = approaches[((cursor % 3) * 6 + i) % approaches.length()];
+        mpos candidate = approaches[i];
         if (map.IsHexMovable(candidate) && map.GetCritterOnHex(candidate) == null &&
             map.GetPathLength(candidate, smitty.Hex, 1 + smitty.Multihex, CanLeaveSpawnHouse) > 0) {
-            hex = candidate;
-            found = true;
-            break;
+            available++;
+            if (Game.Random(1, available) == 1) {
+                hex = candidate;
+                found = true;
+            }
         }
     }
-    map.DenDefenseNextSpawn = Game.FrameTime + Time::Seconds(3);
+    // Раньше было 3000 мс; среднее равномерного интервала 750..2250 равно 1500 мс.
+    timespan interval = Time::Milliseconds(Game.Random(750, 2250));
+    map.DenDefenseNextSpawn = Game.FrameTime + interval;
+    map.StartTimeEvent(interval, SpawnTick, Game.DenDefenseGeneration);
     if (!found) {
         Game.DenDefenseSpawnRetries = Game.DenDefenseSpawnRetries + 1;
         if (Game.DenDefenseSpawnRetries % 5 == 1) {
@@ -936,7 +941,7 @@ void SpawnEnemy()
         return;
     }
     Game.DenDefenseSpawnRetries = 0;
-    int brother = Game.DenDefenseWave == 3 && cursor >= 20 ? cursor - 19 : 0;
+    int brother = Game.DenDefenseWave == 3 && cursor >= Game.DenDefenseSpawnTotal - 2 ? cursor - Game.DenDefenseSpawnTotal + 3 : 0;
     hstring proto;
     if (Game.DenDefenseWave == 1) {
         // Местные Проститутка (nftrmp), Алкоголик и Псих (nmlosr), как в den.fomap.
@@ -950,8 +955,8 @@ void SpawnEnemy()
                                        Content::Critter::AveragePeasant,
                                        Content::Critter::HomesteaderMale,
                                        Content::Critter::HomesteaderFemale};
-        // У nmbpea есть J (ружьё), у nmbsnp — нет; оба брата должны реально стрелять.
-        proto = brother > 0 ? Content::Critter::WeakPeasant : townspeople[cursor % townspeople.length()];
+        // Тот же MasterTrader/nmpeas, что у Дантона на авторской карте Кламата.
+        proto = brother > 0 ? Content::Critter::MasterTrader : townspeople[cursor % townspeople.length()];
     }
     // Штатные реплики проститутки / зависимых, племени, бандитов и горожан.
     // Таблицы звуков и анимаций наследуются от моделей; общие прото и AiSettings не меняем.
@@ -998,7 +1003,7 @@ void SpawnEnemy()
         }
     }
     else if (Game.DenDefenseWave == 2) {
-        if (cursor < 3) {
+        if (cursor < 6) {
             Item spear = ItemStacks::AddItem(enemy, Content::Item::spear, 1);
             enemy.ChangeItemSlot(spear.Id, CritterItemSlot::Main);
         }
@@ -1016,14 +1021,15 @@ void SpawnEnemy()
     }
     if (brother > 0) {
         enemy.DialogId = (brother == 1 ? "den_defense_bobby" : "den_defense_billy").hstr();
-        Item rifle = ItemStacks::AddItem(enemy, Content::Item::springer_rifle, 1);
-        rifle.DenDefenseFiniteAmmo = true;
-        rifle.AmmoPid = Content::Item::_10mm_jhp;
-        rifle.AmmoCount = 1;
+        // У nmpeas нет J (ружьё), зато есть E (пистолет); сохраняем пять конечных патронов.
+        Item pistol = ItemStacks::AddItem(enemy, Content::Item::_10mm_pistol, 1);
+        pistol.DenDefenseFiniteAmmo = true;
+        pistol.AmmoPid = Content::Item::_10mm_jhp;
+        pistol.AmmoCount = 1;
         ItemStacks::AddItem(enemy, Content::Item::_10mm_jhp, 4);
-        verify(CritterAnims::IsCritterStateAnim(enemy, rifle.Weapon_StateAnim), "Dunton rifle animation missing");
-        enemy.ChangeItemSlot(rifle.Id, CritterItemSlot::Main);
-        enemy.LastWeaponId = rifle.Id;
+        verify(CritterAnims::IsCritterStateAnim(enemy, pistol.Weapon_StateAnim), "Dunton pistol animation missing");
+        enemy.ChangeItemSlot(pistol.Id, CritterItemSlot::Main);
+        enemy.LastWeaponId = pistol.Id;
         enemy.LastWeaponUse = 0;
         enemy.LastWeaponNotFound = false;
         ItemStacks::AddItem(enemy, Content::Item::brass_knuckles, 1);
@@ -1096,7 +1102,7 @@ void ChooseTarget(Critter npc)
 // Именно фактический выстрел: не выбор оружия и не попытка перезарядки.
 void OnWeaponFired(Critter cr, AbstractItem weapon, ProtoItem? ammo)
 {
-    if (IsActor(cr) && cr.DenDefenseBrother > 0 && weapon.ProtoId == Content::Item::springer_rifle && ammo != null) {
+    if (IsActor(cr) && cr.DenDefenseBrother > 0 && weapon.ProtoId == Content::Item::_10mm_pistol && ammo != null) {
         Messaging::SayShoutOnHead(cr, MsgStr::DialogTextKey(cr.DialogId, Game.Random(100, 103)));
     }
 }
@@ -1131,6 +1137,7 @@ void FailAttempt()
     Map? map = Game.GetMap(Game.DenDefenseMapId);
     if (map != null) {
         map.StopTimeEvent(Controller);
+        map.StopTimeEvent(SpawnTick);
     }
     StopScenarioActions();
     BroadcastRest(2);

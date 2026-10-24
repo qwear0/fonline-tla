@@ -1,12 +1,12 @@
 [Comment]
-Billy Dunton: randomized shot-only threats, in addition to ordinary combat barks.
+Buck Dunton from Klamath: randomized shot-only threats, in addition to ordinary combat barks.
 
 [Dialog]
 Speech 1
   Answer Exit
 
 [Text russ]
-{Name}{}{Билли Дантон}
+{Name}{}{Бак Дантон}
 {Speech 1}{}{Здесь вам не место!}
 {Speech 1 Answer Exit}{}{Посмотрим.}
 {100}{}{Смитти! Сейчас вся твоя мастерская станет металлоломом!}
@@ -15,7 +15,7 @@ Speech 1
 {103}{}{Ну что, Смитти, кто теперь чинит дырки в твоей шкуре?}
 
 [Text engl]
-{Name}{}{Billy Dunton}
+{Name}{}{Buck Dunton}
 {Speech 1}{}{You do not belong here!}
 {Speech 1 Answer Exit}{}{We will see.}
 {100}{}{Smitty! Your whole workshop is about to become scrap!}

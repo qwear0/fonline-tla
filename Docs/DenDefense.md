@@ -5,7 +5,9 @@
 Owner: [`Scripts/DenDefense.fos`](../Scripts/DenDefense.fos), server-authoritative scenario with
 client-only rest fades and failure input blocking. It uses the existing shared `den` location/map and its
 original Smitty, not a private base or a replacement city. Ordinary inhabitants and map items are not
-reset, except that Smitty's workshop door at `303:147` starts open and is reopened for each new attempt.
+reset. Smitty's workshop door at `303:147` starts open and is reopened for each new attempt;
+loose supplies around the workshop move into his crate, and the original drunkard at `289:147`
+becomes Todd, the post-wave cleaner owned by [`Scripts/DenCleanup.fos`](../Scripts/DenCleanup.fos).
 Smitty's former trader/dialog behavior is intentionally replaced for this scenario.
 
 - [`PlayerRegistration.fos`](../Scripts/PlayerRegistration.fos) calls `OnSuccessfulLogin` with the
@@ -187,11 +189,37 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   spills ordinary, non-hidden, non-gag belongings onto the actual map. If no map is available, items
   remain until a safe mapped spill. Nested containers move intact; quantities use `ItemStacks`.
 - Before deleting obsolete companions/enemies, reset spills their remaining belongings. It never
-  purges map items. Smitty's remaining ordinary inventory is spilled before re-equipping him. Hidden/
-  gag system items are not exposed. Failed moves assert before actor deletion.
+  purges map items. Smitty's remaining ordinary inventory goes into his crate before re-equipping him.
+  At attempt setup, loose pickable non-container items within 12 hexes of `303:147` also move into
+  that crate, without copying stacks. Hidden/gag system items are not exposed. Failed moves assert
+  before actor deletion.
 - Preserve ground loot, acquired rewards and living player inventories across attempts. There is no
   expiry, anti-farming rule, provenance ledger or arbitrary per-wave experience bonus. LAN SQLite
   preserves this state across process shutdown; profiles still using Memory do **not**.
+
+## Todd and post-wave cleanup
+
+Owner: `Scripts/DenCleanup.fos`; authored inputs: `Maps/den.fomap`,
+`Items/DenDefenseSupplies.foitem`, `Dialogs/den_defense_todd.fodlg`.
+
+- The existing drunkard at `289:147`, outside Smitty's fence, is renamed Todd; no duplicate NPC is
+  created. Authored initialization and attempt setup also support an older saved Den map.
+- Only after a wave is fully spawned and its registered enemies are all dead does Todd select a
+  reachable current-generation wave corpse. He walks with ordinary door-aware NPC plans to the
+  normal corpse-looting distance (one hex plus both multihex radii), faces it and plays the loot action.
+  After one real second at that distance, the body disappears. Players, companions and ordinary
+  inhabitants are never cleanup targets. MercLoot reservations are respected at selection and removal.
+- Each cleanup action has a 20% chance of one uniformly selected bark from the ten requested lines
+  (`100..109`, Russian and English). A 250 ms idle timer handles the one-second deadline; busy/dialog
+  time can delay completion. Unreachable bodies are ignored; a stalled selected target is skipped
+  after 30 seconds for that wave. Rest, a new active wave, failure or Todd's death cancels his task;
+  a subsequent completed wave makes remaining reachable bodies eligible again.
+- Remaining ordinary corpse items go intact into Smitty's crate at `300:141` before body deletion.
+  The same crate holds workshop supplies. Moving stacks uses `ItemStacks`, asserts on failed moves
+  and does not destroy unclaimed loot. The crate inherits the wooden-crate presentation with an
+  enlarged capacity. Old saves without it create exactly one crate on demand.
+- New server-only transient `DenCleanup*` critter properties hold target/deadline/generation/skips;
+  no public property, RemoteCall or removal/rename migration is introduced.
 
 ## Global rest and time domains
 
@@ -228,9 +256,9 @@ unrelated caravan/encounter NPCs that happen to use bounty-hunter prototypes.
 
 | Wave | Composition and equipment |
 | --- | --- |
-| 1 | 25 attackers cycling Prostitute, Drunkard and Madman; original Den models/dialogs, one-shot stock bags 26/11, plus alcohol/rocks for drunkards |
-| 2 | 15 tribals: exactly three spears, twelve unarmed; meat/flowers/healing powder |
-| 3 | 20 unarmed townspeople and Bobby/Billy Dunton; each brother has brass knuckles and a single-shot `springer_rifle` with **one loaded + four spare rounds**; money/alcohol/miscellaneous loot |
+| 1 | 50 attackers cycling Prostitute, Drunkard and Madman; original Den models/dialogs, one-shot stock bags 26/11, plus alcohol/rocks for drunkards |
+| 2 | 30 tribals: exactly six spears, twenty-four unarmed; meat/flowers/healing powder |
+| 3 | 42 unarmed townspeople and Chuck/Buck Dunton; each brother has brass knuckles and a `10mm_pistol` with **one loaded + four spare rounds**; money/alcohol/miscellaneous loot |
 
 New wave-2/3 enemies, including the Dunton brothers, start at 50% of their normal maximum HP.
 Wave 1 halves that already reduced maximum once more (50% of its previous balance); both maximum
@@ -246,11 +274,16 @@ lines. Its stock bags supply knives/switchblades/shivs, jet, flowers and caps; d
 carry beer/booze and rocks. Bags are filled once, not refreshed during combat; city quest state is
 not copied to these attackers.
 
-The first enemy is admitted when the 10:00 rest transition finishes; subsequent admissions are spaced by
-three real seconds. Each wave reinstalls the map controller. Spawn selection rotates explicit indoor
-candidate sets in the nearby western houses and checks a route toward the workshop through openable,
-unlocked doors. An occupied/unreachable room falls through to the other rooms, never to street hexes
-or forced unlocking. If all candidates are blocked, the same cursor retries and logs periodically;
+The first enemy is admitted when the 10:00 rest transition finishes. Subsequent admissions use a
+separate generation-guarded `SpawnTick` map timer with a uniform **750–2250 real ms** delay
+(mean **1500 ms**, half the former 3000 ms); the one-second combat controller does not quantize it.
+Each wave reinstalls the controller and replaces its spawn timer. Spawn selection uniformly samples
+all currently free/reachable hexes from explicit indoor sets: the original three rooms, the warehouse
+below Smitty (`316:188` through `324:202`), the house beside the Brotherhood bunker (`260:172`
+through `264:180`) and the farther eastern house (rooms around `242:160` and `246:166`).
+Every candidate needs a route toward the workshop through openable, unlocked doors. An occupied or
+unreachable room never forces a street spawn or unlocking. If all candidates are blocked, the same
+cursor retries with another randomized delay and logs periodically;
 this is not a kill. Visible reachable participants/companions distract attackers; otherwise they
 walk toward living Smitty.
 Stale/invisible distractions return to that objective. `MainPlanes.CanOpenDoor` is shared by target
@@ -277,9 +310,12 @@ names remain authored in his dialog. [`Animation.fos`](../Scripts/Animation.fos)
 Fallout death playback from a final-frame corpse idle, avoiding repeated falling/twitching without
 reviving or moving the corpse.
 
-`NpcPlanes` and `ItemMovement` prevent synthetic ammo refill for attackers/tagged brother rifles.
-Normal weapon selection rejects an exhausted rifle and falls back to knuckles/unarmed. Both brothers
-use a model supporting shotgun frames. `Combat` emits their additional randomized localized threats at
+`NpcPlanes` and `ItemMovement` prevent synthetic ammo refill for attackers/tagged brother pistols.
+Normal weapon selection rejects an exhausted pistol and falls back to knuckles/unarmed. Both brothers
+use Klamath's authored Dunton prototype `MasterTrader` / model `nmpeas`, with the names Chuck and Buck
+from `Dialogs/klam_danton.fodlg`. That model has pistol frames (`E`), not rifle frames (`J`), so their
+former rifles are replaced by pistols without increasing the ammunition supply. Historical dialog
+resource IDs `den_defense_bobby` / `den_defense_billy` remain unchanged. `Combat` emits their additional randomized localized threats at
 actual firearm ammo expenditure. Wave actors select existing voiced AI packets (45/11 for wave 1,
 1 for tribals, 13/14 for wave 3), rather than silent packet 25; the shared bark tables and ordinary
 combat-text path remain unchanged.

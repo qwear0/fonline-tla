@@ -1,0 +1,192 @@
+// DenCleanup — Тодд убирает тела врагов после завершённых волн обороны Дэна.
+// SERVER: подход вплотную, секунда обыска и перенос оставшейся добычи в ящик Смитти.
+// Задание и пропущенные недоступные тела хранятся на NPC; изменяемых глобальных таблиц нет.
+// Связи: DenDefense (стадии и поколения), MercLoot (резерв тела), NpcPlanes, ItemStacks.
+namespace DenCleanup
+{
+
+#if SERVER
+
+///@ Property Critter Server ident DenCleanupTargetId Mutable
+///@ Property Critter Server nanotime DenCleanupReadyAt Mutable
+///@ Property Critter Server nanotime DenCleanupTargetUntil Mutable
+///@ Property Critter Server int32 DenCleanupGeneration Mutable
+///@ Property Critter Server int32 DenCleanupWave Mutable
+///@ Property Critter Server ident[] DenCleanupSkippedIds Mutable
+
+Item GetSupplies(Map map)
+{
+    const mpos hex = mpos(300, 141);
+    Item[] crates = map.GetItemsInRadius(hex, 0, "DenDefenseSupplies".hstr());
+    verify(crates.length() <= 1, "More than one Smitty supplies crate");
+    // Сохранённая карта могла быть создана до добавления авторского ящика.
+    return crates.isEmpty() ? ItemStacks::AddItem(map, hex, "DenDefenseSupplies".hstr(), 1) : crates[0];
+}
+
+void StoreItems(Item[] items, Map map)
+{
+    Item crate = GetSupplies(map);
+    for (int i = 0; i < items.length(); i++) {
+        Item item = items[i];
+        if (!item.Hidden && !item.IsGag) {
+            Item? stored = ItemStacks::MoveItem(item, item.Count, crate, 0);
+            verify(stored != null && stored.Ownership == ItemOwnership::ItemContainer && stored.ContainerId == crate.Id, "Unable to store Den supplies", item);
+        }
+    }
+}
+
+// Переносим вещи из мастерской и двора, но не декорации, двери и чужие контейнеры.
+void StoreGroundSupplies(Map map)
+{
+    Item[] items = map.GetItemsInRadius(mpos(303, 147), 12);
+    Item[] supplies = {};
+    for (int i = 0; i < items.length(); i++) {
+        Item item = items[i];
+        if (item.IsCanPickUp && !item.Hidden && !item.IsGag && item.Type != ItemType::Container) {
+            supplies.insertLast(item);
+        }
+    }
+    StoreItems(supplies, map);
+}
+
+void Init(Critter todd, bool firstTime)
+{
+    todd.DialogId = "den_defense_todd".hstr();
+    todd.BagId = Bags::Empty;
+    todd.StopTimeEvent(NpcBags::OnCritterIdle);
+    todd.IsNoHome = true;
+    todd.IsNoEnemyStack = true;
+    todd.ReplicationTime = -1;
+    todd.StopMoving();
+    NpcPlanes::DropPlanes(todd);
+    EnemyStack::ClearEnemyStack(todd);
+    todd.StopTimeEvent(Idle);
+    todd.StartTimeEvent(Time::Milliseconds(250), Time::Milliseconds(250), Idle);
+}
+
+void Setup(Map map)
+{
+    Critter? todd = null;
+    Critter[] inhabitants = map.GetCritters(CritterFindType::Npc);
+    for (int i = 0; i < inhabitants.length(); i++) {
+        Critter cr = inhabitants[i];
+        if (cr.DialogId == "den_defense_todd".hstr() || (cr.DialogId == Content::Dialog::all_alco && cr.Hex == mpos(289, 147))) {
+            verify(todd == null, "More than one Todd on Den map");
+            todd = cr;
+        }
+    }
+    verify(todd != null, "Authored Den cleaner is missing");
+    Init(todd, false);
+    ReleaseTarget(todd);
+    StoreGroundSupplies(map);
+}
+
+void ReleaseTarget(Critter todd)
+{
+    MercLoot::RemoveWalk(todd, "DenCleanup".hstr());
+    if (todd.DenCleanupTargetId != ZERO_IDENT) {
+        todd.StopMoving();
+    }
+    todd.DenCleanupTargetId = ZERO_IDENT;
+    todd.DenCleanupReadyAt = ZERO_NANOTIME;
+}
+
+bool CanClean(Critter todd, Critter corpse, Map map)
+{
+    return corpse.MapId == map.Id && MercLoot::IsWaveCorpse(corpse) && !MercLoot::IsReserved(todd, map, corpse.Id);
+}
+
+bool SelectTarget(Critter todd, Map map)
+{
+    int bestDistance = 2147483647;
+    Critter? best = null;
+    Critter[] corpses = map.GetCritters(CritterFindType::DeadNpc);
+    for (int i = 0; i < corpses.length(); i++) {
+        Critter corpse = corpses[i];
+        if (!CanClean(todd, corpse, map) || todd.DenCleanupSkippedIds.exists(corpse.Id)) {
+            continue;
+        }
+        int distance = Game.GetDistance(todd.Hex, corpse.Hex);
+        int cut = 1 + todd.Multihex + corpse.Multihex;
+        if (distance < bestDistance && (distance <= cut || map.GetPathLength(todd, corpse.Hex, cut, MainPlanes::CanOpenDoor) > 0)) {
+            best = corpse;
+            bestDistance = distance;
+        }
+    }
+    if (best == null) {
+        return false;
+    }
+    todd.DenCleanupTargetId = best.Id;
+    todd.DenCleanupTargetUntil = Game.FrameTime + Time::Seconds(30);
+    return true;
+}
+
+[[TimeEvent]]
+void Idle(Critter todd)
+{
+    Map? map = todd.GetMap();
+    bool finished = Game.DenDefenseStage == DenDefense::STAGE_WAITING || Game.DenDefenseStage == DenDefense::STAGE_VICTORY;
+    if (!todd.IsAlive() || map == null || map.Id != Game.DenDefenseMapId || !finished || Game.DenDefenseWave == 0 ||
+        Game.DenDefenseSpawned != Game.DenDefenseSpawnTotal || !Game.DenDefenseEnemyIds.isEmpty()) {
+        ReleaseTarget(todd);
+        return;
+    }
+    if (todd.DenCleanupGeneration != Game.DenDefenseGeneration || todd.DenCleanupWave != Game.DenDefenseWave) {
+        ReleaseTarget(todd);
+        todd.DenCleanupGeneration = Game.DenDefenseGeneration;
+        todd.DenCleanupWave = Game.DenDefenseWave;
+        todd.DenCleanupSkippedIds = {};
+    }
+    if (todd.DenCleanupTargetId != ZERO_IDENT && Game.FrameTime >= todd.DenCleanupTargetUntil) {
+        auto skipped = todd.DenCleanupSkippedIds.clone();
+        skipped.insertLast(todd.DenCleanupTargetId);
+        todd.DenCleanupSkippedIds = skipped;
+        ReleaseTarget(todd);
+    }
+    if (CritterState::IsBusy(todd) || Dialogs::IsTalking(todd)) {
+        return;
+    }
+    if (todd.DenCleanupTargetId == ZERO_IDENT && !SelectTarget(todd, map)) {
+        return;
+    }
+    Critter? corpse = Game.GetCritter(todd.DenCleanupTargetId);
+    if (corpse == null || !CanClean(todd, corpse, map)) {
+        ReleaseTarget(todd);
+        return;
+    }
+    int cut = 1 + todd.Multihex + corpse.Multihex;
+    if (Game.GetDistance(todd.Hex, corpse.Hex) > cut) {
+        todd.DenCleanupReadyAt = ZERO_NANOTIME;
+        if (NpcPlanes::GetPlanes(todd, "DenCleanup".hstr()) == null) {
+            NpcPlanes::AddWalkPlane(todd,
+                                    NpcPlanes::AI_PLANE_PICK_PRIORITY,
+                                    "DenCleanup".hstr(),
+                                    0,
+                                    corpse.Hex,
+                                    Game.GetDirection(todd.Hex, corpse.Hex),
+                                    false,
+                                    cut);
+        }
+        return;
+    }
+    if (todd.DenCleanupReadyAt == ZERO_NANOTIME) {
+        MercLoot::RemoveWalk(todd, "DenCleanup".hstr());
+        todd.StopMoving();
+        todd.SetDir(Game.GetDirection(todd.Hex, corpse.Hex));
+        todd.Action(CritterAction::OperateContainer, CritterActions::EncodeContainerActionExt(TransferTypes::CritLoot, true, true), null);
+        todd.DenCleanupReadyAt = Game.FrameTime + Time::Seconds(1);
+        if (Game.Random(1, 100) <= 20) {
+            Messaging::Say(todd, MsgStr::DialogTextKey(todd.DialogId, Game.Random(100, 109)));
+        }
+        return;
+    }
+    if (Game.FrameTime >= todd.DenCleanupReadyAt) {
+        StoreItems(corpse.GetItems(), map);
+        Game.DestroyCritter(corpse);
+        ReleaseTarget(todd);
+    }
+}
+
+#endif
+
+}

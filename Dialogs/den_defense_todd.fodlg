@@ -1,0 +1,36 @@
+[Comment]
+Todd, the authored drunkard outside Smitty's fence. Cleanup barks have a 20% chance per corpse.
+
+[Dialog]
+Speech 1
+  Answer Exit
+
+[Text russ]
+{Name}{}{Тодд}
+{Speech 1}{}{Потом поговорим, браток... Работа сама себя не сделает.}
+{Speech 1 Answer Exit}{}{Ладно, не мешаю.}
+{100}{}{Тяжёлый, сука... Опять нажрался брамина перед смертью...}
+{101}{}{За ноги... и в канаву. Ничего сложного, браток...}
+{102}{}{Кровь на ботинках... Опять стирать... хотя похрен...}
+{103}{}{Меньше народа в Дене — больше воздуха... и Винта...}
+{104}{}{Раньше ты был крутым... А теперь ты просто работа на полчаса...}
+{105}{}{Фрэнки сказал всё прибрать... Фрэнки не любит, когда пахнет... не Винтом...}
+{106}{}{Голова гудит... Зачем вы вообще сюда лезете умирать?!}
+{107}{}{Глаза застилает... Этот жмурик только что моргнул или мне кажется?}
+{108}{}{Винта в карманах нет? Жаль... очень жаль...}
+{109}{}{Опять пустые карманы... Ну хоть сапоги ещё ничего...}
+
+[Text engl]
+{Name}{}{Todd}
+{Speech 1}{}{Talk later, pal... This work won't do itself.}
+{Speech 1 Answer Exit}{}{All right, I'll leave you to it.}
+{100}{}{Heavy bastard... Stuffed yourself with brahmin before dying again...}
+{101}{}{Grab the legs... into the ditch. Nothing to it, pal...}
+{102}{}{Blood on my boots... Gotta wash them again... ah, fuck it...}
+{103}{}{Fewer people in the Den means more air... and more Jet...}
+{104}{}{Used to be a tough guy... Now you're just half an hour's work...}
+{105}{}{Frankie said to clean it all up... Frankie doesn't like smells... unless it's Jet...}
+{106}{}{My head's pounding... Why the hell do you all come here to die?!}
+{107}{}{Everything's blurry... Did this stiff just blink, or am I seeing things?}
+{108}{}{No Jet in your pockets? Shame... a damn shame...}
+{109}{}{Empty pockets again... At least the boots look decent...}

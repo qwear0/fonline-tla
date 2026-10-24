@@ -1,12 +1,12 @@
 [Comment]
-Bobby Dunton: randomized shot-only threats, in addition to ordinary combat barks.
+Chuck Dunton from Klamath: randomized shot-only threats, in addition to ordinary combat barks.
 
 [Dialog]
 Speech 1
   Answer Exit
 
 [Text russ]
-{Name}{}{Бобби Дантон}
+{Name}{}{Чак Дантон}
 {Speech 1}{}{Убирайся с дороги!}
 {Speech 1 Answer Exit}{}{Нет.}
 {100}{}{Смитти, вылезай! Прятаться за хламом бесполезно!}
@@ -15,7 +15,7 @@ Speech 1
 {103}{}{Смитти, на этот раз братцы Дантон пришли за тобой!}
 
 [Text engl]
-{Name}{}{Bobby Dunton}
+{Name}{}{Chuck Dunton}
 {Speech 1}{}{Out of my way!}
 {Speech 1 Answer Exit}{}{No.}
 {100}{}{Come out, Smitty! That scrap will not save you!}

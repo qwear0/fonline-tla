@@ -28,7 +28,7 @@ After an Engine update, rebuild and rebake matching client/server outputs before
 | [Systems.md](Systems.md) | Durable gameplay ownership, sides, entrypoints and authored-content boundaries. Read before opening a `.fos`. |
 | [ScriptStyle.md](ScriptStyle.md) | How a `.fos` module is written: header block, comments, naming, structure. |
 | [Animation.md](Animation.md) | Baked root-motion import, sprite loading and native 2D walk-cycle alignment. |
-| [DenDefense.md](DenDefense.md) | Shared Den introduction: confirmed-login ownership, companions, waves, global rest, ground loot and failure. |
+| [DenDefense.md](DenDefense.md) | Shared Den introduction: confirmed-login ownership, companions, randomized waves, global rest, supplies, Todd's cleanup and failure. |
 | [AiControl.md](AiControl.md) | AI control bridge/MCP adapter, normal actions versus privileged QA, existing live-client diagnostics. |
 | [../Nullability.md](../Nullability.md) | Script `T?`, native `ptr<T>`/`nptr<T>`, generated GUI ownership and existing checks. |
 

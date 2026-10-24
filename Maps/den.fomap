@@ -9,6 +9,11 @@ ScrollAxialArea = -334 137 464 259
 Size = 368 333
 WorkHex = 252 134
 
+[$Name/Item]
+$Id = 1000
+$Proto = DenDefenseSupplies
+Hex = 300 141
+
 [$Name/Critter]
 $Id = 4294957516
 $Proto = BountyHunter_10
@@ -204,10 +209,11 @@ TeamId = 4
 $Id = 4294957494
 $Proto = Loser
 AiId = 14
-BagId = 11
-DialogId = all_alco
+DialogId = den_defense_todd
 Dir = 210
 Hex = 289 147
+InitScript = DenCleanup::Init
+ReplicationTime = -1
 TeamId = 4
 
 [$Name/Critter]

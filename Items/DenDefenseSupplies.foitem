@@ -1,0 +1,10 @@
+[ProtoItem]
+$Name = DenDefenseSupplies
+$Parent = container_wood_crate
+
+Container_Volume = 1000000
+
+$Text russ = "Ящик Смитти"
+$Text russ Desc = "Здесь Смитти хранит припасы, а Тодд складывает вещи убитых налётчиков."
+$Text engl = "Smitty's crate"
+$Text engl Desc = "Smitty keeps supplies here, and Todd stores belongings left by dead attackers."
