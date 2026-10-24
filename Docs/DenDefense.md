@@ -63,7 +63,10 @@ reset does not restore items lost on death.
 `Game` properties persist generation, IDs, stage, wave cursor, outstanding/history IDs and rest target/
 phase. Critter markers persist participation and once-per-generation kit/reward claims. Frame-time
 deadlines and client presentation are transient. Controller/rest/death callbacks validate generation.
-On every start, `ResumeController` cancels the map controller and all rest callbacks, stops scenario
+On every start, `ResumeController` explicitly makes the Den location persistent, including its map,
+inhabitants and items: engine-created locations are transient until opted in. Player critters are
+already explicitly persistent in `PlayerRegistration`. Other transient world locations are not opted
+in by this scenario. It then cancels the map controller and all rest callbacks, stops scenario
 actions, clears wave/spawn/rest progress and marks the attempt Failed. It retains generation and actor
 IDs for `StartAttempt` to clean up old companions/enemies on the next confirmed login; that login
 increments the generation, so prior kit/reward claims do not apply to the new attempt. No account,

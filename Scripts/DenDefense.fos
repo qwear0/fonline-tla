@@ -803,6 +803,8 @@ void ResumeController()
     }
     Map? map = GetBaseMap();
     verify(map != null, "Shared Den map is missing at server start");
+    // Движок создаёт локации временными; сохраняем базу вместе с её картой и содержимым.
+    map.GetLocation().MakePersistent(true);
     map.StopTimeEvent(Controller);
     Game.StopTimeEvent(CloseRestDialogs);
     Game.StopTimeEvent(FinishRest);
