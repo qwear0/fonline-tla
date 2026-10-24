@@ -1,0 +1,301 @@
+// MercLoot — разовый сбор добычи наёмниками в обороне Дэна.
+// SERVER: выбор достижимой цели в радиусе приказа, резерв трупа/предмета, подход и перенос.
+// Состояние задания хранится на криттере; общих изменяемых таблиц резервирования нет.
+// Связи: Merc (хозяин и idle), DenDefense (волны и право приказа), NpcPlanes, ItemMovement.
+namespace MercLoot
+{
+
+#if SERVER
+
+///@ Property Critter Server bool MercLootActive Mutable
+///@ Property Critter Server ident MercLootMapId Mutable
+///@ Property Critter Server mpos MercLootCenter Mutable
+///@ Property Critter Server ident MercLootTargetId Mutable
+///@ Property Critter Server bool MercLootCorpse Mutable
+///@ Property Critter Server nanotime MercLootStartAt Mutable
+///@ Property Critter Server nanotime MercLootTargetUntil Mutable
+///@ Property Critter Server ident[] MercLootSkippedIds Mutable
+
+const int RADIUS = 10;
+const int START_INTERVAL_SECONDS = 2;
+const int TARGET_TIMEOUT_SECONDS = 30;
+
+// Снимаем только собственный план, не отменяя боевые реакции и чужие сценарные планы.
+void RemoveWalk(Critter merc, hstring identifier)
+{
+    NpcPlanes::NpcPlane[]? planes = NpcPlanes::GetPlanes(merc);
+    if (planes != null) {
+        for (int i = planes.length() - 1; i >= 0; i--) {
+            if (planes[i].Identifier == identifier) {
+                NpcPlanes::ErasePlane(merc, i);
+            }
+        }
+    }
+}
+
+void ReleaseTarget(Critter merc)
+{
+    RemoveWalk(merc, "MercLoot".hstr());
+    if (!NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK)) {
+        merc.StopMoving();
+    }
+    merc.MercLootTargetId = ZERO_IDENT;
+    merc.MercLootCorpse = false;
+}
+
+void Cancel(Critter merc)
+{
+    if (!merc.MercLootActive) {
+        return;
+    }
+    ReleaseTarget(merc);
+    merc.MercLootActive = false;
+    merc.MercLootMapId = ZERO_IDENT;
+    merc.MercLootSkippedIds = {};
+}
+
+void Skip(Critter merc, ident id)
+{
+    auto skipped = merc.MercLootSkippedIds.clone();
+    if (skipped.find(id) < 0) {
+        skipped.insertLast(id);
+        merc.MercLootSkippedIds = skipped;
+    }
+}
+
+bool IsSkipped(Critter merc, ident id)
+{
+    return merc.MercLootSkippedIds.find(id) >= 0;
+}
+
+int TakeCount(Critter merc, Item item)
+{
+    if (item.Hidden || item.IsGag || item.IsNoLoot || IsSkipped(merc, item.Id)) {
+        return 0;
+    }
+    int64 free = int64(merc.CarryWeight) - Parameters::CritterGetItemsWeightLimited(merc, int64(merc.CarryWeight));
+    if (free < 0) {
+        return 0;
+    }
+    if (item.Weight == 0) {
+        return item.Count;
+    }
+    return int(Math::Min(int64(item.Count), free / item.Weight));
+}
+
+Item? FindCorpseItem(Critter merc, Critter corpse)
+{
+    Item[] items = corpse.GetItems();
+    for (int i = 0; i < items.length(); i++) {
+        if (TakeCount(merc, items[i]) > 0) {
+            return items[i];
+        }
+    }
+    return null;
+}
+
+bool IsWaveCorpse(Critter corpse)
+{
+    return corpse.IsDead() && !corpse.IsNoLoot && DenDefense::IsActor(corpse) && corpse.DenDefenseRole == DenDefense::ROLE_ENEMY;
+}
+
+bool IsGroundItem(Item item, ident mapId)
+{
+    return item.Ownership == ItemOwnership::MapHex && item.MapId == mapId && item.IsCanPickUp && !item.Hidden && !item.IsGag && !item.IsNoLoot;
+}
+
+bool IsReserved(Critter merc, Map map, ident targetId)
+{
+    Critter[] collectors = map.GetCritters(CritterFindType::NonDeadNpc);
+    for (int i = 0; i < collectors.length(); i++) {
+        Critter other = collectors[i];
+        if (other.Id != merc.Id && other.MercLootActive && other.MercLootTargetId == targetId && other.MercLootMapId == map.Id &&
+            other.MercMasterId != ZERO_IDENT && other.IsAlive() && DenDefense::CanAct(other)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool CanReach(Critter merc, Map map, mpos hex)
+{
+    int cut = 1 + merc.Multihex;
+    return Game.GetDistance(merc.Hex, hex) <= cut || (!merc.IsNoMove && map.GetPathLength(merc, hex, cut, MainPlanes::CanOpenDoor) > 0);
+}
+
+// Резервируем цель до выхода из серверного обработчика: второй мерк уже увидит её занятой.
+// Если осталось только зарезервированное, ждём: другой сборщик может освободить неполный труп.
+bool SelectTarget(Critter merc, Map map, bool& pending)
+{
+    ident best = ZERO_IDENT;
+    bool corpseTarget = false;
+    int distance = 2147483647;
+    pending = false;
+    Critter[] corpses = map.GetCrittersInRadius(merc.MercLootCenter, RADIUS, CritterFindType::DeadNpc);
+    for (int i = 0; i < corpses.length(); i++) {
+        Critter corpse = corpses[i];
+        if (!IsWaveCorpse(corpse) || IsSkipped(merc, corpse.Id) || FindCorpseItem(merc, corpse) == null || !CanReach(merc, map, corpse.Hex)) {
+            continue;
+        }
+        if (IsReserved(merc, map, corpse.Id)) {
+            pending = true;
+            continue;
+        }
+        int current = Game.GetDistance(merc.Hex, corpse.Hex);
+        if (current < distance) {
+            best = corpse.Id;
+            corpseTarget = true;
+            distance = current;
+        }
+    }
+    Item[] items = map.GetItemsInRadius(merc.MercLootCenter, RADIUS);
+    for (int i = 0; i < items.length(); i++) {
+        Item item = items[i];
+        if (!IsGroundItem(item, map.Id) || TakeCount(merc, item) == 0 || !CanReach(merc, map, item.Hex)) {
+            continue;
+        }
+        if (IsReserved(merc, map, item.Id)) {
+            pending = true;
+            continue;
+        }
+        int current = Game.GetDistance(merc.Hex, item.Hex);
+        if (current < distance) {
+            best = item.Id;
+            corpseTarget = false;
+            distance = current;
+        }
+    }
+    if (best == ZERO_IDENT) {
+        return false;
+    }
+    merc.MercLootTargetId = best;
+    merc.MercLootCorpse = corpseTarget;
+    merc.MercLootTargetUntil = Game.FrameTime + Time::Seconds(TARGET_TIMEOUT_SECONDS);
+    return true;
+}
+
+void Start(Critter player, Critter merc, mpos center, int delaySeconds)
+{
+    if (merc.MercMasterId != player.Id || !merc.IsAlive() || !DenDefense::CanAct(merc) || merc.MapId != player.MapId || merc.MapId != Game.DenDefenseMapId) {
+        return;
+    }
+    Cancel(merc);
+    RemoveWalk(merc, "MercFollow".hstr());
+    if (!NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK)) {
+        merc.StopMoving();
+    }
+    merc.MercLootMapId = merc.MapId;
+    merc.MercLootCenter = center;
+    merc.MercLootStartAt = Game.FrameTime + Time::Seconds(delaySeconds);
+    merc.MercLootActive = true;
+}
+
+// true временно подавляет обычное следование хозяину; прежний приказ follow/wait не меняем.
+bool Process(Critter merc)
+{
+    if (!merc.MercLootActive) {
+        return false;
+    }
+    Map? map = merc.GetMap();
+    Critter? master = Game.GetCritter(merc.MercMasterId);
+    if (!merc.IsAlive() || !DenDefense::CanAct(merc) || map == null || master == null || master.MapId != merc.MapId || merc.MapId != merc.MercLootMapId ||
+        merc.MapId != Game.DenDefenseMapId) {
+        Cancel(merc);
+        return false;
+    }
+    if (Time::IsTimeoutActive(merc.TimeoutBattle) || NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK)) {
+        ReleaseTarget(merc);
+        return true;
+    }
+    if (merc.MercLootTargetId != ZERO_IDENT && Game.FrameTime >= merc.MercLootTargetUntil) {
+        Skip(merc, merc.MercLootTargetId);
+        ReleaseTarget(merc);
+    }
+    if (Game.FrameTime < merc.MercLootStartAt || CritterState::IsBusy(merc) || Dialogs::IsTalking(merc)) {
+        return true;
+    }
+    if (merc.MercLootTargetId == ZERO_IDENT) {
+        bool pending = false;
+        if (!SelectTarget(merc, map, pending)) {
+            if (!pending) {
+                Cancel(merc);
+                return false;
+            }
+            return true;
+        }
+    }
+
+    Critter? corpse = merc.MercLootCorpse ? Game.GetCritter(merc.MercLootTargetId) : null;
+    Item? item = null;
+    mpos hex;
+    if (merc.MercLootCorpse) {
+        if (corpse != null && corpse.MapId == map.Id && IsWaveCorpse(corpse)) {
+            item = FindCorpseItem(merc, corpse);
+            hex = corpse.Hex;
+        }
+    }
+    else {
+        item = Game.GetItem(merc.MercLootTargetId);
+        if (item != null && IsGroundItem(item, map.Id)) {
+            hex = item.Hex;
+        }
+        else {
+            item = null;
+        }
+    }
+    if (item == null || Game.GetDistance(merc.MercLootCenter, hex) > RADIUS || TakeCount(merc, item) == 0) {
+        ReleaseTarget(merc);
+        return true;
+    }
+    int cut = 1 + merc.Multihex;
+    if (Game.GetDistance(merc.Hex, hex) > cut) {
+        NpcPlanes::NpcPlane[]? walks = NpcPlanes::GetPlanes(merc, "MercLoot".hstr());
+        if (walks == null) {
+            if (!NpcPlanes::AddWalkPlane(merc, NpcPlanes::AI_PLANE_PICK_PRIORITY, "MercLoot".hstr(), 0, hex, Game.GetDirection(merc.Hex, hex), false, cut)) {
+                Skip(merc, merc.MercLootTargetId);
+                ReleaseTarget(merc);
+            }
+        }
+        return true;
+    }
+    RemoveWalk(merc, "MercLoot".hstr());
+    merc.StopMoving();
+    bool ground = !merc.MercLootCorpse;
+    int ap = ground ? Settings.Movement.RtApCostPickItem : Settings.Movement.RtApCostMoveItemContainer;
+    if (!CritterActions::ProcessAp(merc, ap)) {
+        return true;
+    }
+
+    ident itemId = item.Id;
+    int before = item.Count;
+    if (ground) {
+        // Точный экземпляр, не первый предмет того же прототипа на гексе. Обычные обработчики
+        // подбора сохраняются, включая особые предметы, запреты и проверку переносимого веса.
+        merc.Action(CritterAction::PickItem, 0, item);
+        Game.OnCritterUseSkill.Fire(merc, CritterProperty::SpecialSkillPickOnGround, null, item, null);
+    }
+    else {
+        merc.Action(CritterAction::PickCritter, 0, null);
+        ItemMovement::MoveItem(item, TakeCount(merc, item), merc);
+    }
+    if (merc.IsDestroyed || !merc.MercLootActive) {
+        return true;
+    }
+    Item? remaining = Game.GetItem(itemId);
+    bool moved = remaining == null || remaining.Ownership != (ground ? ItemOwnership::MapHex : ItemOwnership::CritterInventory) ||
+                 (ground ? remaining.MapId != map.Id : corpse == null || remaining.CritterId != corpse.Id) || remaining.Count < before;
+    if (!moved) {
+        Skip(merc, itemId);
+    }
+    else {
+        merc.MercLootTargetUntil = Game.FrameTime + Time::Seconds(TARGET_TIMEOUT_SECONDS);
+    }
+    if (ground) {
+        ReleaseTarget(merc);
+    }
+    return true;
+}
+
+#endif
+
+}

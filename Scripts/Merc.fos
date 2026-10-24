@@ -8,6 +8,7 @@
 // Параметры мерков хранятся в Property-декларациях группы Mercs на криттере.
 // Главный мерк (NpcRole = ROLE_LEADER) передаёт диалоговые настройки всем меркам хозяина.
 // FavoriteItem вызывает поддержание выбранной готовности оружия вне боя.
+// MercLoot временно ведёт перемещение по разовому приказу собрать добычу.
 // Связи: NpcPlanes (боевые/ходовые планы), GlobalmapGroupExtended (группы на
 // глобале), Entrance/Teams/CritterState/PlayerRegistration, Tla (общие enum'ы).
 namespace Merc
@@ -201,6 +202,7 @@ void MercSmthAttacked(Critter merc, Critter fromCr, Critter attacker)
 
 void MercDeadImpl(Critter merc, Critter killer)
 {
+    MercLoot::Cancel(merc);
     if (DenDefense::IsCompanion(merc)) {
         NpcPlanes::DropPlanes(merc);
         return;
@@ -229,6 +231,7 @@ EventResult MercAttacked(Critter merc, Critter attacker)
 void MercSmthDeadImpl(Critter merc, Critter fromCr, Critter killer)
 {
     if (fromCr.Id == merc.MercMasterId) {
+        MercLoot::Cancel(merc);
         if (DenDefense::IsCompanion(merc)) {
             NpcPlanes::DropPlanes(merc);
             return;
@@ -253,6 +256,7 @@ void MercIdleImpl(Critter merc)
     }
 
     if (DenDefense::IsCompanion(merc) && (merc.IsDead() || Game.DenDefenseStage == DenDefense::STAGE_FAILED)) {
+        MercLoot::Cancel(merc);
         return;
     }
 
@@ -263,6 +267,7 @@ void MercIdleImpl(Critter merc)
 
     Critter? master = Game.GetCritter(masterId);
     if (master == null) {
+        MercLoot::Cancel(merc);
         return;
     }
 
@@ -273,6 +278,10 @@ void MercIdleImpl(Critter merc)
     if (master.IsDead()) {
         MercSmthDeadImpl(merc, master, null);
         return; // погиб хозяин
+    }
+
+    if (MercLoot::Process(merc)) {
+        return;
     }
 
     Map? masterMap = master.GetMap();
@@ -473,6 +482,7 @@ void CancelMerc(Critter merc)
         return;
     }
 
+    MercLoot::Cancel(merc);
     for (int i = 0; i < CritterPropertyGroup::Mercs.length(); i++) {
         merc.SetAsInt(CritterPropertyGroup::Mercs[i], 0);
     }
@@ -900,8 +910,11 @@ bool IsBehaviorParameter(CritterProperty param)
 void ApplyBehaviorParameter(Critter merc, CritterProperty param, int value)
 {
     merc.SetAsInt(param, value);
-    if (param == CritterProperty::MercWaitForMaster && merc.MercWaitForMaster) {
-        NpcPlanes::DropPlanes(merc);
+    if (param == CritterProperty::MercWaitForMaster) {
+        MercLoot::Cancel(merc);
+        if (merc.MercWaitForMaster) {
+            NpcPlanes::DropPlanes(merc);
+        }
     }
     if (param == CritterProperty::MercWeaponReady) {
         UpdateWeaponReady(merc);

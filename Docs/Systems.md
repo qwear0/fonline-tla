@@ -63,7 +63,7 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | `DenAutoAttack` / `InputHandler` / `ChosenTabs` | S/C | Ctrl+A selects usable Den enemies with positive HP first, then distance; Ctrl+Shift+A repeats when AP allows, with a HUD status tab; melee-only approach, no aiming; [DenDefense.md](DenDefense.md#player-autoattack) |
 | `PlayerRegistration` | S/C | Login and registration; confirmed returned Player commits Den defense entry |
 | `DenDefense` | S/C | Shared Den generation/primary, companions, rest/waves, ground loot and failure; `OnSuccessfulLogin`, `ResumeController`; [DenDefense.md](DenDefense.md) |
-| `Merc` / `FavoriteItem` / `CritterAnims` | S / shared helpers | Companion ownership, leader-to-squad dialog behavior propagation (`SetBehaviorParameter`, `ROLE_LEADER`), persistent weapon readiness maintained outside combat, and weapon-animation admission; narrow Den exceptions, normal recruitment/animation policy otherwise |
+| `Merc` / `MercLoot` / `FavoriteItem` / `CritterAnims` | S / shared helpers | Companion ownership, leader-to-squad dialog behavior propagation (`SetBehaviorParameter`, `ROLE_LEADER`), transient reserved-target Den loot jobs, persistent weapon readiness maintained outside combat, and weapon-animation admission; narrow Den exceptions, normal recruitment/animation policy otherwise |
 | `Replication` | S | Ordinary death/respawn/permanent-death flow; Den participants use their scenario's base resurrection instead |
 | `TownSupply` | S | Disabled city bounty-hunter retaliation; `CallTownSupply`, pending callbacks and direct spawns are inert; legacy guards are removed |
 
@@ -93,6 +93,8 @@ authoritative slot moves; the engine must apply slots before raising that event.
 Merc following keeps one `MercFollow` walk plan and retargets it to the master's latest
 hex with `MercMasterDist` as the stop radius. It does not queue historical player positions.
 Unchanged active walk routes are not restarted every AI tick; attack plans retain priority.
+`MercLoot` temporarily replaces following with reserved-target collection walks; completion or explicit
+follow/wait releases the job. See [DenDefense.md](DenDefense.md#supplies-companions-and-ground-loot).
 
 The engine handles individual item instances and never merges stacks. Use `ItemStacks::` for quantity
 operations rather than raw engine add/move/destroy/clone calls. `Gui/Cursor.fogui` refreshes weapon

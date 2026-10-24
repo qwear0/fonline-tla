@@ -114,6 +114,24 @@ no existing serialized identifier is removed/renamed and no migration rule/engin
   the battle timeout defer either order to the end of combat, leaving normal AI weapon selection intact.
   The existing second-based equipment timer reapplies the choice after combat; the command also
   attempts an immediate update. Old entities without the new property default to holstering.
+- Every companion also offers a one-shot **collect loot** order through `DenDefense::CollectLoot`.
+  [`MercLoot.fos`](../Scripts/MercLoot.fos) owns target selection, reservations and collection.
+  The ordinary dialog orders only that NPC; the leader starts himself immediately and the other
+  living owned mercenaries on this map at two-second intervals. The ten-hex search radius is fixed
+  around the speaker's position at command time (shared by the leader's batch, not a drifting radius).
+  Eligible targets are current-generation wave corpses and loose pickable map items; no living NPC,
+  player/companion corpse, hidden/gag or no-loot item is harvested. Containers are carried intact.
+  No value/category filter discards ordinary loot. Collected items stay in the collecting mercenary's
+  inventory, using ordinary carry weight and stack splitting/merging; nothing is cloned or teleported.
+  Exact target IDs are claimed in each collector's transient `MercLoot*` properties. Other collectors
+  on the map skip a reserved corpse/item; a corpse stays reserved across its item transfers. Workers
+  wait for claimed targets to be released rather than racing for the same loot. Thirty seconds without
+  a successful transfer releases/skips a stalled target for that order. Real NPC walk plans handle
+  routes/doors; adjacent pickups spend ordinary AP and use normal item-movement checks/events.
+  Combat pauses collection and releases its claim. Follow/wait cancels collection; death, rest/failure,
+  map departure, master departure or dismissal also release it. Completion resumes the previous
+  follow/wait behavior. These jobs/reservations do not survive server restart; no new RemoteCall or
+  serialized-property removal/rename migration is needed. Client gameplay acceptance remains manual.
 - Both `hmlthr` and `hmlmax` support Knife, Club and Hammer frames for the starting weapons.
   The narrow companion-only Club-to-Knife fallback in [`CritterAnims.fos`](../Scripts/CritterAnims.fos)
   remains for older tribal companions; it does not admit unsupported weapons for unrelated NPCs.

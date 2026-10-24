@@ -21,6 +21,8 @@ Speech 2
     Result Script DenDefense::HolsterWeapons
   Answer Exit******
     Result Script DenDefense::ReadyWeapons
+  Answer Exit*******
+    Result Script DenDefense::CollectLoot
 
 [Text russ]
 {Name}{}{Соплеменник}
@@ -35,6 +37,7 @@ Speech 2
 {Speech 2 Answer Exit****}{}{Пока без изменений.}
 {Speech 2 Answer Exit*****}{}{Убери оружие, хва играться}
 {Speech 2 Answer Exit******}{}{Ну ка не прохлаждаемся, оружие на готове!}
+{Speech 2 Answer Exit*******}{}{Кости уже остыли, а вот карманы наверняка ещё полны. Собери всё, что представляет хоть какую-то ценность, и пошли отсюда}
 
 [Text engl]
 {Name}{}{Tribesperson}
@@ -49,3 +52,4 @@ Speech 2
 {Speech 2 Answer Exit****}{}{No changes for now.}
 {Speech 2 Answer Exit*****}{}{Put that weapon away. Stop playing around.}
 {Speech 2 Answer Exit******}{}{No slacking off! Keep your weapon ready!}
+{Speech 2 Answer Exit*******}{}{The bones are cold, but the pockets must still be full. Collect anything worth taking, then let us get out of here.}

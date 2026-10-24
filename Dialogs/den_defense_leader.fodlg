@@ -21,6 +21,8 @@ Speech 2
     Result Script DenDefense::HolsterWeapons
   Answer Exit******
     Result Script DenDefense::ReadyWeapons
+  Answer Exit*******
+    Result Script DenDefense::CollectLoot
 
 [Text russ]
 {Name}{}{Главный наёмник}
@@ -35,6 +37,7 @@ Speech 2
 {Speech 2 Answer Exit****}{}{Пока без изменений.}
 {Speech 2 Answer Exit*****}{}{Не светите пушками, нарваться хотите?}
 {Speech 2 Answer Exit******}{}{Так, че расслабились - кулаки размяли, оружие к бою}
+{Speech 2 Answer Exit*******}{}{Соберите всё полезное с этих жмуриков. Патроны, медикаменты, крышки — нам пригодится абсолютно всё}
 
 [Text engl]
 {Name}{}{Mercenary leader}
@@ -49,3 +52,4 @@ Speech 2
 {Speech 2 Answer Exit****}{}{No changes for now.}
 {Speech 2 Answer Exit*****}{}{Stop flashing your guns. Looking for trouble?}
 {Speech 2 Answer Exit******}{}{Getting soft, are we? Flex those fists, weapons ready!}
+{Speech 2 Answer Exit*******}{}{Collect everything useful from those stiffs. Ammo, medicine, caps — we will need absolutely everything.}
