@@ -72,13 +72,17 @@ void InitParameters()
 [[ServerRemoteCall]]
 void ProcessSkillsUp(Player player, any[] params)
 {
+    Critter? cr = player.GetControlledCritter();
+    if (cr != null) {
+        SpendSkills(cr, params);
+    }
+}
+
+// Общая серверная проверка пакета ручной прокачки игрока или его наёмника.
+void SpendSkills(Critter cr, any[] params)
+{
     if (params.length() % 2 > 0 || params.length() / 2 > CritterPropertyGroup::Skills.length()) {
         Game.Log("Wrong ProcessSkillsUp params length: " + params.length());
-        return;
-    }
-
-    Critter? cr = player.GetControlledCritter();
-    if (cr == null) {
         return;
     }
 
@@ -152,8 +156,13 @@ void ProcessPerkUp(Player player, int perkIndex)
         return;
     }
 
-    if (cr.UnspentPerks > 0) {
-        CritterProperty perk = CritterProperty(perkIndex);
+    TakePerk(cr, CritterProperty(perkIndex));
+}
+
+// Окончательные требования и наличие очка всегда проверяет сервер.
+void TakePerk(Critter cr, CritterProperty perk)
+{
+    if (cr.UnspentPerks > 0 && CritterPropertyGroup::Perks.find(perk) != -1) {
         if (Perks::PerkCheck(cr, perk)) {
             cr.UnspentPerks = cr.UnspentPerks - 1;
             cr.SetAsInt(perk, cr.GetAsInt(perk) + 1);

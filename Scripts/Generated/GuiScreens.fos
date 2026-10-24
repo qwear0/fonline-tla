@@ -7363,7 +7363,7 @@ namespace Character
 
     int GetPropValue(CritterProperty prop)
     {
-        return Chosen.GetAsInt(prop);
+        return ::MercProgression::GetPropValue(prop);
     }
 
     bool IsTagSkill(CritterProperty prop)
@@ -7395,6 +7395,12 @@ namespace Character
             if (GetPropValue(CritterProperty::UnspentPerks) > 0) {
                 Gui::ShowScreen(GuiScreen::Perk);
             }
+        }
+
+        void OnHide() override
+        {
+            Gui::HideScreen(GuiScreen::Perk);
+            ::MercProgression::Clear();
         }
     };
 
@@ -8029,7 +8035,7 @@ namespace Character
                     }
                 }
                 if (args.length() > 1) {
-                    CurPlayer.ServerCall.ProcessSkillsUp(args);
+                    ::MercProgression::SubmitSkills(args);
                 }
             }
             Gui::HideScreen();
@@ -8112,7 +8118,7 @@ namespace Character
 
         string get_Text() override
         {
-            return Chosen.Name;
+            return Game.MercSheetId != ZERO_IDENT ? Game.MercSheetName : Chosen.Name;
         }
     };
 
@@ -8452,7 +8458,7 @@ namespace Character
             if (!HasChosen) {
                 return;
             }
-            int[] kills = array<int>(Chosen.Kills);
+            int[] kills = Game.MercSheetId != ZERO_IDENT ? Game.MercSheetKills : array<int>(Chosen.Kills);
             bool killsTitleAdded = false;
             for (int i = 0; i < kills.length(); i++) {
                 if (kills[i] != 0) {
@@ -8581,7 +8587,7 @@ namespace Character
 
             // Addiction
             bool addictionTitleAdded = false;
-            bool[] addictions = array<bool>(Chosen.Addictions);
+            bool[] addictions = Game.MercSheetId != ZERO_IDENT ? Game.MercSheetAddictions : array<bool>(Chosen.Addictions);
             for (int i = 0; i < addictions.length(); i++) {
                 if (addictions[i]) {
                     if (!addictionTitleAdded) {
@@ -15493,8 +15499,6 @@ namespace Use
 
 namespace Perk
 {
-    ////import bool PerkCheck0( Critter& cr, CritterProperty perk ) from "Perks";
-
     CritterProperty[] AccessPerks = {};
     CritterProperty TargetPerk;
     int Scroll;
@@ -15502,10 +15506,16 @@ namespace Perk
 
     void GetAccessPerks()
     {
+        AccessPerks.clear();
+        TargetPerk = CritterProperty::None;
+        Scroll = 0;
         if (!HasChosen) {
             return;
         }
-        AccessPerks.clear();
+        if (Game.MercSheetId != ZERO_IDENT) {
+            AccessPerks = Game.MercSheetPerks;
+            return;
+        }
 
         for (int i = 0, j = CritterPropertyGroup::Perks.length(); i < j; i++) {
             if (::Perks::PerkCheck(Chosen, CritterPropertyGroup::Perks[i])) {
@@ -15654,8 +15664,7 @@ namespace Perk
         void OnLMouseClick() override
         {
             if (TargetPerk != CritterProperty::None) {
-                CurPlayer.ServerCall.ProcessPerkUp(TargetPerk);
-                //Game.CustomCall( "AssignPerk " + TargetPerk );
+                ::MercProgression::SubmitPerk(TargetPerk);
                 Gui::HideScreen();
             }
         }

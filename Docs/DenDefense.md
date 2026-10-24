@@ -91,10 +91,20 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   The other three use [`Critters/DenDefenseCompanion.focr`](../Critters/DenDefenseCompanion.focr):
   the long-haired leather-jacket model `hmlmax`. All start at level 3 / 3,000 XP and SPECIAL `8/4/5/4/5/10/4`
   (40 points, the five remaining stats split as evenly as integers allow). Tagged skills are Melee
-  Weapons, First Aid and Small Guns. All affordable level-up points go through
-  `Parameters::SpendSkillPoints` into Melee Weapons using the same tag bonus and cost bands as players:
-  30 earned points yield 118% melee, with one point left because the next increase costs two;
-  First Aid starts at 38% and Small Guns at 65%.
+  Weapons, First Aid and Small Guns. Their 30 starting skill points and one level-3 perk remain
+  unspent; neither creation nor later level-ups automatically choose skills or perks. The owner uses
+  **“Let's see what you can do”** in each companion's dialog (including the leader) to open the ordinary
+  Character/SPECIAL sheet and manually allocate skills or choose an available perk. SPECIAL values
+  remain read-only, as on the player's sheet. Confirming skills uses the ordinary tag bonus and cost
+  bands; canceling leaves pending skill allocations unspent. A perk is applied only after explicit
+  selection and confirmation, independently of pending skills.
+  [`MercProgression.fos`](../Scripts/MercProgression.fos) sends an owner-only snapshot of NPC stats and
+  available perks; each server request rechecks ownership, life, scenario eligibility, map and talking
+  distance before spending that NPC's points through `Parameters`. Leader progression never propagates
+  to the squad. Existing companions retain previously spent points; no automatic respec is performed.
+  The same sheet entry is available in the ordinary `all_mercenary` dialog. Deploy matching client/server
+  Scripts and Metadata packs for the new RemoteCalls; snapshot state is client-local and requires no
+  saved-property migration.
   Each starts with **five consumable stimpaks** and exactly one equipped weapon, in squad order:
   **sledgehammer, combat knife, crowbar, club**. Smitty does not equip or resupply companions.
   Maximum/starting HP are **103/91/103/91**, another 50% over the previous 69/61/69/61 with integer
@@ -104,10 +114,12 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   vehicle seating or exempt unrelated recruits.
 - **Wave kill XP is shared**, not awarded to the last hitter. `Combat` suppresses its ordinary
   killer-only award for current-generation wave enemies; `ConfirmEnemyDeath` removes a registered
-  enemy and distributes its `KillExperience` once. Every non-dead participant and scenario companion
+  enemy and distributes its `KillExperience` once. `SpawnEnemy` doubles that pool for every siege
+  enemy, including the brothers, without changing shared prototypes or unrelated enemies.
+  Every non-dead participant and scenario companion
   on that map gets an equal base share, including knocked-out defenders, regardless of damage dealt
   or whether a player, companion, Smitty or the environment finished the enemy. Integer remainder
-  points go to randomly rotated recipients; the base pool is not multiplied or discarded. More
+  points go to randomly rotated recipients; sharing does not further multiply or discard the pool. More
   eligible defenders means less XP each. Dead/off-map actors and Smitty do not take a share. Ordinary
   experience setters, level-ups and personal XP perks still apply; unrelated kills are unchanged.
 - The primary can press **Barter** in a living companion's dialog to transfer items freely in either
@@ -141,7 +153,8 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   `Merc::ROLE_LEADER` reserves `NpcRole = 1000001` in the existing persistent role property; ordinary
   `Merc::SetMercParameter` / `WaitMaster` / `FollowMaster` dialogs use the same propagation path.
   Master identity, contract type and expiry are not squad behavior settings. New attempts create the
-  leader prototype. No new RemoteCall or removal/rename migration rule is required.
+  leader prototype. Squad-command propagation itself needs no additional RemoteCall or removal/rename
+  migration rule.
 - Every companion dialog shows only the weapon order that changes its current readiness setting:
   **holster outside combat** when ready, or **keep weapons ready** when holstered. `CanHolsterWeapons`
   and `CanReadyWeapons` gate the answers; their plain `CanChangeWeaponReadiness` helper also guards

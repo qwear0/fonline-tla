@@ -383,9 +383,9 @@ void CreateCompanion(Critter primary, Map map, int index)
     ids.insertLast(companion.Id);
     Game.DenDefenseCompanionIds = ids;
     verify(Merc::Merc2Player(primary, companion, true, false, 0, 3, Merc::MERC_CUSTOM, true, true), "Unable to assign Den companion", companion);
-    // Два повышения уровня по обычной формуле; тратим всё доступное на тегнутое холодное оружие.
+    // Стартовые повышения дают очки и перк для ручного выбора хозяином, без автопрокачки.
     companion.UnspentSkillPoints = (companion.Level - 1) * (5 + companion.IntellectBase * 2);
-    Parameters::SpendSkillPoints(companion, CritterProperty::SkillMeleeWeapons, companion.UnspentSkillPoints);
+    companion.UnspentPerks = companion.Level / 3;
     companion.StopTimeEvent(NpcBags::OnCritterIdle);
     companion.IsNoEnemyStack = true;
     companion.IsNoLoot = false;
@@ -1013,6 +1013,8 @@ void SpawnEnemy(Map map, mpos hex)
                                         {CritterProperty::DenDefenseBrother, brother},
                                         {CritterProperty::TeamId, int(Teams::Mob0)}};
     Critter enemy = map.AddCritter(proto, hex, HDIR_Random, props);
+    // Удвоенный пул опыта только для врагов осады, без изменения общих прототипов.
+    enemy.KillExperience *= 2;
     // Первая волна: ещё вдвое меньше прежних 50%; остальные волны без изменений.
     ScaleSpawnHealth(enemy, Game.DenDefenseWave == 1 ? 25 : 50);
     if (cursor == 0) {

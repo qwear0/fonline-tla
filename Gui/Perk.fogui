@@ -25,8 +25,6 @@
 //   "CheckTransparentOnHit": false,
 //   "GlobalScope":
 {
-    ////import bool PerkCheck0( Critter& cr, CritterProperty perk ) from "Perks";
-
     CritterProperty[] AccessPerks = {};
     CritterProperty TargetPerk;
     int Scroll;
@@ -34,10 +32,16 @@
 
     void GetAccessPerks()
     {
+        AccessPerks.clear();
+        TargetPerk = CritterProperty::None;
+        Scroll = 0;
         if (!HasChosen) {
             return;
         }
-        AccessPerks.clear();
+        if (Game.MercSheetId != ZERO_IDENT) {
+            AccessPerks = Game.MercSheetPerks;
+            return;
+        }
 
         for (int i = 0, j = CritterPropertyGroup::Perks.length(); i < j; i++) {
             if (::Perks::PerkCheck(Chosen, CritterPropertyGroup::Perks[i])) {
@@ -581,8 +585,7 @@
     {
         {
             if (TargetPerk != CritterProperty::None) {
-                CurPlayer.ServerCall.ProcessPerkUp(TargetPerk);
-                //Game.CustomCall( "AssignPerk " + TargetPerk );
+                ::MercProgression::SubmitPerk(TargetPerk);
                 Gui::HideScreen();
             }
         }

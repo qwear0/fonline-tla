@@ -1,0 +1,208 @@
+// MercProgression — ручная прокачка собственного наёмника через окно персонажа.
+// SERVER проверяет хозяина, доступность и очки; CLIENT хранит только снимок для Character/Perk.
+// OwnerSync-параметры NPC передаются только хозяину, без изменения владения или управления криттером.
+namespace MercProgression
+{
+
+///@ RemoteCall Server ProcessMercSkills(ident mercId, any[] params)
+///@ RemoteCall Server ProcessMercPerk(ident mercId, int32 perkIndex)
+///@ RemoteCall Client ReceiveMercSheet(ident mercId, CritterProperty=>int32 props, CritterProperty[] perks, int32[] kills, bool[] addictions, bool open)
+
+///@ Property Game Client ident MercSheetId Mutable
+///@ Property Game Client string MercSheetName Mutable
+///@ Property Game Client CritterProperty=>int32 MercSheetProps Mutable
+///@ Property Game Client CritterProperty[] MercSheetPerks Mutable
+///@ Property Game Client int32[] MercSheetKills Mutable
+///@ Property Game Client bool[] MercSheetAddictions Mutable
+
+#if SERVER
+bool CanManage(Critter player, Critter npc)
+{
+    return player.IsAlive() && npc.IsAlive() && !npc.ControlledByPlayer && npc.MercMasterId == player.Id && player.MapId != ZERO_IDENT &&
+           npc.MapId == player.MapId && DenDefense::CanAct(player) && (!DenDefense::IsCompanion(npc) || DenDefense::CanControlCompanion(player, npc)) &&
+           Game.GetDistance(player, npc) <= (npc.TalkDistance != 0 ? npc.TalkDistance : Settings.Dialog.TalkDistance) + player.Multihex;
+}
+
+[[DialogDemand]]
+bool CanOpen(Critter player, Critter npc)
+{
+    return CanManage(player, npc);
+}
+
+[[DialogResult]]
+void Show(Critter player, Critter npc)
+{
+    if (CanManage(player, npc)) {
+        SendSheet(player, npc, true);
+    }
+}
+
+void SendSheet(Critter player, Critter npc, bool open)
+{
+    CritterProperty[] properties = {CritterProperty::Strength,
+                                    CritterProperty::Perception,
+                                    CritterProperty::Endurance,
+                                    CritterProperty::Charisma,
+                                    CritterProperty::Intellect,
+                                    CritterProperty::Agility,
+                                    CritterProperty::Luck,
+                                    CritterProperty::MaxLife,
+                                    CritterProperty::CurrentHp,
+                                    CritterProperty::IsPoisoned,
+                                    CritterProperty::IsRadiated,
+                                    CritterProperty::IsDamagedEye,
+                                    CritterProperty::IsDamagedRightArm,
+                                    CritterProperty::IsDamagedLeftArm,
+                                    CritterProperty::IsDamagedRightLeg,
+                                    CritterProperty::IsDamagedLeftLeg,
+                                    CritterProperty::PoisoningLevel,
+                                    CritterProperty::RadiationLevel,
+                                    CritterProperty::ArmorClass,
+                                    CritterProperty::ActionPoints,
+                                    CritterProperty::CarryWeight,
+                                    CritterProperty::MeleeDamage,
+                                    CritterProperty::NormalResistance,
+                                    CritterProperty::PoisonResistance,
+                                    CritterProperty::RadiationResistance,
+                                    CritterProperty::Sequence,
+                                    CritterProperty::HealingRate,
+                                    CritterProperty::CriticalChance,
+                                    CritterProperty::Age,
+                                    CritterProperty::Gender,
+                                    CritterProperty::Level,
+                                    CritterProperty::Experience,
+                                    CritterProperty::UnspentSkillPoints,
+                                    CritterProperty::UnspentPerks,
+                                    CritterProperty::TagSkill1,
+                                    CritterProperty::TagSkill2,
+                                    CritterProperty::TagSkill3,
+                                    CritterProperty::Karma};
+    properties.insertLast(CritterPropertyGroup::Skills);
+    properties.insertLast(CritterPropertyGroup::Traits);
+    properties.insertLast(CritterPropertyGroup::Perks);
+    properties.insertLast(CritterPropertyGroup::KarmaPerks);
+    properties.insertLast(CritterPropertyGroup::Reputations);
+    dict<CritterProperty, int> props = {};
+    for (int i = 0; i < properties.length(); i++) {
+        props[properties[i]] = npc.GetAsInt(properties[i]);
+    }
+    CritterProperty[] perks = {};
+    if (npc.UnspentPerks > 0) {
+        for (int i = 0; i < CritterPropertyGroup::Perks.length(); i++) {
+            CritterProperty perk = CritterPropertyGroup::Perks[i];
+            if (Perks::PerkCheck(npc, perk)) {
+                perks.insertLast(perk);
+            }
+        }
+    }
+    player.PlayerClientCall.ReceiveMercSheet(npc.Id, props, perks, npc.Kills, npc.Addictions, open);
+}
+
+[[ServerRemoteCall]]
+void ProcessMercSkills(Player player, ident mercId, any[] params)
+{
+    Critter? master = player.GetControlledCritter();
+    Critter? npc = Game.GetCritter(mercId);
+    if (master != null && npc != null && CanManage(master, npc)) {
+        Parameters::SpendSkills(npc, params);
+    }
+}
+
+[[ServerRemoteCall]]
+void ProcessMercPerk(Player player, ident mercId, int perkIndex)
+{
+    Critter? master = player.GetControlledCritter();
+    Critter? npc = Game.GetCritter(mercId);
+    if (master != null && npc != null && CanManage(master, npc)) {
+        Parameters::TakePerk(npc, CritterProperty(perkIndex));
+        SendSheet(master, npc, false);
+    }
+}
+#endif
+
+#if CLIENT
+[[ModuleInit]]
+void Init()
+{
+    Game.OnDisconnected.Subscribe(Close);
+    Game.OnMapLoaded.Subscribe(Close);
+}
+
+void Clear()
+{
+    Game.MercSheetId = ZERO_IDENT;
+    Game.MercSheetName = "";
+    Game.MercSheetProps = {};
+    Game.MercSheetPerks = {};
+    Game.MercSheetKills = {};
+    Game.MercSheetAddictions = {};
+}
+
+[[Event]]
+void Close()
+{
+    if (Game.MercSheetId != ZERO_IDENT) {
+        Gui::HideScreen(GuiScreen::Perk);
+        Gui::HideScreen(GuiScreen::Character);
+        Clear();
+    }
+}
+
+[[ClientRemoteCall]]
+void ReceiveMercSheet(ident mercId, dict<CritterProperty, int> props, CritterProperty[] perks, int[] kills, bool[] addictions, bool open)
+{
+    if (!HasChosen || (!open && Game.MercSheetId != mercId)) {
+        return;
+    }
+    Critter? npc = Game.GetCritter(mercId);
+    if (npc == null) {
+        return;
+    }
+    if (open) {
+        Gui::HideScreen(GuiScreen::Perk);
+        Gui::HideScreen(GuiScreen::Character);
+        Gui::HideScreen(GuiScreen::Dialog);
+    }
+    Game.MercSheetId = mercId;
+    Game.MercSheetName = npc.Name;
+    Game.MercSheetProps = props;
+    Game.MercSheetPerks = perks;
+    Game.MercSheetKills = kills;
+    Game.MercSheetAddictions = addictions;
+    if (open) {
+        Gui::ShowScreen(GuiScreen::Character);
+    }
+}
+
+int GetPropValue(CritterProperty prop)
+{
+    if (Game.MercSheetId != ZERO_IDENT) {
+        auto props = Game.MercSheetProps;
+        verify(props.exists(prop), "Missing mercenary sheet property", prop);
+        return props[prop];
+    }
+    return Chosen.GetAsInt(prop);
+}
+
+void SubmitSkills(any[] params)
+{
+    if (Game.MercSheetId != ZERO_IDENT) {
+        CurPlayer.ServerCall.ProcessMercSkills(Game.MercSheetId, params);
+    }
+    else {
+        CurPlayer.ServerCall.ProcessSkillsUp(params);
+    }
+}
+
+void SubmitPerk(CritterProperty perk)
+{
+    if (Game.MercSheetId != ZERO_IDENT) {
+        CurPlayer.ServerCall.ProcessMercPerk(Game.MercSheetId, int(perk));
+    }
+    else {
+        CurPlayer.ServerCall.ProcessPerkUp(int(perk));
+    }
+}
+#endif
+
+}

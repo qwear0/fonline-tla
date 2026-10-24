@@ -54,7 +54,7 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | Owner | Side | Responsibility / entry to inspect |
 | --- | --- | --- |
 | `Combat` | S | Hit resolution, damage and effects; `CombatAttack`, `ApplyDamage` |
-| `Parameters` | S/C | Derived property getters/setters and character rules |
+| `Parameters` | S/C | Derived property getters/setters and character rules; shared server-side skill/perk spending |
 | `CritterActions` | S | Authoritative actions and AP processing |
 | `CritterState` | S | Alive, knockout and dead transitions |
 | `NpcPlanes` / `MainPlanes` / `Pattern*` | S | NPC plan processing, weapon selection and behavior patterns; `MainPlanes` reuses a usable cached weapon but retries failed searches against current inventory/ammo/state on the next selection |
@@ -62,6 +62,7 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | `ChosenActions` | S/C | Client action queue and server request handlers; reused for the one-shot autoattack approach/attack |
 | `DenAutoAttack` / `InputHandler` / `ChosenTabs` | S/C | Ctrl+A selects usable Den enemies with positive HP first, then distance; Ctrl+Shift+A repeats when AP allows, with a HUD status tab; melee-only approach, no aiming; [DenDefense.md](DenDefense.md#player-autoattack) |
 | `PlayerRegistration` | S/C | Login and registration; confirmed returned Player commits Den defense entry |
+| `MercProgression` | S/C | Owner-only NPC Character/SPECIAL sheet, manual skills/perks; dialog `Show`, snapshot and server spending; [DenDefense.md](DenDefense.md) |
 | `DenDefense` | S/C | Shared Den generation/primary, companions, rest/randomized waves, loot and failure; restart resets siege, not saved characters; `OnSuccessfulLogin`, `ResumeController`, `SpawnTick`; [DenDefense.md](DenDefense.md) |
 | `DenCleanup` | S | Authored Todd at `289:147`; 7–15 s post-wave delay, corpse walk/one-second removal, leftover loot onto the ground, workshop supplies into Smitty's crate; `Init`, `Setup`, `Idle`; [DenDefense.md](DenDefense.md#todd-and-post-wave-cleanup) |
 | `DenWander` | S | 30% of wave-1 enemies first walk to a reachable yard hex, retaliate only against their own attackers, say an arrival line and resume normal attacks; `TryStart`, `Process`, `OnAttacked`, `WalkEnd`; [DenDefense.md](DenDefense.md#combat-and-completion) |
