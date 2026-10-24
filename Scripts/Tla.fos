@@ -617,7 +617,7 @@ const int ChosenPickCrit = 16;        // id криттера, (лут — 0, т�
 const int ChosenSneak = 17;
 const int ChosenUnloadWeapon = 18;  // id предмета
 const int ChosenDenAutoAttack = 19; // id оружия, pid оружия, тип цели, id цели, неприцельный режим, исходный режим
-const int ChosenDenAutoMove = 20;   // как ChosenMoveToCrit; следом обязательно идёт ChosenDenAutoAttack
+const int ChosenDenAutoMove = 20;   // id цели, резерв, бег, дальность атаки, HexX/HexY позиции; следом ChosenDenAutoAttack
 
 #endif
 

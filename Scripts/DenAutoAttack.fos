@@ -19,6 +19,75 @@ bool MatchesAutoAttackWeapon(Critter cr, ident weaponId, hstring weaponPid, int 
            CritterItem::GetActiveMode(cr) == mode && use < WeaponHelpers::MAX_USES && use < weapon.Weapon_ActiveUses;
 }
 
+#if SERVER || CLIENT
+
+// Дистанция сама по себе недостаточна: стена может отделять даже соседний гекс от цели.
+bool IsAutoAttackPosition(Map map, mpos from, mpos target, int reach)
+{
+    int distance = Game.GetDistance(from, target);
+    if (distance > reach) {
+        return false;
+    }
+    mpos tracedHex = target;
+    map.GetHexInPath(from, tracedHex, 0.0f, distance);
+    return tracedHex == target;
+}
+
+bool IsAutoAttackInRange(Map map, Critter cr, Critter target, AbstractItem weapon, int mode)
+{
+    int reach = Parameters::GetCritterAttackDistance(cr, weapon, mode) + target.Multihex;
+    return IsAutoAttackPosition(map, cr.Hex, target.Hex, reach);
+}
+
+// Поиск пути допускает отложенный проход через критеров, но конечная позиция должна быть свободной.
+bool IsAutoAttackHexFree(Map map, mpos hex)
+{
+    if (!map.IsHexMovable(hex)) {
+        return false;
+    }
+#if SERVER
+    Critter? occupant = map.GetCritterOnHex(hex);
+#endif
+#if CLIENT
+    Critter? occupant = map.GetCritterOnHex(hex, CritterFindType::NonDead);
+#endif
+    return occupant == null || occupant.IsDead();
+}
+
+// Ищем путь к конкретной позиции с линией атаки, а не к произвольному гексу в радиусе цели.
+bool FindAutoAttackPosition(Map map, Critter cr, Critter target, int reach, mpos& hex)
+{
+    if (IsAutoAttackPosition(map, cr.Hex, target.Hex, reach)) {
+        hex = cr.Hex;
+        return true;
+    }
+    int bestLength = 0;
+    for (int x = int(target.Hex.x) - reach; x <= int(target.Hex.x) + reach; x++) {
+        for (int y = int(target.Hex.y) - reach; y <= int(target.Hex.y) + reach; y++) {
+            if (x < 0 || y < 0 || x >= int(map.Size.width) || y >= int(map.Size.height)) {
+                continue;
+            }
+            mpos candidate = mpos(x, y);
+            if (!IsAutoAttackHexFree(map, candidate) || !IsAutoAttackPosition(map, candidate, target.Hex, reach)) {
+                continue;
+            }
+#if SERVER
+            int length = map.GetPathLength(cr, candidate, 0, null);
+#endif
+#if CLIENT
+            int length = map.GetPathLength(cr, candidate, 0);
+#endif
+            if (length > 0 && (bestLength == 0 || length < bestLength)) {
+                bestLength = length;
+                hex = candidate;
+            }
+        }
+    }
+    return bestLength > 0;
+}
+
+#endif
+
 #if CLIENT
 
 uint AutoAttackRequestId = 0;
@@ -108,18 +177,6 @@ bool IsDenAutoAttackTarget(Critter cr, Critter target)
            cr.IsSee(target) && DenDefense::CanAttack(cr, target);
 }
 
-bool IsAutoAttackInRange(Map map, Critter cr, Critter target, AbstractItem weapon, int mode)
-{
-    int dist = Game.GetDistance(cr.Hex, target.Hex);
-    int reach = Parameters::GetCritterAttackDistance(cr, weapon, mode) + target.Multihex;
-    if (dist > reach) {
-        return false;
-    }
-    mpos tracedHex = target.Hex;
-    map.GetHexInPath(cr.Hex, tracedHex, 0.0f, dist);
-    return tracedHex == target.Hex;
-}
-
 [[ServerRemoteCall]]
 void FindDenAutoAttackTarget(Player player, uint requestId, ident chosenId, ident mapId, ident weaponId, hstring weaponPid, int mode)
 {
@@ -148,8 +205,9 @@ void FindDenAutoAttackTarget(Player player, uint requestId, ident chosenId, iden
             continue;
         }
         int reach = Parameters::GetCritterAttackDistance(cr, weapon, attackMode) + target.Multihex;
-        if (melee && distance > reach) {
-            if (map.GetPathLength(cr, target.Hex, reach, null) == 0) {
+        if (melee) {
+            mpos attackHex;
+            if (!FindAutoAttackPosition(map, cr, target, reach, attackHex)) {
                 continue;
             }
         }

@@ -1,7 +1,7 @@
 // ChosenActions — очередь действий игрового персонажа (Chosen): постановка, покадровая обработка и исполнение команд игрока.
 // CLIENT: копит и прогоняет очередь действий (перемещение, атака, использование предметов и навыков, подбор, диалог, контейнеры), регенерирует ОД и шлёт серверу RemoteCall.
 // SERVER: реализует эти RemoteCall и Lock*-хелперы, управляя busy/free-состоянием критера; опирается на коды действий из Tla, а также на боевую, диалоговую и предметную логику.
-// Ctrl+A запрашивает одну цель только из врагов обороны Дэна; ближний бой использует обычный подход.
+// Ctrl+A запрашивает одну цель только из врагов обороны Дэна; ближний бой подходит к позиции с чистой линией атаки.
 // Глобальное состояние необходимо клиентской сессии: очередь действий и последняя команда движения.
 
 namespace ChosenActions
@@ -192,6 +192,26 @@ void ChosenProcess()
             }
 
             hex = cr.Hex;
+            if (actionType == Tla::ChosenDenAutoMove) {
+                if (DenAutoAttack::IsAutoAttackPosition(CurMap, chosen.Hex, cr.Hex, cut)) {
+                    chosen.StopMove();
+                    break;
+                }
+                mpos attackHex = mpos(ChosenActions[5], ChosenActions[6]);
+                // Не меняем пригодную конечную позицию на каждом кадре уже начатого подхода.
+                if (!chosen.IsMoving() || !DenAutoAttack::IsAutoAttackHexFree(CurMap, attackHex) ||
+                    !DenAutoAttack::IsAutoAttackPosition(CurMap, attackHex, cr.Hex, cut)) {
+                    if (!DenAutoAttack::FindAutoAttackPosition(CurMap, chosen, cr, cut, attackHex)) {
+                        chosen.StopMove();
+                        ChosenActions.clear();
+                        return;
+                    }
+                    ChosenActions[5] = attackHex.x;
+                    ChosenActions[6] = attackHex.y;
+                }
+                hex = attackHex;
+                cut = 0; // Подход завершается на проверенном гексе, а не где угодно в радиусе цели.
+            }
         }
         else {
             hex = mpos(ChosenActions[1], ChosenActions[2]);
@@ -228,7 +248,7 @@ void ChosenProcess()
         }
 
         // Поиск пути
-        auto path = CurMap.GetPath(chosen.Hex, hex, cut);
+        auto path = actionType == Tla::ChosenDenAutoMove ? CurMap.GetPath(chosen, hex, 0) : CurMap.GetPath(chosen.Hex, hex, cut);
         if (path.isEmpty() && actionType == Tla::ChosenDenAutoMove) {
             chosen.StopMove();
             ChosenActions.clear();
@@ -569,27 +589,29 @@ void ChosenProcess()
             // else
             //    needMove = !CheckDist( chosen.HexX, chosen.HexY, hx, hy, maxDist );
             // TODO: мигрировать трассировку r17.
-            if (autoAttack && !WeaponHelpers::IsWeaponHthAttack(item, use)) {
-                mpos tracedHex = mpos(hx, hy);
-                CurMap.GetHexInPath(chosen.Hex, tracedHex, 0.0f, dist);
-                if (needMove || tracedHex != mpos(hx, hy)) {
+            if (autoAttack && !DenAutoAttack::IsAutoAttackPosition(CurMap, chosen.Hex, mpos(hx, hy), maxDist)) {
+                if (!WeaponHelpers::IsWeaponHthAttack(item, use) || targetCr == null) {
                     break; // Дальнобойная автоатака не превращается в преследование.
                 }
+                mpos attackHex;
+                if (!DenAutoAttack::FindAutoAttackPosition(CurMap, chosen, targetCr, maxDist, attackHex)) {
+                    break;
+                }
+                SetAction({Tla::ChosenDenAutoMove, targetCr.Id, 0, 0, maxDist, attackHex.x, attackHex.y}, false, false);
+                SetAction(curAction, true, false);
+                return;
             }
             if (needMove) {
                 if (dist > maxDist) {
                     bool isRun = false; // 814 ( Settings.Movement.AlwaysRun && dist >= Settings.Movement.AlwaysRunUseDist );
                     if (targetCr != null) {
-                        if (autoAttack && CurMap.GetPathLength(chosen, mpos(hx, hy), maxDist) == 0) {
-                            break;
-                        }
-                        SetAction({autoAttack ? Tla::ChosenDenAutoMove : Tla::ChosenMoveToCrit, targetCr.Id, 0, isRun ? 1 : 0, maxDist, 0, 0}, false, false);
+                        SetAction({Tla::ChosenMoveToCrit, targetCr.Id, 0, isRun ? 1 : 0, maxDist, 0, 0}, false, false);
                     }
                     else {
                         SetAction({Tla::ChosenMove, hx, hy, isRun ? 1 : 0, maxDist, 0, 1}, false, false);
                     }
 
-                    if (autoAttack || CurMap.GetPathLength(chosen, mpos(hx, hy), maxDist) > 0) {
+                    if (CurMap.GetPathLength(chosen, mpos(hx, hy), maxDist) > 0) {
                         SetAction(curAction, true, false);
                     }
 
@@ -615,6 +637,11 @@ void ChosenProcess()
             if (Game.GetDistance(chosen.Hex, mpos(hx, hy)) >= 1 && chosen.Dir != dir) {
                 chosen.ChangeDir(dir);
             }
+        }
+
+        // Последняя проверка всех автоатак до анимации, предсказания ОД и отправки запроса.
+        if (autoAttack && (targetCr == null || !HasCurMap || !DenAutoAttack::IsAutoAttackInRange(CurMap, chosen, targetCr, item, rate))) {
+            break;
         }
 
         // Использование

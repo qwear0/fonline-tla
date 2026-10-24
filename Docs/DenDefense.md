@@ -191,13 +191,19 @@ on the defense map. Smitty, companions, players, ordinary inhabitants and enemie
 are never automatic targets. There is no monster/faction heuristic or general-purpose combat mode.
 
 The active main-hand weapon/use is retained, including the selected empty-hand attack. The command
-executes one unaimed weapon use without changing the saved aiming mode. Unarmed/melee approaches with
-the existing action queue and pathfinder; ranged/throwing only selects an in-range, unobstructed target
-and never approaches. Holding the key does not repeat attacks; there is no automatic reload or retarget.
+executes one unaimed weapon use without changing the saved aiming mode. Unarmed/melee selects a
+reachable, unoccupied attack hex satisfying both weapon range and a clear trace, then approaches that
+exact hex with the existing action queue and pathfinder. A reachable radius behind a wall is not sufficient;
+enemies without a usable position are skipped. The approach retains a usable destination while moving
+and reevaluates it if it becomes blocked or no longer has range/trace to the target. Ranged/throwing
+only selects an in-range, unobstructed target and never approaches. Holding the key does not repeat
+attacks; there is no automatic reload or retarget.
 If no eligible target exists, unrelated queued actions are left alone. Weapon changes, lost/dead targets,
 failed paths and stale target-selection replies cancel the automatic command. The server rechecks
-scenario eligibility before the actual attack. Ordinary `A`, aimed mouse attacks and damage rules are
-unchanged; bursts/explosions still follow the existing collateral-damage rules.
+scenario eligibility, range and trace before the actual attack. The client also rechecks range/trace
+for melee and ranged attacks before weapon animation, AP prediction and dispatch.
+Ordinary `A`, aimed mouse attacks and damage rules are unchanged; bursts/explosions still follow the
+existing collateral-damage rules.
 
 Owners: `Scripts/InputHandler.fos` (hotkey), `Scripts/DenAutoAttack.fos` (selection RPC and execution
 guard), `Scripts/ChosenActions.fos` (queue), `Scripts/Tla.fos` (client action codes).
