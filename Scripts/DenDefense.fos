@@ -625,7 +625,7 @@ void Rest(Critter player, Critter npc)
     Game.DenDefenseStage = STAGE_RESTING;
     Game.DenDefenseRestPhase = 0;
     Game.DenDefenseRestUntil = Game.FrameTime + Time::Seconds(1);
-    Game.DenDefenseDawn = GameTime::GetNearSynchronizedTime(0, 0, 0, 6, 0, 0);
+    Game.DenDefenseDawn = GameTime::GetNearSynchronizedTime(0, 0, 0, 10, 0, 0);
     Game.DenDefenseDawnLocked = false;
     StopScenarioActions();
     Game.StartTimeEvent(Time::Milliseconds(1), CloseRestDialogs, Game.DenDefenseGeneration);
@@ -646,10 +646,10 @@ void FinishRest(any value)
         return;
     }
     if (!Game.DenDefenseDawnLocked) {
-        // Рассвет мог пройти во время затемнения или простоя сервера. До первого скачка
-        // выбираем будущий 06:00; после фиксации повторный вызов не выбирает следующие сутки.
+        // Утро могло пройти во время затемнения или простоя сервера. До первого скачка
+        // выбираем будущий 10:00; после фиксации повторный вызов не выбирает следующие сутки.
         if (Game.DenDefenseDawn <= Game.SynchronizedTime) {
-            Game.DenDefenseDawn = GameTime::GetNearSynchronizedTime(0, 0, 0, 6, 0, 0);
+            Game.DenDefenseDawn = GameTime::GetNearSynchronizedTime(0, 0, 0, 10, 0, 0);
         }
         Game.DenDefenseDawnLocked = true;
     }
@@ -719,7 +719,7 @@ void StartAfterRest(any value)
     map.DenDefenseNextSpawn = Game.FrameTime + Time::Seconds(3);
     Game.DenDefenseDawn = ZERO_SYNCTIME;
     Game.Log("Den defense wave started, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave + " total=" + Game.DenDefenseSpawnTotal);
-    // Первого атакующего выпускаем сразу после рассвета, остальных — по таймеру карты.
+    // Первого атакующего выпускаем сразу после утреннего отдыха, остальных — по таймеру карты.
     map.StopTimeEvent(Controller);
     map.StartTimeEvent(Time::Seconds(1), Time::Seconds(1), Controller, Game.DenDefenseGeneration);
     SpawnEnemy();

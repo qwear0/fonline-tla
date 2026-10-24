@@ -60,11 +60,12 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | `NpcPlanes` / `Pattern*` | S | NPC plan processing and behavior patterns |
 | `Animation` | C/M | `InitAnimation` subscribes to critter animation events; Fallout/tactics selection; sounds only on C |
 | `ChosenActions` | S/C | Client action queue and server request handlers; reused for the one-shot autoattack approach/attack |
-| `DenAutoAttack` / `InputHandler` | S/C | Ctrl+A selects one current Den defense enemy, approaches for melee only and attacks without aiming; [DenDefense.md](DenDefense.md#one-shot-player-autoattack) |
+| `DenAutoAttack` / `InputHandler` | S/C | Ctrl+A prioritizes usable enemies with positive HP, then distance; approaches for melee only and attacks without aiming; [DenDefense.md](DenDefense.md#one-shot-player-autoattack) |
 | `PlayerRegistration` | S/C | Login and registration; confirmed returned Player commits Den defense entry |
 | `DenDefense` | S/C | Shared Den generation/primary, companions, rest/waves, ground loot and failure; `OnSuccessfulLogin`, `ResumeController`; [DenDefense.md](DenDefense.md) |
 | `Merc` / `CritterAnims` | S / shared helpers | Companion ownership and weapon-animation admission; narrow Den exceptions, normal recruitment/animation policy otherwise |
 | `Replication` | S | Ordinary death/respawn/permanent-death flow; Den participants use their scenario's base resurrection instead |
+| `TownSupply` | S | Disabled city bounty-hunter retaliation; `CallTownSupply`, pending callbacks and direct spawns are inert; legacy guards are removed |
 
 See [Animation.md](Animation.md) for the native baked root-motion flow, distinct from the game animation selector.
 

@@ -40,7 +40,7 @@ run as secondaries; living inventories, builds, experience and levels are retain
 | --- | --- |
 | Starting | Reserve generation/primary before setup and reentrant callbacks; create the four companions, then Waiting |
 | Waiting | A living participant with their briefing kit may request rest; the previous wave must already be cleared |
-| Resting | Close conflicting dialogs, block actions, globally fade out, advance to dawn, heal living defenders, fade in, start the next wave |
+| Resting | Close conflicting dialogs, block actions, globally fade out, advance to 10:00, heal living defenders, fade in, start the next wave |
 | Fighting | Spawn the full wave gradually; complete only after every required enemy has actually died |
 | Victory | Stop waves; each participant may claim one `car_fuel_injection` |
 | Failed | Stop progression, actions, revival and claims; **only the next successful login** starts a new generation and selects its primary |
@@ -94,7 +94,7 @@ no existing serialized identifier is removed/renamed and no migration rule/engin
 
 ## Global rest and time domains
 
-A rest request persists its next 06:00 target and phase. If that dawn passes during the initial fade
+A rest request persists its next 10:00 target and phase. If that morning passes during the initial fade
 or a server pause, it is reselected before the first clock advance. The target is then locked before
 calling the setter, so a resumed/partly completed rest cannot advance by an extra day. Every online
 client, even outside Den, receives phase/remaining-time state. A mid-rest entrant joins that same
@@ -121,6 +121,10 @@ client `MapTime`/`DayColor` follow synchronized time for lighting.
 
 ## Combat and completion
 
+The city retaliation mechanism in `TownSupply` is disabled globally: neither new nor pending calls
+spawn bounty hunters, and legacy guards are removed on initialization/idle. This does not remove
+unrelated caravan/encounter NPCs that happen to use bounty-hunter prototypes.
+
 | Wave | Composition and equipment |
 | --- | --- |
 | 1 | 25 attackers cycling Prostitute, Drunkard and Madman; original Den models/dialogs, one-shot stock bags 26/11, plus alcohol/rocks for drunkards |
@@ -141,7 +145,7 @@ lines. Its stock bags supply knives/switchblades/shivs, jet, flowers and caps; d
 carry beer/booze and rocks. Bags are filled once, not refreshed during combat; city quest state is
 not copied to these attackers.
 
-The first enemy is admitted when the dawn transition finishes; subsequent admissions are spaced by
+The first enemy is admitted when the 10:00 rest transition finishes; subsequent admissions are spaced by
 three real seconds. Each wave reinstalls the map controller. Spawn selection rotates explicit indoor
 candidate sets in the nearby western houses and checks a route toward the workshop through openable,
 unlocked doors. An occupied/unreachable room falls through to the other rooms, never to street hexes
@@ -185,10 +189,13 @@ outstanding actor fails diagnostically instead of awarding a false victory.
 
 ## One-shot player autoattack
 
-`Ctrl+A` on the Game screen asks `DenAutoAttack` to select the nearest visible, usable target from
-**current-generation Den defense enemies only**. Server checks require a living scenario participant
-on the defense map. Smitty, companions, players, ordinary inhabitants and enemies outside this scenario
-are never automatic targets. There is no monster/faction heuristic or general-purpose combat mode.
+`Ctrl+A` on the Game screen asks `DenAutoAttack` to select a visible, usable target from
+**current-generation Den defense enemies only**. Eligible enemies with `CurrentHp > 0` take priority
+over those with zero/negative HP; within each group the nearest wins, with critter ID breaking ties.
+Living enemies with nonpositive HP remain fallback targets if no positive-HP enemy is usable.
+Server checks require a living scenario participant on the defense map. Smitty, companions, players,
+ordinary inhabitants and enemies outside this scenario are never automatic targets. There is no
+monster/faction heuristic or general-purpose combat mode.
 
 The active main-hand weapon/use is retained, including the selected empty-hand attack. The command
 executes one unaimed weapon use without changing the saved aiming mode. Unarmed/melee selects a

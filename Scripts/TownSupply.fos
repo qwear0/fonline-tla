@@ -1,222 +1,62 @@
-// TownSupply — механика "городской охраны": наёмные охотники за головами карают игрока за нападение на мирного NPC в городе.
-// Сторона SERVER. CallTownSupply запускает цепочку отложенных TimeEvent'ов, которые спавнят у входа на карту отряд
-// bounty hunter'ов и натравливают их на обидчика через боевые планы NpcPlanes; охрана уходит к выходу и деспавнится по завершении плана.
-// Связи: EnemyStack (стек врагов жертвы и охраны), Entrance (точки входа/выхода), Maps::IsCityLocation (только городские локации).
+// TownSupply — отключённая механика карательных охотников за нападение на мирного NPC в городе.
+// SERVER: новые и отложенные вызовы ничего не создают; прежняя охрана удаляется без продолжения охоты.
+// Свойства и обработчики сохранены для загрузки прежних миров и отложенных TimeEvent'ов.
+// Связи: Main (вызов после убийства NPC), NpcPlanes (остановка прежней охраны).
 namespace TownSupply
 {
 
 #if SERVER
 
-// Городская охрана
-
 ///@ Property Critter Server ident TownSupplyVictimId Mutable Persistent
 ///@ Property Critter Server ident TownSupplyHostileId Mutable Persistent
 
-const int ENTER_ENTRY = 0;
-const int EXIT_ENTRY = 0;
-const int ROLE_GUARD = 29;
-const int PLANE_GOTO_EXIT = 29;
-int SupplyGameMinutes()
-{
-    return Game.Random(5, 60);
-}
-
+// Оставляем точку входа Main, но больше не назначаем карательные отряды.
 void CallTownSupply(Critter victim, Critter hostile)
 {
-    if (IsValidForSupply(victim, hostile)) {
-        any[] values = {victim.Id, hostile.Id, 0};
-        Game.StartTimeEvent(Time::GameMinutes(SupplyGameMinutes()), CallTownSupplyNext, values); //SavedDeferredCall
-    }
 }
 
+// Ранее сохранённый вызов завершается без спавна и повторного назначения.
 [[TimeEvent]]
 void CallTownSupplyNext(any[] values)
 {
-    if (values.length() < 3) {
-        return;
-    }
-
-    ident victimId = values[0];
-    Critter? hostile = Game.GetCritter(values[1]);
-
-    values[2] = int(values[2]) + 1;
-    int rate = values[2];
-
-    if (hostile != null && hostile.MapId != ZERO_IDENT && not hostile.IsDead()) {
-        int count = hostile.Level / 10 + 1;
-        if (count > 10) {
-            count = 10;
-        }
-
-        CallSupply(victimId, hostile, count);
-        return;
-    }
-
-    if (rate >= 10) {
-        return;
-    }
-
-    Game.StartTimeEvent(Time::GameMinutes(SupplyGameMinutes()), CallTownSupplyNext, values); //SavedDeferredCall
-}
-
-bool IsValidForSupply(Critter victim, Critter hostile)
-{
-    // Только для NPC-гуманоидов в городских локациях
-    if (hostile.ControlledByPlayer && !victim.ControlledByPlayer && !victim.IsNoSupply) {
-        int bt = victim.BodyType;
-        if (bt >= BodyTypes::Men && bt <= BodyTypes::Ghoul) {
-            Map? map = hostile.GetMap();
-            if (map != null) {
-                hstring locPid = map.GetLocation().ProtoId;
-                if (Maps::IsCityLocation(locPid)) {
-                    return true;
-                }
-            }
-        }
-    }
-
-    return false;
 }
 
 void CallSupply(ident victimId, Critter target, int supplyCount)
 {
-    Map? map = target.GetMap();
-    if (map == null) {
-        return;
-    }
-
-    mpos hex = target.Hex;
-    if (!Entrance::GetNearEntry(map, ENTER_ENTRY, hex)) {
-        return;
-    }
-
-    int rnd = Game.Random(0, 9);
-
-    hstring[] hunters = {Content::Critter::BountyHunter_1,
-                         Content::Critter::BountyHunter_2,
-                         Content::Critter::BountyHunter_3,
-                         Content::Critter::BountyHunter_4,
-                         Content::Critter::BountyHunter_5,
-                         Content::Critter::BountyHunter_6,
-                         Content::Critter::BountyHunter_7,
-                         Content::Critter::BountyHunter_8,
-                         Content::Critter::BountyHunter_9,
-                         Content::Critter::BountyHunter_10};
-
-    dict<CritterProperty, any> props = {{CritterProperty::BagId, Bags::AllBountyHunters1 + rnd},
-                                        {CritterProperty::TeamId, Teams::Guard},
-                                        {CritterProperty::KillExperience, 0},
-                                        {CritterProperty::PerkTerminator, 1},
-                                        {CritterProperty::IsNoSteal, 1},
-                                        {CritterProperty::IsNoLoot, 1},
-                                        {CritterProperty::IsNoSupply, 1},
-                                        {CritterProperty::TownSupplyVictimId, victimId},
-                                        {CritterProperty::TownSupplyHostileId, target.Id}};
-
-    Critter bountyHunter = map.AddCritter(hunters[rnd], hex, HDIR_Random, props);
-    bountyHunter.SetupScript(GuardInit);
-
-    NpcPlanes::AddAttackPlane(bountyHunter, 0, target, true);
-
-    if (supplyCount > 1) {
-        CallSupply(victimId, target, supplyCount - 1);
-    }
 }
 
 void GuardInit(Critter bountyHunter, bool firstTime)
 {
-    bountyHunter.NpcRole = ROLE_GUARD;
-    bountyHunter.StartTimeEvent(Time::Asap(), Time::Seconds(1), GuardIdle);
-    bountyHunter.OnDead.Subscribe(GuardDead);
-    bountyHunter.OnSomeCritterDead.Subscribe(GuardSmthDead);
-    // Подписка на атаку отключена: обработчик GuardSmthAttack — заглушка
-    // bountyHunter.OnSomeCritterAttack.Subscribe(GuardSmthAttack);
-    bountyHunter.OnNpcPlaneEnd.Subscribe(GuardPlaneEnd);
-    bountyHunter.BonusLook = 100;
-    bountyHunter.PerkSniper = 1;
-    bountyHunter.PerkSlayer = 1;
-    bountyHunter.PerkTerminator = 1;
-    bountyHunter.PerkBetterCriticals = 1;
+    NpcPlanes::DropPlanes(bountyHunter);
+    bountyHunter.StartTimeEvent(Time::Asap(), GuardIdle);
 }
 
+// Удаление отложено до завершения инициализации загруженного криттера.
 [[TimeEvent]]
 void GuardIdle(Critter bountyHunter)
 {
-    mpos hex = bountyHunter.Hex;
-    if (not Entrance::GetNearEntry(bountyHunter.GetMap(), EXIT_ENTRY, hex)) {
-        Game.DestroyCritter(bountyHunter);
-    }
-    else {
-        // План «идти к выходу» ставим один раз: без этого GuardIdle каждую секунду добавлял новый
-        // walk-план (они не дедуплицируются), очередь переполнялась, AddPlane возвращал false и
-        // охотник самоуничтожался через ~9 секунд
-        NpcPlanes::NpcPlane[] existingExit = {};
-        if (NpcPlanes::GetPlanes(bountyHunter, PLANE_GOTO_EXIT, existingExit) > 0) {
-            return;
-        }
-
-        bountyHunter.CurrentAp = bountyHunter.ActionPoints * Tla::AP_DIVIDER;
-        NpcPlanes::NpcPlane plane = NpcPlanes::CreatePlane();
-        plane.Type = NpcPlanes::AI_PLANE_WALK;
-        plane.Priority = NpcPlanes::AI_PLANE_WALK_PRIORITY;
-        plane.Identifier = PLANE_GOTO_EXIT;
-        plane.Walk_Hex = hex;
-        plane.Walk_Dir = 6;
-        plane.Run = true;
-        plane.Walk_Cut = 2;
-        if (not NpcPlanes::AddPlane(bountyHunter, plane)) {
-            Game.DestroyCritter(bountyHunter);
-        }
-    }
+    Game.DestroyCritter(bountyHunter);
 }
 
 [[Event]]
 void GuardDead(Critter bountyHunter, Critter? killer)
 {
-    // Отключено: раньше смерть охотника могла поднимать новую волну поддержки против убийцы
-    /*if (killer != null && IsValidForSupply(bountyHunter,killer)) {
-        CallSupply(killer, 1);
-    }*/
     Game.DestroyCritter(bountyHunter);
 }
 
 [[Event]]
 void GuardSmthDead(Critter bountyHunter, Critter fromCrit, Critter? killer)
 {
-    // Заносим в стек врагов охраны игрока, убивающего другого охотника
-    if (killer != null && killer.ControlledByPlayer && fromCrit.NpcRole == ROLE_GUARD) {
-        EnemyStack::AddEnemyToStack(bountyHunter, killer.Id);
-        return;
-    }
-
-    // Убираем id обидчика из стека врагов жертвы
-    ident victimId = bountyHunter.TownSupplyVictimId;
-    ident hostileId = bountyHunter.TownSupplyHostileId;
-    if (victimId != ZERO_IDENT && hostileId == fromCrit.Id) {
-        Critter? victim = Game.GetCritter(victimId);
-        if (victim != null) {
-            EnemyStack::EraseEnemyFromStack(victim, hostileId);
-        }
-    }
 }
 
 void GuardSmthAttack(Critter bountyHunter, Critter fromCrit, Critter target)
 {
-    // bountyHunter.AddEnemyToStack
 }
 
 [[Event]]
 EventResult GuardPlaneEnd(Critter bountyHunter, int planeId, int reason, Critter someCr, Item someItem)
 {
-    NpcPlanes::NpcPlane? plane = NpcPlanes::GetCritterPlane(bountyHunter, planeId);
-    if (plane == null) {
-        return EventResult::StopChain;
-    }
-
-    if (plane.Identifier == PLANE_GOTO_EXIT) {
-        Game.DestroyCritter(bountyHunter);
-    }
-
+    Game.DestroyCritter(bountyHunter);
     return EventResult::StopChain;
 }
 

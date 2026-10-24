@@ -1,4 +1,4 @@
-// DenAutoAttack — одиночная неприцельная атака ближайшего врага обороны Дэна по Ctrl+A.
+// DenAutoAttack — одиночная неприцельная атака врага обороны Дэна по Ctrl+A: сначала цели с ОЖ > 0, затем ближайшая.
 // CLIENT: запрашивает цель и передаёт одну атаку существующей очереди ChosenActions.
 // SERVER: выбирает только видимых врагов текущего сценария и проверяет их перед CritterActions::Attack.
 // Глобальное состояние — номер и снимок ожидающего запроса клиентской сессии: нужны для отбрасывания запоздалых ответов.
@@ -194,6 +194,7 @@ void FindDenAutoAttackTarget(Player player, uint requestId, ident chosenId, iden
     bool melee = WeaponHelpers::IsWeaponHthAttack(weapon, use);
     ident bestId = ZERO_IDENT;
     int bestDistance = 0;
+    bool bestHasPositiveHp = false;
     auto candidates = cr.GetCritters(CritterSeeType::WhoISee, CritterFindType::NonDeadNpc);
     for (int i = 0; i < candidates.length(); i++) {
         Critter target = candidates[i];
@@ -201,8 +202,14 @@ void FindDenAutoAttackTarget(Player player, uint requestId, ident chosenId, iden
             continue;
         }
         int distance = Game.GetDistance(cr.Hex, target.Hex);
-        if (bestId != ZERO_IDENT && (distance > bestDistance || (distance == bestDistance && target.Id.value >= bestId.value))) {
-            continue;
+        bool hasPositiveHp = target.CurrentHp > 0;
+        if (bestId != ZERO_IDENT) {
+            if (!hasPositiveHp && bestHasPositiveHp) {
+                continue;
+            }
+            if (hasPositiveHp == bestHasPositiveHp && (distance > bestDistance || (distance == bestDistance && target.Id.value >= bestId.value))) {
+                continue;
+            }
         }
         int reach = Parameters::GetCritterAttackDistance(cr, weapon, attackMode) + target.Multihex;
         if (melee) {
@@ -216,6 +223,7 @@ void FindDenAutoAttackTarget(Player player, uint requestId, ident chosenId, iden
         }
         bestId = target.Id;
         bestDistance = distance;
+        bestHasPositiveHp = hasPositiveHp;
     }
     player.ClientCall.DenAutoAttackTarget(requestId, bestId);
 }
