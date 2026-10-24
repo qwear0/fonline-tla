@@ -1,6 +1,8 @@
 // ChosenActions — очередь действий игрового персонажа (Chosen): постановка, покадровая обработка и исполнение команд игрока.
 // CLIENT: копит и прогоняет очередь действий (перемещение, атака, использование предметов и навыков, подбор, диалог, контейнеры), регенерирует ОД и шлёт серверу RemoteCall.
 // SERVER: реализует эти RemoteCall и Lock*-хелперы, управляя busy/free-состоянием критера; опирается на коды действий из Tla, а также на боевую, диалоговую и предметную логику.
+// Ctrl+A запрашивает одну цель только из врагов обороны Дэна; ближний бой использует обычный подход.
+// Глобальное состояние необходимо клиентской сессии: очередь действий и последняя команда движения.
 
 namespace ChosenActions
 {
@@ -43,6 +45,7 @@ int GetChosenActions(any[] & actions)
 
 void SetChosenActions(any[] actions)
 {
+    DenAutoAttack::CancelRequest();
     ChosenActions.resize(0);
     verify(actions.length() % 7 == 0, "Assertion failed");
     ChosenActions = actions.clone();
@@ -54,6 +57,7 @@ void SetAction(any[] action, bool append, bool toBeginning)
         return;
     }
     verify(action.length() == 7, "Assertion failed");
+    DenAutoAttack::CancelRequest();
 
     if (!append) {
         ChosenActions.resize(0);
@@ -80,6 +84,19 @@ void ChosenProcess()
 
     Critter chosen = Chosen;
 
+    // Проверяем автоматический подход до ожидания движения: смерть цели не должна вести к её трупу.
+    if (ChosenActions.length() > 0 && (int(ChosenActions[0]) == Tla::ChosenDenAutoMove || int(ChosenActions[0]) == Tla::ChosenDenAutoAttack)) {
+        int offset = int(ChosenActions[0]) == Tla::ChosenDenAutoMove ? 7 : 0;
+        verify(ChosenActions.length() >= offset + 7, "Missing automatic attack action");
+        Critter? target = Game.GetCritter(ChosenActions[offset + 4]);
+        if (!HasCurMap || !chosen.IsAlive() || target == null || target.IsDead() ||
+            !DenAutoAttack::MatchesAutoAttackWeapon(chosen, ChosenActions[offset + 1], ChosenActions[offset + 2], ChosenActions[offset + 6])) {
+            chosen.StopMove();
+            ChosenActions.clear();
+            return;
+        }
+    }
+
     if (HasCurMap) {
         // Крыша
         CurMap.SetHiddenRoof(chosen.Hex);
@@ -96,7 +113,7 @@ void ChosenProcess()
             // Даём действию перемещения из очереди перенацелить текущий ход (например, при новом клике по карте);
             // всё остальное не прерывает начатое движение, пока оно не завершится.
             int pendingType = (ChosenActions.length() > 0 ? int(ChosenActions[0]) : 0);
-            if (pendingType != Tla::ChosenMove && pendingType != Tla::ChosenMoveToCrit) {
+            if (pendingType != Tla::ChosenMove && pendingType != Tla::ChosenMoveToCrit && pendingType != Tla::ChosenDenAutoMove) {
                 return;
             }
         }
@@ -149,11 +166,12 @@ void ChosenProcess()
     int actionType = curAction[0];
 
     // Принудительно завершаем перемещение
-    if (actionType != Tla::ChosenMove && actionType != Tla::ChosenMoveToCrit) {
+    if (actionType != Tla::ChosenMove && actionType != Tla::ChosenMoveToCrit && actionType != Tla::ChosenDenAutoMove) {
         chosen.StopMove();
     }
 
     switch (actionType) {
+    case Tla::ChosenDenAutoMove:
     case Tla::ChosenMoveToCrit:
     case Tla::ChosenMove: {
         mpos hex;
@@ -165,7 +183,7 @@ void ChosenProcess()
         }
 
         // Перемещение к критеру
-        if (actionType == Tla::ChosenMoveToCrit) {
+        if (actionType == Tla::ChosenMoveToCrit || actionType == Tla::ChosenDenAutoMove) {
             Critter? cr = Game.GetCritter(ChosenActions[1]);
             // Цель пропала из видимости — отменяем действие, иначе hex остаётся (0,0)
             // и персонаж уходит в угол карты
@@ -187,6 +205,9 @@ void ChosenProcess()
         // Не может двигаться
         if (chosen.IsNoMove) {
             Messaging::Info(TextPackKey(TextPackName::Game, "" + (MsgStr::StrCritterCantMove)));
+            if (actionType == Tla::ChosenDenAutoMove) {
+                ChosenActions.clear();
+            }
             break;
         }
 
@@ -208,6 +229,11 @@ void ChosenProcess()
 
         // Поиск пути
         auto path = CurMap.GetPath(chosen.Hex, hex, cut);
+        if (path.isEmpty() && actionType == Tla::ChosenDenAutoMove) {
+            chosen.StopMove();
+            ChosenActions.clear();
+            return;
+        }
         if (path.isEmpty() && Game.GetDistance(chosen.Hex, hex) > cut + 1) {
             path = CurMap.GetPath(chosen.Hex, hex, ++cut);
         }
@@ -287,7 +313,9 @@ void ChosenProcess()
         CurPlayer.ServerCall.ReloadWeapon(weapon.Id, ZERO_IDENT);
         chosen.CurrentAp -= apCost * Tla::AP_DIVIDER;
     } break;
+    case Tla::ChosenDenAutoAttack:
     case Tla::ChosenUseItem: {
+        bool autoAttack = actionType == Tla::ChosenDenAutoAttack;
         ident itemId = ChosenActions[1];
         int targetType = ChosenActions[3];
         ident targetId = ChosenActions[4];
@@ -522,7 +550,7 @@ void ChosenProcess()
             int maxDist = 0;
             if (isAttack) {
                 AbstractItem weap = CritterItem::GetActive(chosen);
-                maxDist = Parameters::GetCritterAttackDistance(chosen, weap, CritterItem::GetActiveMode(chosen));
+                maxDist = Parameters::GetCritterAttackDistance(chosen, weap, autoAttack ? rate : CritterItem::GetActiveMode(chosen));
             }
             else {
                 maxDist = 1 + chosen.Multihex;
@@ -541,17 +569,27 @@ void ChosenProcess()
             // else
             //    needMove = !CheckDist( chosen.HexX, chosen.HexY, hx, hy, maxDist );
             // TODO: мигрировать трассировку r17.
+            if (autoAttack && !WeaponHelpers::IsWeaponHthAttack(item, use)) {
+                mpos tracedHex = mpos(hx, hy);
+                CurMap.GetHexInPath(chosen.Hex, tracedHex, 0.0f, dist);
+                if (needMove || tracedHex != mpos(hx, hy)) {
+                    break; // Дальнобойная автоатака не превращается в преследование.
+                }
+            }
             if (needMove) {
                 if (dist > maxDist) {
                     bool isRun = false; // 814 ( Settings.Movement.AlwaysRun && dist >= Settings.Movement.AlwaysRunUseDist );
                     if (targetCr != null) {
-                        SetAction({Tla::ChosenMoveToCrit, targetCr.Id, 0, isRun ? 1 : 0, maxDist, 0, 0}, false, false);
+                        if (autoAttack && CurMap.GetPathLength(chosen, mpos(hx, hy), maxDist) == 0) {
+                            break;
+                        }
+                        SetAction({autoAttack ? Tla::ChosenDenAutoMove : Tla::ChosenMoveToCrit, targetCr.Id, 0, isRun ? 1 : 0, maxDist, 0, 0}, false, false);
                     }
                     else {
                         SetAction({Tla::ChosenMove, hx, hy, isRun ? 1 : 0, maxDist, 0, 1}, false, false);
                     }
 
-                    if (CurMap.GetPathLength(chosen, mpos(hx, hy), maxDist) > 0) {
+                    if (autoAttack || CurMap.GetPathLength(chosen, mpos(hx, hy), maxDist) > 0) {
                         SetAction(curAction, true, false);
                     }
 
@@ -622,10 +660,15 @@ void ChosenProcess()
 
         chosen.CurrentAp -= apCost * Tla::AP_DIVIDER;
         if (isAttack && targetCr != null) {
-            CurPlayer.ServerCall.Attack(targetCr.Id, rate);
+            if (autoAttack) {
+                CurPlayer.ServerCall.DenAutoAttack(targetCr.Id, itemId, item.ProtoId, param);
+            }
+            else {
+                CurPlayer.ServerCall.Attack(targetCr.Id, rate);
+            }
         }
 
-        /*if( isAttack && !aim && Keyb::ShiftDwn )               // Continue battle after attack
+        /*if( isAttack && !aim && Keyb::ShiftDwn )               // Продолжить бой после атаки
            {
            SetAction( curAction, false, false );
            return;
@@ -799,8 +842,8 @@ void ChosenProcess()
             }
         }
 
-        // Контейнерный UI обновляется только authoritative-снимком сервера. Оптимистичное скрытие
-        // здесь оставляло предмет навсегда скрытым при stale count или исчезнувшей цели.
+        // Интерфейс контейнера обновляется только авторитетным снимком сервера. Оптимистичное скрытие
+        // здесь оставляло предмет навсегда скрытым при устаревшем количестве или исчезнувшей цели.
         if (!ClientItems::TryBeginContainerOperation(int(transferType), transferContainerId, transferSession)) {
             break;
         }

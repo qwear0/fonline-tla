@@ -1,0 +1,183 @@
+// DenAutoAttack — одиночная неприцельная атака ближайшего врага обороны Дэна по Ctrl+A.
+// CLIENT: запрашивает цель и передаёт одну атаку существующей очереди ChosenActions.
+// SERVER: выбирает только видимых врагов текущего сценария и проверяет их перед CritterActions::Attack.
+// Глобальное состояние — номер и снимок ожидающего запроса клиентской сессии: нужны для отбрасывания запоздалых ответов.
+namespace DenAutoAttack
+{
+
+///@ RemoteCall Server FindDenAutoAttackTarget(uint32 requestId, ident chosenId, ident mapId, ident weaponId, hstring weaponPid, int32 mode)
+///@ RemoteCall Client DenAutoAttackTarget(uint32 requestId, ident targetId)
+///@ RemoteCall Server DenAutoAttack(ident targetId, ident weaponId, hstring weaponPid, int32 mode)
+
+// Не подменяем оружие или способ применения, пока идёт ответ сервера либо подход к цели.
+bool MatchesAutoAttackWeapon(Critter cr, ident weaponId, hstring weaponPid, int mode)
+{
+    AbstractItem weapon = CritterItem::GetActive(cr);
+    Item? held = cr.GetItem(ItemProperty::CritterSlot, CritterItemSlot::Main);
+    int use = WeaponHelpers::WeaponModeUse(mode);
+    return weapon.Type == ItemType::Weapon && weapon.ProtoId == weaponPid && (held != null ? held.Id : ZERO_IDENT) == weaponId &&
+           CritterItem::GetActiveMode(cr) == mode && use < WeaponHelpers::MAX_USES && use < weapon.Weapon_ActiveUses;
+}
+
+#if CLIENT
+
+uint AutoAttackRequestId = 0;
+any[] PendingAutoAttack = {}; // id персонажа, id карты, id оружия, pid оружия, исходный режим
+
+[[ModuleInit]]
+void InitDenAutoAttack()
+{
+    Game.OnMapLoaded.Subscribe(ClearDenAutoAttack);
+    Game.OnDisconnected.Subscribe(ClearDenAutoAttack);
+}
+
+void CancelRequest()
+{
+    PendingAutoAttack.clear();
+}
+
+[[Event]]
+void ClearDenAutoAttack()
+{
+    CancelRequest();
+    any[] actions = {};
+    ChosenActions::GetChosenActions(actions);
+    if (actions.length() > 0 && (int(actions[0]) == Tla::ChosenDenAutoAttack || int(actions[0]) == Tla::ChosenDenAutoMove)) {
+        ChosenActions::SetChosenActions({});
+    }
+}
+
+void Request()
+{
+    CancelRequest();
+    if (!HasChosen || !HasCurMap || !Chosen.IsAlive() || Game.DenDefenseClientFrozen || Game.DenDefenseClientResting) {
+        return;
+    }
+    Critter chosen = Chosen;
+    AbstractItem weapon = CritterItem::GetActive(chosen);
+    Item? held = chosen.GetItem(ItemProperty::CritterSlot, CritterItemSlot::Main);
+    ident weaponId = held != null ? held.Id : ZERO_IDENT;
+    int mode = CritterItem::GetActiveMode(chosen);
+    if (!MatchesAutoAttackWeapon(chosen, weaponId, weapon.ProtoId, mode)) {
+        return;
+    }
+    PendingAutoAttack = {chosen.Id, CurMap.Id, weaponId, weapon.ProtoId, mode};
+    AutoAttackRequestId++;
+    CurPlayer.ServerCall.FindDenAutoAttackTarget(AutoAttackRequestId, chosen.Id, CurMap.Id, weaponId, weapon.ProtoId, mode);
+}
+
+[[ClientRemoteCall]]
+void DenAutoAttackTarget(uint requestId, ident targetId)
+{
+    if (requestId != AutoAttackRequestId || PendingAutoAttack.isEmpty()) {
+        return;
+    }
+    any[] request = PendingAutoAttack.clone();
+    CancelRequest();
+    if (targetId == ZERO_IDENT || !HasChosen || !HasCurMap || !Chosen.IsAlive() || Chosen.Id != ident(request[0]) || CurMap.Id != ident(request[1]) ||
+        Game.DenDefenseClientFrozen || Game.DenDefenseClientResting) {
+        return;
+    }
+    Gui::Screen? screen = Gui::GetActiveScreen();
+    if (screen == null || screen.Num != GuiScreen::Game || Gui::IsConsoleActive()) {
+        return;
+    }
+    ident weaponId = request[2];
+    hstring weaponPid = request[3];
+    int mode = request[4];
+    if (!MatchesAutoAttackWeapon(Chosen, weaponId, weaponPid, mode)) {
+        return;
+    }
+    Critter? target = Game.GetCritter(targetId);
+    if (target == null || target.IsDead()) {
+        return;
+    }
+    int attackMode = WeaponHelpers::MakeWeaponMode(WeaponHelpers::WeaponModeUse(mode), HitLocations::LocationNone);
+    ChosenActions::SetChosenActions({Tla::ChosenDenAutoAttack, weaponId, weaponPid, ClientDefines::TARGET_CRITTER, targetId, attackMode, mode});
+}
+
+#endif
+
+#if SERVER
+
+// Только враги текущего сценария: бой, внешний вид и принадлежность к другим командам не считаются основанием.
+bool IsDenAutoAttackTarget(Critter cr, Critter target)
+{
+    return cr.IsAlive() && DenDefense::IsParticipant(cr) && cr.MapId == Game.DenDefenseMapId && !target.ControlledByPlayer && !target.IsDead() &&
+           !target.IsInvulnerable && DenDefense::IsActor(target) && target.DenDefenseRole == DenDefense::ROLE_ENEMY && target.MapId == cr.MapId &&
+           cr.IsSee(target) && DenDefense::CanAttack(cr, target);
+}
+
+bool IsAutoAttackInRange(Map map, Critter cr, Critter target, AbstractItem weapon, int mode)
+{
+    int dist = Game.GetDistance(cr.Hex, target.Hex);
+    int reach = Parameters::GetCritterAttackDistance(cr, weapon, mode) + target.Multihex;
+    if (dist > reach) {
+        return false;
+    }
+    mpos tracedHex = target.Hex;
+    map.GetHexInPath(cr.Hex, tracedHex, 0.0f, dist);
+    return tracedHex == target.Hex;
+}
+
+[[ServerRemoteCall]]
+void FindDenAutoAttackTarget(Player player, uint requestId, ident chosenId, ident mapId, ident weaponId, hstring weaponPid, int mode)
+{
+    Critter? cr = player.GetControlledCritter();
+    if (cr == null || cr.Id != chosenId || cr.MapId != mapId || !DenDefense::IsParticipant(cr) || !MatchesAutoAttackWeapon(cr, weaponId, weaponPid, mode)) {
+        return;
+    }
+    Map? map = cr.GetMap();
+    if (map == null) {
+        return;
+    }
+    AbstractItem weapon = CritterItem::GetActive(cr);
+    int use = WeaponHelpers::WeaponModeUse(mode);
+    int attackMode = WeaponHelpers::MakeWeaponMode(use, HitLocations::LocationNone);
+    bool melee = WeaponHelpers::IsWeaponHthAttack(weapon, use);
+    ident bestId = ZERO_IDENT;
+    int bestDistance = 0;
+    auto candidates = cr.GetCritters(CritterSeeType::WhoISee, CritterFindType::NonDeadNpc);
+    for (int i = 0; i < candidates.length(); i++) {
+        Critter target = candidates[i];
+        if (!IsDenAutoAttackTarget(cr, target)) {
+            continue;
+        }
+        int distance = Game.GetDistance(cr.Hex, target.Hex);
+        if (bestId != ZERO_IDENT && (distance > bestDistance || (distance == bestDistance && target.Id.value >= bestId.value))) {
+            continue;
+        }
+        int reach = Parameters::GetCritterAttackDistance(cr, weapon, attackMode) + target.Multihex;
+        if (melee && distance > reach) {
+            if (map.GetPathLength(cr, target.Hex, reach, null) == 0) {
+                continue;
+            }
+        }
+        else if (!IsAutoAttackInRange(map, cr, target, weapon, attackMode)) {
+            continue;
+        }
+        bestId = target.Id;
+        bestDistance = distance;
+    }
+    player.ClientCall.DenAutoAttackTarget(requestId, bestId);
+}
+
+[[ServerRemoteCall]]
+void DenAutoAttack(Player player, ident targetId, ident weaponId, hstring weaponPid, int mode)
+{
+    Critter? cr = player.GetControlledCritter();
+    Critter? target = Game.GetCritter(targetId);
+    if (cr == null || target == null || !IsDenAutoAttackTarget(cr, target) || !MatchesAutoAttackWeapon(cr, weaponId, weaponPid, mode)) {
+        return;
+    }
+    Map? map = cr.GetMap();
+    int attackMode = WeaponHelpers::MakeWeaponMode(WeaponHelpers::WeaponModeUse(mode), HitLocations::LocationNone);
+    if (map == null || !IsAutoAttackInRange(map, cr, target, CritterItem::GetActive(cr), attackMode)) {
+        return;
+    }
+    CritterActions::Attack(cr, targetId, attackMode);
+}
+
+#endif
+
+}

@@ -59,7 +59,8 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | `CritterState` | S | Alive, knockout and dead transitions |
 | `NpcPlanes` / `Pattern*` | S | NPC plan processing and behavior patterns |
 | `Animation` | C/M | `InitAnimation` subscribes to critter animation events; Fallout/tactics selection; sounds only on C |
-| `ChosenActions` | S/C | Client action queue and server request handlers |
+| `ChosenActions` | S/C | Client action queue and server request handlers; reused for the one-shot autoattack approach/attack |
+| `DenAutoAttack` / `InputHandler` | S/C | Ctrl+A selects one current Den defense enemy, approaches for melee only and attacks without aiming; [DenDefense.md](DenDefense.md#one-shot-player-autoattack) |
 | `PlayerRegistration` | S/C | Login and registration; confirmed returned Player commits Den defense entry |
 | `DenDefense` | S/C | Shared Den generation/primary, companions, rest/waves, ground loot and failure; `OnSuccessfulLogin`, `ResumeController`; [DenDefense.md](DenDefense.md) |
 | `Merc` / `CritterAnims` | S / shared helpers | Companion ownership and weapon-animation admission; narrow Den exceptions, normal recruitment/animation policy otherwise |

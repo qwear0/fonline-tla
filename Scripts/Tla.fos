@@ -8,10 +8,10 @@
 namespace Tla
 {
 
-// Todo: добавить поддержку Map::NoLogOut
+// В планах: добавить поддержку Map::NoLogOut
 
 // Спецификации сообщений
-// note: MessageSpecifications::AimedHit должен быть MessageSpecifications::Hit+1, а MessageSpecifications::CritAimedHit — MessageSpecifications::CritHit+1
+// Примечание: MessageSpecifications::AimedHit должен быть MessageSpecifications::Hit+1, а MessageSpecifications::CritAimedHit — MessageSpecifications::CritHit+1
 // Спецификации сообщений
 
 hstring EntryHash(int entryNumber)
@@ -615,7 +615,9 @@ const int ChosenTalkNpc = 14;         // id криттера
 const int ChosenPickItem = 15;        // pid, HexX, HexY
 const int ChosenPickCrit = 16;        // id криттера, (лут — 0, толчок — 1)
 const int ChosenSneak = 17;
-const int ChosenUnloadWeapon = 18; // id предмета
+const int ChosenUnloadWeapon = 18;  // id предмета
+const int ChosenDenAutoAttack = 19; // id оружия, pid оружия, тип цели, id цели, неприцельный режим, исходный режим
+const int ChosenDenAutoMove = 20;   // как ChosenMoveToCrit; следом обязательно идёт ChosenDenAutoAttack
 
 #endif
 

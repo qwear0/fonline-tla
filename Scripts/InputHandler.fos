@@ -146,6 +146,14 @@ bool HandleHotkeys(KeyCode key)
         }
     }
 
+    if (key == KeyCode::A && Input::IsCtrlDown() && !Input::IsAltDown() && !Input::IsShiftDown() && !inputFocused) {
+        Gui::Screen? screen = Gui::GetActiveScreen();
+        if (screen != null && screen.Num == GuiScreen::Game) {
+            DenAutoAttack::Request();
+            return true;
+        }
+    }
+
     if (!Input::IsCtrlDown() && !Input::IsAltDown() && !Input::IsShiftDown()) {
         switch (key) {
         case KeyCode::F1:
@@ -153,14 +161,14 @@ bool HandleHotkeys(KeyCode key)
             break;
 
         case KeyCode::F2:
-            // breadcrumb: сохранение лога в файл, ждёт восстановления API
+            // Задел: сохранение лога в файл, ждёт восстановления API
             // if( Game.SaveText( filePath, text ) )
             //    Messaging::Info( GetGameText( MsgStr::StrLogSaved ) );
             // else
             //    Messaging::Info( GetGameText( MsgStr::StrLogNotSaved ) );
             break;
         case KeyCode::F3:
-            // breadcrumb: сохранение скриншота, ждёт восстановления API
+            // Задел: сохранение скриншота, ждёт восстановления API
             // if( Game.SaveScreenshot( filePath ) )
             //    Messaging::Info( GetGameText( MsgStr::StrScreenshotSaved ) );
             // else
@@ -245,7 +253,7 @@ bool HandleHotkeys(KeyCode key)
                 Gui::ShowScreen(GuiScreen::SkillBox);
             }
             else if (key == KeyCode::Tab && screen.Num == GuiScreen::Game) {
-                // breadcrumb: миникарта ещё не подключена
+                // Задел: миникарта ещё не подключена
                 //Gui::ShowScreen(GuiScreen::MiniMap);
             }
 

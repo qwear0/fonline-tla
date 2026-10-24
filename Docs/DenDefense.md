@@ -183,6 +183,27 @@ Only confirmed deaths of current-generation enemies on the scenario map retire o
 Incomplete spawning, map loss, disappearance, escape and unrelated deaths do not clear a wave; a lost
 outstanding actor fails diagnostically instead of awarding a false victory.
 
+## One-shot player autoattack
+
+`Ctrl+A` on the Game screen asks `DenAutoAttack` to select the nearest visible, usable target from
+**current-generation Den defense enemies only**. Server checks require a living scenario participant
+on the defense map. Smitty, companions, players, ordinary inhabitants and enemies outside this scenario
+are never automatic targets. There is no monster/faction heuristic or general-purpose combat mode.
+
+The active main-hand weapon/use is retained, including the selected empty-hand attack. The command
+executes one unaimed weapon use without changing the saved aiming mode. Unarmed/melee approaches with
+the existing action queue and pathfinder; ranged/throwing only selects an in-range, unobstructed target
+and never approaches. Holding the key does not repeat attacks; there is no automatic reload or retarget.
+If no eligible target exists, unrelated queued actions are left alone. Weapon changes, lost/dead targets,
+failed paths and stale target-selection replies cancel the automatic command. The server rechecks
+scenario eligibility before the actual attack. Ordinary `A`, aimed mouse attacks and damage rules are
+unchanged; bursts/explosions still follow the existing collateral-damage rules.
+
+Owners: `Scripts/InputHandler.fos` (hotkey), `Scripts/DenAutoAttack.fos` (selection RPC and execution
+guard), `Scripts/ChosenActions.fos` (queue), `Scripts/Tla.fos` (client action codes).
+Role/generation properties remain server-only;
+client/server outputs must be rebaked/rebuilt together for the added RemoteCalls.
+
 ## Failure presentation and verification limits
 
 All online participants are action-frozen on actual failure; Smitty's death alone is not failure.
