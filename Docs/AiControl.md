@@ -7,8 +7,8 @@ Explicit `qa_*` commands are different: when `AiControl.AllowQaCommands` is enab
 they grant privileged setup/read access, including direct property and inventory changes. Keep QA disabled
 outside disposable development/playtest runs.
 
-This is a **foundation port** adapted from the sibling project (`H:/lf-29`). The native bridge is shared
-verbatim; the script layer (`Scripts/AiControl.fos`) was rewritten against TLA's own client API. It covers
+This is a **foundation port** adapted from the sibling project (`H:/lf-29`). The native bridge originated
+there; the script layer (`Scripts/AiControl.fos`) was rewritten against TLA's own client API. It covers
 observation, events, the core player-control commands, register/login, and dialog observation, all verified
 end-to-end against a running client. Higher-level features that depend on systems TLA does not yet expose
 the same way (roster, admin prep, factions, overwatch, global-map interests, the advisory/agent-runtime
@@ -69,7 +69,12 @@ Keep the listener on loopback. It binds the local client as a remotely controlla
 | `events` | `{ "afterSeq": 0, "limit": 100 }` | Client events after a sequence number |
 | `act` | command object | Enqueues a command for the next client loop |
 
-The bridge serves one connection at a time; the next adapter is accepted once the current one closes. A connection that fails (a read or write error, typically a client that went away before its response was written) is closed and reported as `lastError` in `status`, and the bridge keeps listening. A request whose handling throws is answered with error `-32603` instead. Only a failure to open the listener stops the bridge.
+The bridge serves one connection at a time; the next adapter is accepted once the current one closes.
+Response writes stay nonblocking, handle partial output, and have a fixed five-second deadline for the
+whole response. A stalled reader is disconnected on timeout; shutdown cancels pending output through
+the stop flag without waiting for the reader. A connection that fails (including a response timeout)
+is closed and reported as `lastError` in `status`, and the bridge keeps listening. A request whose
+handling throws is answered with error `-32603` instead. Listener setup failures stop the bridge.
 
 If `AiControl.Token` is non-empty, call `auth` first on every connection. The MCP adapter does this
 automatically when `TLA_AI_TOKEN` / `--token` is supplied.

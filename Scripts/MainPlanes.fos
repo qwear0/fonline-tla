@@ -239,13 +239,8 @@ EventResult NpcPlaneRun(Critter npc, int planeId, int reason, any& r0, any& r1, 
             return EventResult::ContinueChain;
         }
 
-        // берём оружие из прошлого боя
-        if (npc.LastWeaponId == ZERO_IDENT && npc.LastWeaponNotFound) // прошлый поиск не дал результата
-        {
-            r0 = 0;
-            return EventResult::ContinueChain;
-        }
-
+        // Повторно используем только пригодное оружие: неудачный поиск не запрещает
+        // следующий, так как инвентарь, патроны и состояние NPC могли измениться.
         r0 = npc.LastWeaponId;
         r1 = npc.LastWeaponUse;
         Item? weapon = null;
@@ -254,6 +249,7 @@ EventResult NpcPlaneRun(Critter npc, int planeId, int reason, any& r0, any& r1, 
         }
 
         if (weapon != null && CheckBattleWeapon(npc, weapon)) {
+            npc.LastWeaponNotFound = false;
             return EventResult::ContinueChain;
         }
 
@@ -347,6 +343,7 @@ EventResult NpcPlaneRun(Critter npc, int planeId, int reason, any& r0, any& r1, 
 
                     if (WeaponHelpers::WeaponSkill(weapon, u) == skill) {
                         npc.LastWeaponId = weapon.Id;
+                        npc.LastWeaponNotFound = false;
                         npc.LastWeaponUse = u;
                         r0 = weapon.Id;
                         r1 = u;
@@ -536,7 +533,7 @@ EventResult NpcPlaneRun(Critter npc, int planeId, int reason, any& r0, any& r1, 
                 }
             }
 
-            // Multihex
+            // Учитываем размер криттера в гексах.
             r0 = int(r0) + multihex;
             r1 = int(r1) + multihex;
             r2 = int(r2) + multihex;
@@ -648,28 +645,28 @@ bool CogitateFiring(Critter cr, ident targetId, int& mode, int& aim)
     }
     else // считаем все режимы дальнобойными
     {
-        // отладочные Messaging::Say оставлены как breadcrumb для трассировки выбора режима стрельбы
+        // Отладочные Messaging::Say оставлены как подсказки для трассировки выбора режима стрельбы.
         bool forceBurst = false;
         if (weapon.Weapon_Round_0 > 1) {
-            // Messaging::Say(cr, "Burst is the only mode");
+            // Messaging::Say(cr, "Доступна только очередь");
             forceBurst = true;
             mode = 0;
         }
         else {
             if (weapon.Weapon_DmgType_1 == DamageTypes::None) {
-                // Messaging::Say(cr, "Single shot is the only mode");
+                // Messaging::Say(cr, "Доступен только одиночный выстрел");
                 mode = 0;
             }
             else {
-                // Messaging::Say(cr, "Second mode available");
+                // Messaging::Say(cr, "Доступен второй режим");
                 // Проверяем именно режим очереди (1), к которому переключаемся, а не одиночный (mode==0)
                 if (ValidateBurst(cr, target, weapon, 1)) {
-                    // Messaging::Say(cr, "Burst forced by check");
+                    // Messaging::Say(cr, "Проверка выбрала очередь");
                     forceBurst = true;
                     mode = 1;
                 }
                 else {
-                    // Messaging::Say(cr, "Single shot forced by check");
+                    // Messaging::Say(cr, "Проверка выбрала одиночный выстрел");
                     mode = 0;
                 }
             }
@@ -758,8 +755,8 @@ int ChooseAim(Critter cr, Critter target, Item? weapon, int mode, ProtoItem ammo
         max = next;
     }
 
-    // отладочный вывод выбранной зоны оставлен как breadcrumb
-    // Messaging::Say(cr, "Aimed shot: "+max);
+    // Отладочный вывод выбранной зоны оставлен как подсказка.
+    // Messaging::Say(cr, "Прицельный выстрел: "+max);
 
     switch (max) {
     case 1:
@@ -858,7 +855,7 @@ bool IsCurrentEnemy(Critter crit, ident targetId)
     }
 
     array<NpcPlanes::NpcPlane> plans = {};
-    // breadcrumb прежнего API: cr.GetPlanesByType(AI_PLANE_ATTACK, plans)
+    // Подсказка о прежнем API: cr.GetPlanesByType(AI_PLANE_ATTACK, plans)
     NpcPlanes::GetPlanes(cr, plans);
     for (int i = 0; i < plans.length(); i++) {
         if (plans[i].Type == NpcPlanes::AI_PLANE_ATTACK && plans[i].Attack_TargId == targetId) {
@@ -871,7 +868,7 @@ bool IsCurrentEnemy(Critter crit, ident targetId)
 
 // Решает, безопасна ли очередь: проверяет, что центральная и две боковые линии огня не
 // перекрыты не-врагами (своими/нейтралами). Закомментированные Messaging::Say — отладочные
-// breadcrumb'ы для трассировки блокировок.
+// подсказки для трассировки блокировок.
 bool ValidateBurst(Critter cr, Critter target, AbstractItem weapon, int mode)
 {
     if (Game.Random(0, 2) == 0) {
