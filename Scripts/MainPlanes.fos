@@ -37,6 +37,13 @@ EventResult NpcPlaneBegin(Critter npc, int planeId, int reason, Critter someCr, 
     return EventResult::ContinueChain;
 }
 
+// Поиск пути и реакция на заслон должны одинаково оценивать доступность двери.
+bool CanOpenDoor(Critter npc, Item obstacle)
+{
+    return obstacle.Type == ItemType::Door && !obstacle.Locker_NoOpen && AiSettings::AiCanOpenDoors(npc.AiId) &&
+           (obstacle.Locker_Broken || Lockers::IsKeyAvailable(npc, obstacle.LockerId));
+}
+
 // Вызывается при завершении плана.
 // Возврат true стирает план, false откладывает (план переходит к следующему приоритету в очереди).
 // REASON_SUCCESS
@@ -105,8 +112,7 @@ EventResult NpcPlaneEnd(Critter npc, int planeId, int reason, Critter? someCr, I
     }
     else if (reason == NpcPlanes::REASON_GAG_ITEM) {
         if (someItem != null) {
-            if (someItem.Type == ItemType::Door && !someItem.Opened && AiSettings::AiCanOpenDoors(npc.AiId) &&
-                Lockers::IsKeyAvailable(npc, someItem.LockerId)) {
+            if (!someItem.Opened && CanOpenDoor(npc, someItem)) {
                 NpcPlanes::NpcPlane child = NpcPlanes::CreatePlane();
                 child.Type = NpcPlanes::AI_PLANE_PICK;
                 child.Priority = 0;

@@ -229,10 +229,8 @@ int ProcessAi(Critter npc)
                     reason = REASON_GAG_ITEM;
                 }
 
-                // Определяем, что заблокировало движение, по гексу блокировки из контекста
-                // движения (движок задаёт его при заслоне) до остановки, чтобы реакции на заслон
-                // в NpcPlaneEnd могли атаковать блокирующего / открыть дверь. Старый код
-                // оставлял gagId неназначенным, поэтому эти реакции никогда не срабатывали.
+                // До остановки сохраняем заслон из контекста движения для реакции
+                // NpcPlaneEnd: атаки блокирующего криттера или открытия двери.
                 Critter? gagCr = null;
                 Item? gagItem = null;
                 MovingContext? moving = npc.GetMovingContext();
@@ -241,11 +239,17 @@ int ProcessAi(Critter npc)
                     if (state == MovingState::GagCritter) {
                         gagCr = map.GetCritterOnHex(blockHex);
                     }
-                    else if (state == MovingState::GagItem) {
+                    else if (state == MovingState::GagItem || state == MovingState::HexBusy) {
+                        // Закрытая дверь завершает разрешённый при поиске путь с HexBusy.
                         gagItem = Maps::MapGetDoor(map, blockHex);
+                        if (gagItem != null && MainPlanes::CanOpenDoor(npc, gagItem)) {
+                            reason = REASON_GAG_ITEM;
+                        }
                     }
                 }
 
+                plane.IsMove = false;
+                SavePlan(npc, plane);
                 npc.StopMoving();
 
                 if ((Game.OnNpcPlaneEnd.Fire(npc, plane.PlaneId, reason, gagCr, gagItem) == EventResult::ContinueChain)) {
@@ -469,7 +473,7 @@ int ProcessAi(Critter npc)
                     if (!npc.IsNoMove) {
                         plane.IsMove = true;
                         SavePlan(npc, plane);
-                        npc.MoveToHex(targ.Hex, bestDist, plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, null);
+                        npc.MoveToHex(targ.Hex, bestDist, plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, MainPlanes::CanOpenDoor);
                         break;
                     }
 
@@ -500,7 +504,7 @@ int ProcessAi(Critter npc)
                                 if (tracer.Success) {
                                     plane.IsMove = true;
                                     SavePlan(npc, plane);
-                                    npc.MoveToHex(thex, 0, plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, null);
+                                    npc.MoveToHex(thex, 0, plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, MainPlanes::CanOpenDoor);
                                     repositioned = true;
                                     break;
                                 }
@@ -526,7 +530,7 @@ int ProcessAi(Critter npc)
                         else if (maxDist > 1 && bestDist == 1) {
                             plane.IsMove = true;
                             SavePlan(npc, plane);
-                            npc.MoveToHex(targ.Hex, bestDist, plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, null);
+                            npc.MoveToHex(targ.Hex, bestDist, plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, MainPlanes::CanOpenDoor);
                         }
 
                         break;
@@ -621,7 +625,7 @@ int ProcessAi(Critter npc)
                 int speed = plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed;
                 if (!plane.IsMove || npc.GetMovingState() != MovingState::InProgress || plane.Walk_MovingHex != plane.Walk_Hex ||
                     plane.Walk_MovingCut != plane.Walk_Cut || plane.Walk_MovingSpeed != speed) {
-                    npc.MoveToHex(plane.Walk_Hex, plane.Walk_Cut, speed, null);
+                    npc.MoveToHex(plane.Walk_Hex, plane.Walk_Cut, speed, MainPlanes::CanOpenDoor);
                     plane.Walk_MovingHex = plane.Walk_Hex;
                     plane.Walk_MovingCut = plane.Walk_Cut;
                     plane.Walk_MovingSpeed = speed;
@@ -661,7 +665,7 @@ int ProcessAi(Critter npc)
             ProtoItem proto_item = Game.GetProtoItem(pid);
 
             if (Game.GetDistance(npc.Hex, hex) > 1 + npc.Multihex) {
-                npc.MoveToHex(hex, 1 + npc.Multihex, is_run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, null);
+                npc.MoveToHex(hex, 1 + npc.Multihex, is_run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, MainPlanes::CanOpenDoor);
                 plane.IsMove = true;
                 SavePlan(npc, plane);
             }

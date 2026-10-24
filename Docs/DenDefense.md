@@ -66,6 +66,9 @@ no existing serialized identifier is removed/renamed and no migration rule/engin
 - Briefing gives each participant **one crowbar and two stimpaks once per generation**. Joining alone
   does not grant them. Any briefed participant may request eligible rest; every participant may claim
   their final reward. Only the primary may issue follow/wait/defend/assist orders.
+- Participant and companion placement searches nearby hex rings, rejects occupied hexes and requires
+  a route to the workshop through openable unlocked doors. A locally free pocket between cars is not
+  a valid spawn; failure to find a connected hex aborts placement instead of trapping an actor.
 - Each of the four companions starts with one crowbar and two actual consumable stimpaks.
   [`Merc.fos`](../Scripts/Merc.fos) retains ownership through death and exempts these companions from
   ordinary dismissal/expiry. Scenario-only Charisma counting in `Merc`/`GlobalmapGroup` does not enlarge
@@ -126,8 +129,12 @@ unlocked doors. An occupied/unreachable room falls through to the other rooms, n
 or forced unlocking. If all candidates are blocked, the same cursor retries and logs periodically;
 this is not a kill. Visible reachable participants/companions distract attackers; otherwise they
 walk toward living Smitty.
-Stale/invisible distractions return to that objective. Door path checks match existing key/open-door
-policy. Scenario attackers do not flee because of the ordinary minimum-hit-chance heuristic.
+Stale/invisible distractions return to that objective. `MainPlanes.CanOpenDoor` is shared by target
+reachability, actual NPC movement and `MainPlanes` door reactions: AI permission is required, and
+non-openable or locked doors without a key remain blocked (broken locks need no key). Movement
+plans admit those doors during path search, then interpret the engine's `HexBusy` door collision as
+an opening subplan before resuming the parent task; they do not force doors open at spawn time.
+Scenario attackers do not flee because of the ordinary minimum-hit-chance heuristic.
 
 Smitty stays inside an explicit workshop hex set (door `303:147` excluded), cannot pursue or be knocked
 outside, and uses a model-compatible 10mm pistol. Admission **and actual attack execution** reject

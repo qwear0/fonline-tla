@@ -69,6 +69,29 @@ Map? GetBaseMap()
     return Game.GetMap(Content::Map::den);
 }
 
+// Свободный гекс должен иметь выход к мастерской, а не быть карманом между машинами.
+// Проверяем все кольца от центра: случайная проверка одного гекса связность не гарантирует.
+bool FindBaseSpawnHex(Map map, mpos center, int radius, mpos& hex)
+{
+    const mpos workshop = mpos(303, 144);
+    for (int ring = 0; ring <= radius; ring++) {
+        for (int x = int(center.x) - ring; x <= int(center.x) + ring; x++) {
+            for (int y = int(center.y) - ring; y <= int(center.y) + ring; y++) {
+                if (x < 0 || y < 0 || x >= int(map.Size.width) || y >= int(map.Size.height)) {
+                    continue;
+                }
+                mpos candidate = mpos(x, y);
+                if (Game.GetDistance(center, candidate) == ring && map.IsHexMovable(candidate) && map.GetCritterOnHex(candidate) == null &&
+                    (Game.GetDistance(candidate, workshop) <= 1 || map.GetPathLength(candidate, workshop, 1, CanLeaveSpawnHouse) > 0)) {
+                    hex = candidate;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 // До коммита логина допустим только перенос: никаких притязаний на поколение, набор или отряд.
 bool PlacePlayer(Critter cr)
 {
@@ -78,7 +101,7 @@ bool PlacePlayer(Critter cr)
     }
 
     mpos hex = mpos(310, 150);
-    if (!Entrance::GetFreeHex(map, 6, hex)) {
+    if (!FindBaseSpawnHex(map, hex, 6, hex)) {
         return false;
     }
 
@@ -316,7 +339,7 @@ void PlaceSmittyAtHome(Critter smitty, Map map)
 void CreateCompanion(Critter primary, Map map, int index)
 {
     mpos hex = primary.Hex;
-    verify(Entrance::GetFreeHex(map, 5, hex), "No free hex for Den companion", index);
+    verify(FindBaseSpawnHex(map, primary.Hex, 5, hex), "No reachable free hex for Den companion", index);
     dict<CritterProperty, any> props = {{CritterProperty::BagId, int(Bags::Empty)},
                                         {CritterProperty::DialogId, "den_defense_companion".hstr()},
                                         {CritterProperty::DenDefenseGeneration, Game.DenDefenseGeneration},
@@ -815,7 +838,8 @@ void SpawnEnemy()
     // Не выходим на улицу и не открываем чужие замки: перебираем остальные дома.
     for (int i = 0; i < approaches.length(); i++) {
         mpos candidate = approaches[((cursor % 3) * 6 + i) % approaches.length()];
-        if (map.IsHexMovable(candidate) && map.GetPathLength(candidate, smitty.Hex, 1 + smitty.Multihex, CanLeaveSpawnHouse) > 0) {
+        if (map.IsHexMovable(candidate) && map.GetCritterOnHex(candidate) == null &&
+            map.GetPathLength(candidate, smitty.Hex, 1 + smitty.Multihex, CanLeaveSpawnHouse) > 0) {
             hex = candidate;
             found = true;
             break;
@@ -914,12 +938,6 @@ bool CanLeaveSpawnHouse(Item obstacle)
     return obstacle.Type == ItemType::Door && !obstacle.Locker_NoOpen && obstacle.LockerId == 0;
 }
 
-// Та же политика дверей, что у MainPlanes::NpcPlaneEnd: запертые без ключа не проходим.
-bool CanPassDoor(Critter npc, Item obstacle)
-{
-    return obstacle.Type == ItemType::Door && AiSettings::AiCanOpenDoors(npc.AiId) && Lockers::IsKeyAvailable(npc, obstacle.LockerId);
-}
-
 void ChooseTarget(Critter npc)
 {
     Map? map = npc.GetMap();
@@ -942,7 +960,7 @@ void ChooseTarget(Critter npc)
         }
         int current = Game.GetDistance(npc, candidate);
         int cut = 1 + npc.Multihex + candidate.Multihex;
-        if (current < distance && (!enemy || current <= cut || map.GetPathLength(npc, candidate.Hex, cut, CanPassDoor) > 0)) {
+        if (current < distance && (!enemy || current <= cut || map.GetPathLength(npc, candidate.Hex, cut, MainPlanes::CanOpenDoor) > 0)) {
             distance = current;
             best = candidate;
         }
