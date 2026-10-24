@@ -72,8 +72,9 @@ whose generated compatibility remains unchanged, deliberately advance
 (for example to a unique release tag), then rebake/repackage together. If used, that
 override becomes a release contract: advance it for every subsequent native release,
 including generated-contract changes; never leave incompatible builds on the same tag.
-The current LAN release uses `tla-lan-20261023-equipment` to deliver the native equipment-slot
-refresh fix even though its metadata and packet schema are unchanged. Advance this tag for
+The current LAN release uses `tla-lan-20261024-merc-loot` to deliver the native equipment-snapshot
+and AI-bridge shutdown fixes together with the mercenary command/loot resources. The prior
+`tla-lan-20261023-equipment` tag must not be reused for this runtime. Advance this tag for
 every later LAN native release; do not reuse it for a different native runtime. Other profiles
 leave the override empty when the generated compatibility version is sufficient. The host/runtime
 ABI and updater-protocol boundaries still apply and may require a fresh distribution.
