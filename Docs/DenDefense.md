@@ -13,7 +13,8 @@ Smitty's former trader/dialog behavior is intentionally replaced for this scenar
   catches. `Main::OnPlayerEnter` can still be rejected and must not claim a run, kit or squad.
 - [`Main.fos`](../Scripts/Main.fos) creates Den in a fresh world and routes initial placement to the
   base. `DenDefense::ResumeController` can create a missing Den in an existing world; it does not
-  regenerate that world or select a new primary on load.
+  regenerate that world or select a new primary on load. Every server start resets the siege
+  to wave zero and marks the old attempt Failed, so the first confirmed login starts a new generation.
 - [`den_defense_smitty.fodlg`](../Dialogs/den_defense_smitty.fodlg) owns briefing, supplies, rest and
   final claims. [`den_defense_companion.fodlg`](../Dialogs/den_defense_companion.fodlg) owns individual
   orders; [`den_defense_leader.fodlg`](../Dialogs/den_defense_leader.fodlg) exposes the same commands
@@ -53,16 +54,23 @@ show a movie, revive him or trigger a reset on login. An already active wave can
 Smitty means no briefing, next rest/wave or reward dialog. Death during Resting cancels that rest and
 clears the blackout without starting another wave. Secondary death does not fail the run, but the
 character stays dead until confirmed re-entry; there is no timed automatic revival. Dead companions
-stay dead until reset. Disconnecting, ordinary Active/Victory login and loading the server do not
-select another primary. A replacement
-generation after primary death still sets up Smitty and the squad anew.
+stay dead until reset. Disconnecting and ordinary Active/Victory login do not select another primary.
+Restarting the server always ends the old attempt, including Victory; the first confirmed login then
+selects the new primary. A replacement generation after primary death or restart sets up Smitty and
+the squad anew. Saved characters retain their builds, levels, experience and remaining inventory;
+reset does not restore items lost on death.
 
 `Game` properties persist generation, IDs, stage, wave cursor, outstanding/history IDs and rest target/
 phase. Critter markers persist participation and once-per-generation kit/reward claims. Frame-time
-deadlines and client presentation are transient. Controller/rest/death callbacks validate generation;
-resume stops/replaces the map controller rather than multiplying it. An interrupted Starting setup
-becomes Failed on load, without automatically starting another attempt. These are additive properties;
-no existing serialized identifier is removed/renamed and no migration rule/engine revision bump is added.
+deadlines and client presentation are transient. Controller/rest/death callbacks validate generation.
+On every start, `ResumeController` cancels the map controller and all rest callbacks, stops scenario
+actions, clears wave/spawn/rest progress and marks the attempt Failed. It retains generation and actor
+IDs for `StartAttempt` to clean up old companions/enemies on the next confirmed login; that login
+increments the generation, so prior kit/reward claims do not apply to the new attempt. No account,
+player character or ordinary town content is deleted, and the world is not regenerated.
+No existing serialized identifier is removed/renamed and no migration rule/engine revision bump is added.
+The `LAN` profile uses persistent SQLite outside the package; see [ClientUpdates.md](ClientUpdates.md)
+for storage and restart instructions. Other profiles remain Memory unless overridden.
 
 ## Supplies, companions and ground loot
 
@@ -309,9 +317,11 @@ build targets from [AGENTS.md](../AGENTS.md#build-and-verify). Technical checks 
 routes, door boundaries, balance, corpse targeting, death presentation or animation fallback. Gameplay
 acceptance belongs to the user; do not substitute a client/AiControl session without their instruction.
 
-Before deploying matching baked resources/binaries, protect any running Memory server: shutdown loses
-its world/progress, and publication alone does not deploy the change. Use isolated bake output for
-non-gameplay verification rather than replacing resources of a valuable live session.
+Before deploying matching baked resources/binaries, protect any older Memory server: shutdown loses
+its world/progress and requires explicit approval. SQLite survives restarts, but the siege deliberately
+does not resume. Keep its external storage directory and stop gracefully before backup/deployment;
+publication alone does not deploy the change. Use isolated bake output for non-gameplay verification
+rather than replacing resources of a valuable live session.
 
 Update this page when login ownership, stage/death policy, item claims/spills, time domains, map hex
 sets, wave equipment, presentation or the script/content boundary changes. See [Systems.md](Systems.md)

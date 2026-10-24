@@ -9,10 +9,12 @@ Start with [../AGENTS.md](../AGENTS.md) for repository practices, then with the 
 
 TLA enables `FO_DATA_SOURCE_DAT`, `FO_DATA_SOURCE_ZIP`, `FO_IMAGE_FRM`, `FO_IMAGE_RIX` and
 `FO_AUDIO_ACM` in `CMakeLists.txt` for its authored Fallout archives, images and sounds. PNG, TGA and FOFRM
-importers are built in. `Server.DbStorage = Memory` needs no optional database provider.
-To select persistent storage, enable its positive `FO_DATABASE_JSON`, `FO_DATABASE_SQLITE`
-or `FO_DATABASE_MONGO` CMake option and reconfigure. Engine `2026.1.26-dev` requires new
-empty storage for JSON and SQLite; it does not convert their old formats.
+importers are built in. `Server.DbStorage = Memory` remains the base setting and needs no optional
+provider. The game enables `FO_DATABASE_SQLITE`; the `LAN` profile uses it to persist characters in
+`TLA-Storage/LAN/`, outside its package (see [ClientUpdates.md](ClientUpdates.md)). Den siege progress
+resets at server start without deleting those characters. To select another persistent provider,
+enable its positive `FO_DATABASE_JSON` or `FO_DATABASE_MONGO` CMake option and reconfigure.
+Engine `2026.1.26-dev` requires new empty storage for JSON and SQLite; it does not convert their old formats.
 See the Engine's [component selection](../Engine/Docs/en/how-to/build/project-configuration.md#optional-native-components)
 and [storage upgrade boundary](../Engine/Docs/en/explanation/persistence/index.md#storage-formats-and-upgrade-boundary).
 After an Engine update, rebuild and rebake matching client/server outputs before running them.
@@ -22,7 +24,7 @@ After an Engine update, rebuild and rebake matching client/server outputs before
 | Document | What it answers |
 | -------- | --------------- |
 | [FOSquadWorkspace.md](FOSquadWorkspace.md) | Two-repository setup, engine baseline versus local state, build commands and bounded historical evidence. |
-| [ClientUpdates.md](ClientUpdates.md) | Built-in Windows resource/DLL updates over LAN, matching client/server packaging and Memory-safe activation. |
+| [ClientUpdates.md](ClientUpdates.md) | Built-in Windows resource/DLL updates over LAN, matching client/server packaging, persistent LAN storage and safe activation. |
 | [Systems.md](Systems.md) | Durable gameplay ownership, sides, entrypoints and authored-content boundaries. Read before opening a `.fos`. |
 | [ScriptStyle.md](ScriptStyle.md) | How a `.fos` module is written: header block, comments, naming, structure. |
 | [Animation.md](Animation.md) | Baked root-motion import, sprite loading and native 2D walk-cycle alignment. |

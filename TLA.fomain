@@ -489,7 +489,8 @@ Name = LocalTest
 ServerNetwork.LoginTimeout = 0
 
 # Локальная упакованная раздача: штатный апдейтер использует игровое TCP-соединение.
-# Наследует открытый ключ разработки и Memory; этот профиль не для публичного сервера.
+# Наследует открытый ключ разработки; этот профиль не для публичного сервера.
+# База хранится вне TLA-LAN, чтобы пересборка пакета не удаляла персонажей.
 
 [SubConfig]
 Name = LAN
@@ -499,6 +500,7 @@ ClientNetwork.UseUdp = False
 # Нативные исправления снимков экипировки и остановки AI-моста требуют новой клиентской DLL.
 Network.ForceCompatibilityVersion = tla-lan-20261024-merc-loot
 Network.ServerPort = 4008
+Server.DbStorage = DbSQLite ../../TLA-Storage/LAN
 ServerNetwork.LoginTimeout = 0
 
 [SubConfig]

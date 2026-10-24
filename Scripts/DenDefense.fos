@@ -794,7 +794,7 @@ void StartAfterRest(any value)
     SpawnEnemy();
 }
 
-// Один регулярный контроллер; полезная нагрузка поколения блокирует старые отложенные вызовы.
+// При каждом запуске сбрасываем осаду; сохранённые персонажи начинают её новым входом.
 [[Event]]
 void ResumeController()
 {
@@ -804,27 +804,25 @@ void ResumeController()
     Map? map = GetBaseMap();
     verify(map != null, "Shared Den map is missing at server start");
     map.StopTimeEvent(Controller);
-    if (Game.DenDefenseStage == STAGE_STARTING) {
-        // Незавершённая настройка не продолжается при загрузке и не выбирает нового хозяина.
-        Game.DenDefenseStage = STAGE_FAILED;
-        Game.Log("Den defense interrupted setup requires next confirmed login");
-    }
-    if (Game.DenDefenseGeneration > 0 && Game.DenDefenseStage != STAGE_FAILED) {
-        map.DenDefenseNextSpawn = Game.FrameTime + Time::Seconds(3);
-        map.StartTimeEvent(Time::Asap(), Time::Seconds(1), Controller, Game.DenDefenseGeneration);
-        if (Game.DenDefenseStage == STAGE_RESTING) {
-            Game.StopTimeEvent(FinishRest);
-            Game.StopTimeEvent(StartAfterRest);
-            Game.DenDefenseRestUntil = Game.FrameTime + Time::Seconds(1);
-            BroadcastRest(Game.DenDefenseRestPhase);
-            if (Game.DenDefenseRestPhase == 0) {
-                Game.StartTimeEvent(Time::Seconds(1), FinishRest, Game.DenDefenseGeneration);
-            }
-            else {
-                Game.StartTimeEvent(Time::Seconds(1), StartAfterRest, Game.DenDefenseGeneration);
-            }
-        }
-    }
+    Game.StopTimeEvent(CloseRestDialogs);
+    Game.StopTimeEvent(FinishRest);
+    Game.StopTimeEvent(StartAfterRest);
+    Game.DenDefenseStage = STAGE_FAILED;
+    StopScenarioActions();
+    Game.DenDefenseWave = 0;
+    Game.DenDefenseSpawned = 0;
+    Game.DenDefenseSpawnTotal = 0;
+    Game.DenDefenseSpawnRetries = 0;
+    Game.DenDefenseRestUsed = false;
+    Game.DenDefenseRestPhase = 0;
+    Game.DenDefenseRestUntil = ZERO_NANOTIME;
+    Game.DenDefenseDawn = ZERO_SYNCTIME;
+    Game.DenDefenseDawnLocked = false;
+    Game.DenDefenseFailurePresented = false;
+    map.DenDefenseNextSpawn = ZERO_NANOTIME;
+    // Сохраняем поколение и списки актёров: StartAttempt уберёт старый отряд и врагов,
+    // а новое поколение отделит прежние отметки участия, выдачи припасов и наград.
+    Game.Log("Den defense reset on server start, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave);
 }
 
 [[TimeEvent]]
