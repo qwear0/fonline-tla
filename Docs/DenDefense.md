@@ -257,7 +257,7 @@ unrelated caravan/encounter NPCs that happen to use bounty-hunter prototypes.
 | Wave | Composition and equipment |
 | --- | --- |
 | 1 | 50 attackers cycling Prostitute, Drunkard and Madman; original Den models/dialogs, one-shot stock bags 26/11, plus alcohol/rocks for drunkards |
-| 2 | 30 tribals: exactly six spears, twenty-four unarmed; meat/flowers/healing powder |
+| 2 | 30 tribals in ten simultaneous groups of three: exactly six spears, twenty-four unarmed; meat/flowers/healing powder |
 | 3 | 42 unarmed townspeople and Chuck/Buck Dunton; each brother has brass knuckles and a `10mm_pistol` with **one loaded + four spare rounds**; money/alcohol/miscellaneous loot |
 
 New wave-2/3 enemies, including the Dunton brothers, start at 50% of their normal maximum HP.
@@ -291,12 +291,16 @@ completion event handles arrival; the combat controller also checks the exact po
 are unchanged. Goal, active flag, aggressor IDs and path-check deadline are transient server-only
 critter properties; no public property, RemoteCall or rename/removal migration is added.
 
-The first enemy is admitted when the 10:00 rest transition finishes. Subsequent admissions use a
-separate generation-guarded `SpawnTick` map timer with a uniform **3000–9000 real ms** delay
-(mean **6000 ms**). Both the mean and range width are four times their previous 1500 ms / 1500 ms
-values; the one-second combat controller does not quantize the interval.
-Each wave reinstalls the controller and replaces its spawn timer. Spawn selection uniformly samples
-all currently free/reachable hexes from explicit indoor sets: the original three rooms, the warehouse
+The first batch is admitted when the 10:00 rest transition finishes. Waves 1/3 admit one enemy per
+batch with a uniform **3000–9000 real ms** delay (mean **6000 ms**). Wave 2 admits **three enemies
+at once**, with a uniform **9000–27000 real ms** delay between groups (mean **18000 ms**, three times
+longer). A separate generation-guarded `SpawnTick` map timer schedules once per batch; the one-second
+combat controller does not quantize the interval. Each wave reinstalls the controller and replaces
+its spawn timer. Waves 1/3 uniformly sample all currently free/reachable indoor candidates. Wave 2
+randomly chooses one eligible room/building and three distinct free/reachable candidates inside it;
+all three positions must be available before any group member is created, otherwise the whole group
+waits for the next randomized retry. Counts and equipment still advance per enemy, not per batch.
+The explicit indoor sets cover the original three rooms, the warehouse
 below Smitty (`316:188` through `324:202`), the house beside the Brotherhood bunker (`260:172`
 through `264:180`) and the farther eastern house (rooms around `242:160` and `246:166`).
 Every candidate needs a route toward the workshop through openable, unlocked doors. An occupied or
