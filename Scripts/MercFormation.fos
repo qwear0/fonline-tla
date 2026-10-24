@@ -1,0 +1,154 @@
+// MercFormation — разнесённые позиции спутников обороны Дэна при следовании за хозяином.
+// SERVER: свободные достижимые гексы, личные резервы и один обновляемый план MercFollow.
+// Резервы хранятся на криттерах и не переживают перезапуск; бой и сбор добычи важнее построения.
+// Связи: Merc (idle), DenDefense (спутники), NpcPlanes (движение), MainPlanes (двери).
+namespace MercFormation
+{
+
+#if SERVER
+
+///@ Property Critter Server bool MercFormationReserved Mutable
+///@ Property Critter Server ident MercFormationMapId Mutable
+///@ Property Critter Server mpos MercFormationHex Mutable
+///@ Property Critter Server mpos MercFormationMasterHex Mutable
+///@ Property Critter Server bool MercFormationMoving Mutable
+
+// Вдали от строя не сдерживаем догоняющих: оцениваем только ближайшие позиции отряда.
+int SpreadPenalty(Critter merc, Critter master, Critter[] peers, mpos hex, int radius)
+{
+    int penalty = 0;
+    for (int i = 0; i < peers.length(); i++) {
+        Critter other = peers[i];
+        if (other.Id == merc.Id) {
+            continue;
+        }
+        bool reserved =
+            other.MercFormationReserved && other.MercFormationMapId == master.MapId && Game.GetDistance(master.Hex, other.MercFormationHex) <= radius;
+        mpos position = reserved ? other.MercFormationHex : other.Hex;
+        if (reserved && position == hex) {
+            return -1; // На один целевой гекс два мерка не идут.
+        }
+        if (Game.GetDistance(master.Hex, position) <= radius) {
+            penalty += Math::Max(0, Game.GetDistance(hex, position) - radius);
+        }
+    }
+    return penalty;
+}
+
+bool IsFreePosition(Critter merc, Map map, mpos hex)
+{
+    return hex == merc.Hex || (map.IsHexMovable(hex) && map.GetCritterOnHex(hex) == null);
+}
+
+// Сначала минимизируем разрыв строя, затем выбираем гекс с убывающим весом дальних колец.
+bool ChoosePosition(Critter merc, Critter master, Map map, Critter[] peers, int radius, mpos& result)
+{
+    mpos[] candidates = {};
+    int[] penalties = {};
+    int[] weights = {};
+    for (int x = int(master.Hex.x) - radius; x <= int(master.Hex.x) + radius; x++) {
+        for (int y = int(master.Hex.y) - radius; y <= int(master.Hex.y) + radius; y++) {
+            if (x < 0 || y < 0 || x >= int(map.Size.width) || y >= int(map.Size.height)) {
+                continue;
+            }
+            mpos candidate = mpos(x, y);
+            int distance = Game.GetDistance(master.Hex, candidate);
+            if (distance < 1 || distance > radius || !IsFreePosition(merc, map, candidate)) {
+                continue;
+            }
+            int penalty = SpreadPenalty(merc, master, peers, candidate, radius);
+            if (penalty < 0) {
+                continue;
+            }
+            candidates.insertLast(candidate);
+            penalties.insertLast(penalty);
+            // Деление учитывает рост числа гексов в кольце; масштаб не даёт дальним весам слипнуться в единицу.
+            weights.insertLast(100 * (radius + 1 - distance) * (radius + 1 - distance) / distance);
+        }
+    }
+    // Дорогой поиск пути нужен только выбранному гексу, а не каждому гексу всех колец.
+    while (!candidates.isEmpty()) {
+        int bestPenalty = 1000000;
+        int totalWeight = 0;
+        int chosen = 0;
+        for (int i = 0; i < candidates.length(); i++) {
+            if (penalties[i] > bestPenalty) {
+                continue;
+            }
+            if (penalties[i] < bestPenalty) {
+                bestPenalty = penalties[i];
+                totalWeight = 0;
+            }
+            totalWeight += weights[i];
+            if (Game.Random(1, totalWeight) <= weights[i]) {
+                chosen = i;
+            }
+        }
+        mpos candidate = candidates[chosen];
+        if (candidate == merc.Hex || map.GetPathLength(merc, candidate, 0, MainPlanes::CanOpenDoor) > 0) {
+            result = candidate;
+            return true;
+        }
+        candidates.removeAt(chosen);
+        penalties.removeAt(chosen);
+        weights.removeAt(chosen);
+    }
+    return false;
+}
+
+void Update(Critter merc, Critter master, Map map)
+{
+    if (NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK)) {
+        merc.MercFormationReserved = false;
+        return;
+    }
+    bool moving = master.GetMovingState() == MovingState::InProgress;
+    int radius = moving ? 3 : 5;
+    Critter[] peers = {};
+    auto ids = Game.DenDefenseCompanionIds.clone();
+    for (int i = 0; i < ids.length(); i++) {
+        Critter? other = Game.GetCritter(ids[i]);
+        if (other != null && DenDefense::IsCompanion(other) && other.IsAlive() && other.MapId == map.Id && other.MercMasterId == master.Id &&
+            !other.MercWaitForMaster && !other.MercLootActive && !NpcPlanes::IsCurPlane(other, NpcPlanes::AI_PLANE_ATTACK)) {
+            peers.insertLast(other);
+        }
+    }
+
+    mpos target = merc.MercFormationHex;
+    bool keep = merc.MercFormationReserved && merc.MercFormationMapId == map.Id && merc.MercFormationMasterHex == master.Hex &&
+                merc.MercFormationMoving == moving && IsFreePosition(merc, map, target) && SpreadPenalty(merc, master, peers, target, radius) == 0;
+    // Закончившийся не у цели план означает блокировку пути: выбираем позицию заново.
+    NpcPlanes::NpcPlane[]? planes = NpcPlanes::GetPlanes(merc, "MercFollow".hstr());
+    if (keep && (target == merc.Hex || planes != null)) {
+        return;
+    }
+    merc.MercFormationReserved = false;
+    if (!ChoosePosition(merc, master, map, peers, radius, target)) {
+        if (planes != null) {
+            merc.StopMoving();
+            MercLoot::RemoveWalk(merc, "MercFollow".hstr());
+        }
+        return; // В тесном проходе ждём освобождения гекса, не телепортируем и не толкаем.
+    }
+    merc.MercFormationHex = target;
+    merc.MercFormationMasterHex = master.Hex;
+    merc.MercFormationMoving = moving;
+    merc.MercFormationMapId = map.Id;
+    merc.MercFormationReserved = true;
+    if (planes != null) {
+        NpcPlanes::NpcPlane follow = planes[0];
+        if (follow.Walk_Hex != target) {
+            follow.Walk_Hex = target;
+            follow.Walk_Cut = 0;
+            follow.Run = Merc::ShouldMercAlwaysRun(merc);
+            follow.IsMove = false;
+        }
+    }
+    else if (merc.Hex != target) {
+        NpcPlanes::AddWalkPlane(merc, 0, "MercFollow".hstr(), 0, target, Merc::GetDir(merc, master), Merc::ShouldMercAlwaysRun(merc), 0);
+    }
+}
+
+#endif
+
+}

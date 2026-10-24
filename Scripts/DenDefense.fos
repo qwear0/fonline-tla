@@ -131,6 +131,11 @@ bool IsCompanion(Critter cr)
     return IsActor(cr) && cr.DenDefenseRole == ROLE_COMPANION;
 }
 
+bool IsWaveEnemy(Critter cr)
+{
+    return IsActor(cr) && cr.DenDefenseRole == ROLE_ENEMY;
+}
+
 // Ослабляем весь рукопашный урон врагов волны, а не только бонус от силы.
 int ScaleEnemyMeleeDamage(Critter cr, int damage)
 {
@@ -1201,6 +1206,35 @@ void ConfirmEnemyDeath(Critter cr)
     if (index >= 0) {
         enemies.removeAt(index);
         Game.DenDefenseEnemyIds = enemies;
+        ShareKillExperience(cr);
+    }
+}
+
+// Пул за смерть врага выдаём один раз, независимо от добившего, включая Смитти и среду.
+void ShareKillExperience(Critter enemy)
+{
+    auto ids = Game.DenDefenseParticipantIds.clone();
+    ids.insertLast(Game.DenDefenseCompanionIds);
+    Critter[] recipients = {};
+    for (int i = 0; i < ids.length(); i++) {
+        Critter? cr = Game.GetCritter(ids[i]);
+        if (cr != null && (IsParticipant(cr) || IsCompanion(cr)) && !cr.IsDead() && cr.MapId == enemy.MapId) {
+            recipients.insertLast(cr);
+        }
+    }
+    if (recipients.isEmpty() || enemy.KillExperience <= 0) {
+        return;
+    }
+
+    int share = enemy.KillExperience / recipients.length();
+    int remainder = enemy.KillExperience % recipients.length();
+    // Остаток не теряем и не отдаём постоянно первому участнику или хозяину.
+    int first = Game.Random(0, recipients.length() - 1);
+    for (int i = 0; i < recipients.length(); i++) {
+        int amount = share + (i < remainder ? 1 : 0);
+        if (amount > 0) {
+            recipients[(first + i) % recipients.length()].Experience += amount;
+        }
     }
 }
 

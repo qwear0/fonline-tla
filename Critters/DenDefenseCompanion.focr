@@ -19,7 +19,7 @@ TagSkill1 = SkillMeleeWeapons
 TagSkill2 = SkillFirstAid
 TagSkill3 = SkillSmallGuns
 Level = 3
-IsNoBarter = True
+IsNoBarter = False
 
 $Text russ = "Соплеменник"
 $Text engl = "Tribesman"

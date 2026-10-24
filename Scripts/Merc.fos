@@ -280,6 +280,9 @@ void MercIdleImpl(Critter merc)
         return; // погиб хозяин
     }
 
+    if (merc.MercWaitForMaster || merc.MercLootActive) {
+        merc.MercFormationReserved = false;
+    }
     if (MercLoot::Process(merc)) {
         return;
     }
@@ -302,6 +305,10 @@ void MercIdleImpl(Critter merc)
                 }
 
                 if (!merc.MercWaitForMaster) {
+                    if (DenDefense::IsCompanion(merc)) {
+                        MercFormation::Update(merc, master, masterMap);
+                        return;
+                    }
                     // Один обновляемый план вместо очереди устаревших позиций хозяина.
                     NpcPlanes::NpcPlane[]? followPlanes = NpcPlanes::GetPlanes(merc, "MercFollow".hstr());
                     if (followPlanes != null) {

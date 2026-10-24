@@ -63,7 +63,7 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | `DenAutoAttack` / `InputHandler` / `ChosenTabs` | S/C | Ctrl+A selects usable Den enemies with positive HP first, then distance; Ctrl+Shift+A repeats when AP allows, with a HUD status tab; melee-only approach, no aiming; [DenDefense.md](DenDefense.md#player-autoattack) |
 | `PlayerRegistration` | S/C | Login and registration; confirmed returned Player commits Den defense entry |
 | `DenDefense` | S/C | Shared Den generation/primary, companions, rest/waves, ground loot and failure; restart resets siege, not saved characters; `OnSuccessfulLogin`, `ResumeController`; [DenDefense.md](DenDefense.md) |
-| `Merc` / `MercLoot` / `FavoriteItem` / `CritterAnims` | S / shared helpers | Companion ownership, leader-to-squad dialog behavior propagation (`SetBehaviorParameter`, `ROLE_LEADER`), transient reserved-target Den loot jobs, persistent weapon readiness maintained outside combat, and weapon-animation admission; narrow Den exceptions, normal recruitment/animation policy otherwise |
+| `Merc` / `MercFormation` / `MercLoot` / `FavoriteItem` / `CritterAnims` | S / shared helpers | Companion ownership, leader-to-squad dialog behavior propagation (`SetBehaviorParameter`, `ROLE_LEADER`), distinct reserved Den follow positions, transient reserved-target Den loot jobs, persistent weapon readiness maintained outside combat, and weapon-animation admission; narrow Den exceptions, normal recruitment/animation policy otherwise |
 | `Replication` | S | Ordinary death/respawn/permanent-death flow; Den participants use their scenario's base resurrection instead |
 | `TownSupply` | S | Disabled city bounty-hunter retaliation; `CallTownSupply`, pending callbacks and direct spawns are inert; legacy guards are removed |
 
@@ -75,7 +75,7 @@ See [Animation.md](Animation.md) for the native baked root-motion flow, distinct
 | --- | --- | --- |
 | `Dialogs` | S/C | Dialog contexts, speech/answer transport and close flow |
 | `Dialog` / `NpcDialog` | S | Authored demand/result handlers and NPC-specific helpers |
-| `Barter` | S | Authoritative NPC barter |
+| `Barter` | S | Authoritative NPC barter; free two-way item transfer with the primary's Den companions |
 | `FixBoy` | S/C | Crafting UI and validated crafting; recipes in `Resources/ServerData/CraftRecipes.json` |
 | `ClientItems` | S/C | Inventory/container presentation and synchronization |
 | `Item` / `ItemMovement` | S | Doors, holodisks, deferred destruction and move rules |
@@ -90,9 +90,11 @@ See [Animation.md](Animation.md) for the native baked root-motion flow, distinct
 AP cost and aiming. `ClientItems::OnCritterAction` refreshes cached inventory cells after
 authoritative slot moves; the engine must apply slots before raising that event.
 
-Merc following keeps one `MercFollow` walk plan and retargets it to the master's latest
-hex with `MercMasterDist` as the stop radius. It does not queue historical player positions.
-Unchanged active walk routes are not restarted every AI tick; attack plans retain priority.
+Merc following keeps one `MercFollow` walk plan, not a queue of historical player positions.
+Ordinary mercs target the master's latest hex with `MercMasterDist` as the stop radius. Den companions
+use `MercFormation` to reserve distinct reachable positions: weighted 1–5-hex idle rings and compact
+1–3-hex moving rings, preferring pairwise separation within the same bounds. They walk to the exact
+reserved hex. Unchanged active walk routes are not restarted every AI tick; attack plans retain priority.
 `MercLoot` temporarily replaces following with reserved-target collection walks; completion or explicit
 follow/wait releases the job. See [DenDefense.md](DenDefense.md#supplies-companions-and-ground-loot).
 

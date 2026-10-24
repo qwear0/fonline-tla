@@ -1,7 +1,7 @@
 // Combat — серверная механика боя: расчёт попадания, урона, критов и рассылка результатов клиентам.
 // Отвечает за проведение атак (CombatAttack), применение урона (ApplyDamage/InjureCritter), критические промахи, взрывы (CommenceExplosion), прицельные выстрелы, очереди и выбор случайной цели.
 // Только сторона SERVER; результаты боя собираются в дерево CombatRes и отправляются игрокам через PlayerClientCall.CombatResult.
-// DenDefense задаёт ослабление рукопашного урона только для врагов своих волн.
+// DenDefense задаёт ослабление рукопашного урона и общий опыт за смерть врагов своих волн.
 namespace Combat
 {
 
@@ -2056,7 +2056,10 @@ void ApplyDamage(AttackStruct attack, Critter target, int rounds, bool isCritica
         }
 
         if (attacker != null) {
-            attacker.Experience += target.KillExperience;
+            // Опыт за врага волны делится в DenDefense после подтверждения его смерти.
+            if (!DenDefense::IsWaveEnemy(target)) {
+                attacker.Experience += target.KillExperience;
+            }
             if (bt < attacker.Kills.length()) {
                 int[] kills = attacker.Kills.clone();
                 kills[bt] += 1;

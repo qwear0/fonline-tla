@@ -2,6 +2,7 @@
 // Ключевое: получение коллекций (инвентарь/лут/бартер), исключение отданных/убранных предметов,
 // перенос между коллекциями, отправка бартер-оффера на сервер; SERVER-часть принимает оффер.
 // Сторона: MIXED (CLIENT основной + SERVER RemoteCall). Связи: Gui, Barter, ClientDefines, Content.
+// Глобальные коллекции и флаги нужны клиентскому UI между сетевыми событиями одной сессии обмена.
 namespace ClientItems
 {
 
@@ -9,7 +10,7 @@ namespace ClientItems
 ///@ RemoteCall Server CloseTransfer(int32 expectedTransferType, ident expectedContainerId, uint32 expectedTransferSession)
 ///@ RemoteCall Server ResumeDialogFromBarter(ident traderId, uint32 expectedTransferSession)
 ///@ RemoteCall Client BarterOfferProcessed(uint32 expectedTransferSession)
-///@ RemoteCall Client SetBarterPricing(uint32 expectedTransferSession, int32 barterCoefficient, bool hasMasterTrader)
+///@ RemoteCall Client SetBarterPricing(uint32 expectedTransferSession, int32 barterCoefficient, bool hasMasterTrader, bool companionTransfer)
 
 // Нормализует ввод пятизначного окна Split и не пропускает нулевой/лишний count в действие.
 int NormalizeSplitCount(int count, int itemCount)
@@ -53,6 +54,7 @@ bool BarterOfferPending = false;
 uint PendingBarterSession = 0;
 int BarterCoefficient = Barter::MinBarterCoefficient;
 bool BarterHasMasterTrader = false;
+bool BarterCompanionTransfer = false;
 uint ActiveBarterSession = 0;
 bool ContainerOperationPending = false;
 int PendingContainerTransferType = int(TransferTypes::Close);
@@ -426,7 +428,7 @@ bool BarterOffer(uint expectedTransferSession)
         buyItemsCount.insertLast(itemsBuy[i].Count);
     }
 
-    if (saleItemsIds.length() == 0) {
+    if (saleItemsIds.length() == 0 && (!BarterCompanionTransfer || buyItemsIds.length() == 0)) {
         return false;
     }
 
@@ -454,7 +456,7 @@ void BarterOfferProcessed(uint expectedTransferSession)
 // Сервер передаёт тот же коэффициент и состояние Master Trader, которые использует при
 // авторитетной проверке сделки. Поэтому суммы в окне совпадают с серверными до единицы.
 [[ClientRemoteCall]]
-void SetBarterPricing(uint expectedTransferSession, int barterCoefficient, bool hasMasterTrader)
+void SetBarterPricing(uint expectedTransferSession, int barterCoefficient, bool hasMasterTrader, bool companionTransfer)
 {
     if (!HasChosen || Chosen.TransferType != TransferTypes::CritBarter || Chosen.TransferSession != expectedTransferSession) {
         return;
@@ -462,10 +464,14 @@ void SetBarterPricing(uint expectedTransferSession, int barterCoefficient, bool 
 
     BarterCoefficient = Math::Clamp(barterCoefficient, Barter::MinBarterCoefficient, Barter::MaxBarterCoefficient);
     BarterHasMasterTrader = hasMasterTrader;
+    BarterCompanionTransfer = companionTransfer;
 }
 
 int64 GetBarterCollectionCost(int collectionType)
 {
+    if (BarterCompanionTransfer) {
+        return 0;
+    }
     bool playerSale = collectionType == ClientDefines::ITEMS_BARTER_OFFER;
     bool playerBuy = collectionType == ClientDefines::ITEMS_BARTER_OPPONENT_OFFER;
     Item[] items = RefreshItemsCollection(collectionType);
@@ -527,7 +533,7 @@ bool BarterTransfer(ident item_id, int collectionTypeFrom, int item_count)
 
     // Предметы без контрактной стоимости нельзя превращать в бартерную валюту. Сервер повторяет
     // эту проверку через GetSaleUnitCost/GetStackCost для недоверенного оффера.
-    if (collectionTypeFrom == ClientDefines::ITEMS_BARTER && Barter::GetSaleUnitCost(item.Cost, BarterCoefficient) == 0) {
+    if (!BarterCompanionTransfer && collectionTypeFrom == ClientDefines::ITEMS_BARTER && Barter::GetSaleUnitCost(item.Cost, BarterCoefficient) == 0) {
         return false;
     }
 

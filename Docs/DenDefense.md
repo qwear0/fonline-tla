@@ -100,6 +100,32 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   [`Merc.fos`](../Scripts/Merc.fos) retains ownership through death and exempts these companions from
   ordinary dismissal/expiry. Scenario-only Charisma counting in `Merc`/`GlobalmapGroup` does not enlarge
   vehicle seating or exempt unrelated recruits.
+- **Wave kill XP is shared**, not awarded to the last hitter. `Combat` suppresses its ordinary
+  killer-only award for current-generation wave enemies; `ConfirmEnemyDeath` removes a registered
+  enemy and distributes its `KillExperience` once. Every non-dead participant and scenario companion
+  on that map gets an equal base share, including knocked-out defenders, regardless of damage dealt
+  or whether a player, companion, Smitty or the environment finished the enemy. Integer remainder
+  points go to randomly rotated recipients; the base pool is not multiplied or discarded. More
+  eligible defenders means less XP each. Dead/off-map actors and Smitty do not take a share. Ordinary
+  experience setters, level-ups and personal XP perks still apply; unrelated kills are unchanged.
+- The primary can press **Barter** in a living companion's dialog to transfer items freely in either
+  direction, without payment or a matching offer. `Barter` sends inventory and equipped belongings,
+  excluding hidden, gag and bad items; server checks retain item ownership/counts, distance, session,
+  movement vetoes and both actors' final carry weight. Another participant cannot access the squad's
+  inventory. `ClientItems.SetBarterPricing` now includes a server-supplied `companionTransfer` flag:
+  the window shows zero prices and accepts take-only/give-only offers, but the server independently
+  rechecks companion control. Matching client/server Scripts and Metadata packs must be deployed
+  together. Ordinary NPC trading still requires payment.
+- Following companions use [`MercFormation.fos`](../Scripts/MercFormation.fos), called from
+  `Merc::MercIdleImpl`, instead of converging on the same master hex. Each reserves a distinct free,
+  reachable target and walks to it with zero stop radius. At rest, target rings are 1–5 hexes from
+  the master, with decreasing weight for farther rings, and selection minimizes pairwise separation
+  beyond five hexes. During movement, both bounds tighten to three hexes. Existing targets remain
+  stable until the master moves/stops, a target becomes occupied or its route fails. Reservations
+  are transient `Critter.MercFormation*` properties. Combat and loot jobs take priority; waiting
+  companions hold their orders. Obstacles and scattered/catching-up actors may temporarily prevent
+  the preferred spacing; formation never teleports or displaces critters. Unrelated mercs retain
+  ordinary `MercMasterDist` following.
 - Ordinary and super stimpaks declare both `IsCanUse` (inventory self-use) and `IsCanUseOnSmth`
   (use on another critter). `CritterActions.UseItemOn` checks these capabilities before dispatching
   to `Main.CritterUseItem` -> `Drugs.UseDrug` / `UseDrugOn`; one unit is consumed through `ItemStacks`.
