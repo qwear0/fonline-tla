@@ -79,6 +79,9 @@ For redistribution, archive the complete client root including its DLL, PDBs and
    updater asks for a restart, close/relaunch the **client** to load the new DLL.
    This does not restart the server or erase its SQLite DB.
 
+After successful activation, follow [DiskCleanup.md](DiskCleanup.md) for staging cleanup and rollback
+retention. Do not retain a full staging copy as the only verification evidence or delete an active feed/log.
+
 A changed DLL hash alone does not enter native-update mode. For a native-only release
 whose generated compatibility remains unchanged, deliberately advance
 `Network.ForceCompatibilityVersion` in the `LAN` subconfig on **both** packaged sides

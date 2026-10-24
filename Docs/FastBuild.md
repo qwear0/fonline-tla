@@ -2,6 +2,7 @@
 
 Read before choosing build, verification, packaging or server-restart commands. Use the smallest
 adequate route; this guide does not replace the activation/storage rules in [ClientUpdates.md](ClientUpdates.md).
+For the purpose of `Baking/`, output retention and end-of-task cleanup, read [DiskCleanup.md](DiskCleanup.md).
 
 ## Choose the work, not the full chain
 
@@ -64,6 +65,8 @@ Before activation, require successful packaging and complete `ServerResources/`,
 4. Confirm `Connect to DbSQLite data base`, `Load client data packs for synchronization`, `Restore world`,
    `Start server complete!`, the expected listening port and no warnings/errors. Den siege resets on restart;
    saved characters remain. Report preparation and downtime separately.
+5. Follow [DiskCleanup.md](DiskCleanup.md): keep compact evidence, one working bake and the required
+   rollback sets; remove only finished task-owned staging copies, not the active package or its logs.
 
 ## Current limit: packaging is not incremental baking
 
