@@ -127,14 +127,17 @@
             }
 
             int cursor = Gui::Cursor;
-            // Обновляем и при неизменном курсоре: цель могла умереть или только появиться.
-            ucolor contour = (cursor == CursorType::UseWeapon ? ucolor(255, 0, 0, 255) : ZERO_UCOLOR);
-            Critter[] visibleCritters = CurMap.GetCritters(CritterFindType::Any);
-            for (int i = 0; i < visibleCritters.length(); i++) {
-                Critter cr = visibleCritters[i];
-                ucolor targetContour = cr.IsDead() ? ZERO_UCOLOR : contour;
-                if (cr.Contour != targetContour) {
-                    cr.Contour = targetContour;
+            // Курсор рисуется и в меню/при загрузке, когда текущей карты ещё нет.
+            if (HasCurMap) {
+                // Обновляем и при неизменном курсоре: цель могла умереть или только появиться.
+                ucolor contour = (cursor == CursorType::UseWeapon ? ucolor(255, 0, 0, 255) : ZERO_UCOLOR);
+                Critter[] visibleCritters = CurMap.GetCritters(CritterFindType::Any);
+                for (int i = 0; i < visibleCritters.length(); i++) {
+                    Critter cr = visibleCritters[i];
+                    ucolor targetContour = cr.IsDead() ? ZERO_UCOLOR : contour;
+                    if (cr.Contour != targetContour) {
+                        cr.Contour = targetContour;
+                    }
                 }
             }
             // Прокрутка карты
@@ -177,7 +180,7 @@
             if (cursor == CursorType::UseWeapon) {
                 CursorAttack.Draw(Game.MousePos, isize(), 0, 0);
 
-                if (!HasChosen) {
+                if (!HasCurMap || !HasChosen) {
                     return;
                 }
                 Critter chosen = Chosen;
