@@ -6,12 +6,16 @@
 // между картами и на глобале, отложенное увольнение и возврат домой/удаление,
 // а также набор диалоговых условий и результатов для квестов и найма.
 // Параметры мерков хранятся в Property-декларациях группы Mercs на криттере.
+// Главный мерк (NpcRole = ROLE_LEADER) передаёт диалоговые настройки всем меркам хозяина.
 // Связи: NpcPlanes (боевые/ходовые планы), GlobalmapGroupExtended (группы на
 // глобале), Entrance/Teams/CritterState/PlayerRegistration, Tla (общие enum'ы).
 namespace Merc
 {
 
 #if SERVER
+
+// Общая роль главного мерка; хранится в существующем NpcRole, без нового свойства.
+const int ROLE_LEADER = 1000001;
 
 // Базовые типы мерков, для использования без дополнительного скриптования
 const int MERC_CUSTOM = 0;          // произвольный, без выраженного типа
@@ -381,7 +385,7 @@ void MercIdle(Critter merc)
 // player - хозяин мерка
 // merc - мерк
 // type - тип мерка
-bool Merc2Player(Critter player, Critter merc, int type) // Predefined Mercs
+bool Merc2Player(Critter player, Critter merc, int type) // Типовой шаблон мерка
 {
     return Merc2Player(player,
                        merc,
@@ -398,13 +402,13 @@ bool Merc2Player(Critter player, Critter merc, int type) // Predefined Mercs
 // Добавление мерка игроку. Тип мерка Merc::MercFollowerDefault.
 // player - хозяин мерка
 // merc - мерк
-bool Merc2Player(Critter player, Critter merc) // Default follower
+bool Merc2Player(Critter player, Critter merc) // Обычный спутник
 {
     return Merc2Player(player, merc, Merc::MercFollowerDefault);
 }
 
 bool Merc2Player(Critter player, Critter merc, bool alwaysRun, bool cancelOnAttack, int loseDist, int mercMasterDist, int type, bool defendMaster,
-                 bool assistMaster) // Custom Mercs
+                 bool assistMaster) // Произвольные настройки мерка
 {
     return Merc2Player(player, merc, alwaysRun, cancelOnAttack, loseDist, mercMasterDist, type, defendMaster, assistMaster, ZERO_TIMESPAN);
 }
@@ -423,7 +427,7 @@ bool Merc2Player(Critter player, Critter merc, bool alwaysRun, bool cancelOnAtta
 // assistMaster - признак, если хозяин кого-то атакует, мерк присоединится к атаке
 // fireTime - время увольнения
 bool Merc2Player(Critter player, Critter merc, bool alwaysRun, bool cancelOnAttack, int loseDist, int mercMasterDist, int type, bool defendMaster,
-                 bool assistMaster, timespan fireTime) // Custom Mercs
+                 bool assistMaster, timespan fireTime) // Произвольные настройки и срок службы
 {
     if (merc.Id == player.Id) {
         Game.Log("Wrong mercenary master... Merc creation failed");
@@ -454,7 +458,7 @@ bool Merc2Player(Critter player, Critter merc, bool alwaysRun, bool cancelOnAtta
 // loseDist - дистанция, при превышении которой между игроком и нпц, отменяется режим мерка.
 // При loseDist= 0 - мерк не будет отставать от хозяина
 // mercMasterDist - дистанция, на которую будет стремиться приблизиться мерк при перемещении хозяина по карте
-bool Merc2Player(Critter player, Critter merc, bool alwaysRun, bool cancelOnAttack, int loseDist, int mercMasterDist) // Custom Mercs
+bool Merc2Player(Critter player, Critter merc, bool alwaysRun, bool cancelOnAttack, int loseDist, int mercMasterDist) // Произвольные настройки мерка
 {
     return Merc2Player(player, merc, alwaysRun, cancelOnAttack, loseDist, mercMasterDist, MERC_CUSTOM, false, false, ZERO_TIMESPAN);
 }
@@ -478,7 +482,7 @@ void CancelMerc(Critter merc)
     merc.OnSomeCritterAttacked.Unsubscribe(MercSmthAttacked);
     merc.OnGlobalMapProcess.Unsubscribe(MercGlobalProcess);
 
-    Game.StartTimeEvent(ReleaseTime(), ReleaseMerc, merc.Id); //SavedDeferredCall
+    Game.StartTimeEvent(ReleaseTime(), ReleaseMerc, merc.Id); // Сохраняемый отложенный вызов
 }
 
 [[TimeEvent]]
@@ -838,10 +842,47 @@ void CancelPlayerMerc(Critter player, Critter? npc)
     CancelMerc(npc);
 }
 
-// Установка параметров мерка
-// сработает только, если нпц является чьим-то мерком
-// param - номер параметра (см. MERC_... параметры в _defines.fos)
-// value - значение
+// Только настройки поведения передаются от главного мерка отряду: хозяин,
+// тип контракта и срок службы остаются индивидуальными.
+bool IsBehaviorParameter(CritterProperty param)
+{
+    return param == CritterProperty::MercAlwaysRun || param == CritterProperty::MercCancelOnAttack || param == CritterProperty::MercLoseDist ||
+           param == CritterProperty::MercMasterDist || param == CritterProperty::MercDefendMaster || param == CritterProperty::MercAssistMaster ||
+           param == CritterProperty::MercCancelOnGlobal || param == CritterProperty::MercWaitForMaster;
+}
+
+void ApplyBehaviorParameter(Critter merc, CritterProperty param, int value)
+{
+    merc.SetAsInt(param, value);
+    if (param == CritterProperty::MercWaitForMaster && merc.MercWaitForMaster) {
+        NpcPlanes::DropPlanes(merc);
+    }
+}
+
+// Копируем итоговое значение главного, а не переключаем каждого спутника:
+// до приказа их настройки могут отличаться. Учитываем и ожидающих на других картах.
+void SetBehaviorParameter(Critter player, Critter merc, CritterProperty param, int value)
+{
+    if (!NpcIsPlayerMercImpl(player, merc) || !IsBehaviorParameter(param)) {
+        return;
+    }
+
+    ApplyBehaviorParameter(merc, param, value);
+    if (merc.NpcRole != ROLE_LEADER) {
+        return;
+    }
+
+    Critter[] mercs = Game.GetCritters(CritterFindType::Npc);
+    for (int i = 0; i < mercs.length(); i++) {
+        Critter follower = mercs[i];
+        if (follower.Id != merc.Id && follower.MercMasterId == player.Id) {
+            ApplyBehaviorParameter(follower, param, value);
+        }
+    }
+}
+
+// Установка параметров мерка через существующие диалоги.
+// param — номер свойства, value — его итоговое значение.
 [[DialogResult]]
 void SetMercParameter(Critter player, Critter? npc, any param, any value)
 {
@@ -853,7 +894,13 @@ void SetMercParameter(Critter player, Critter? npc, any param, any value)
         return;
     }
 
-    npc.SetAsInt(CritterProperty(param), value);
+    CritterProperty property = CritterProperty(param);
+    if (IsBehaviorParameter(property)) {
+        SetBehaviorParameter(player, npc, property, value);
+    }
+    else {
+        npc.SetAsInt(property, value);
+    }
 }
 
 // Специальный метод для сохранения Id мерка в переменную
@@ -881,7 +928,7 @@ void CancelMerc(Critter player, Critter npc, any varNum)
 void WaitMaster(Critter player, Critter? npc)
 {
     Map? map = player.GetMap();
-    if (map == null || npc == null) {
+    if (map == null || npc == null || !NpcIsPlayerMercImpl(player, npc)) {
         return;
     }
 
@@ -890,14 +937,14 @@ void WaitMaster(Critter player, Critter? npc)
         Location::SetKnownLoc(player, loc);
     }
 
-    npc.MercWaitForMaster = true;
+    SetBehaviorParameter(player, npc, CritterProperty::MercWaitForMaster, 1);
 }
 
 [[DialogResult]]
 void FollowMaster(Critter player, Critter? npc)
 {
     if (npc != null) {
-        npc.MercWaitForMaster = false;
+        SetBehaviorParameter(player, npc, CritterProperty::MercWaitForMaster, 0);
     }
 }
 

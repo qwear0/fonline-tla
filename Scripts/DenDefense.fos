@@ -358,14 +358,17 @@ void CreateCompanion(Critter primary, Map map, int index)
 {
     mpos hex = primary.Hex;
     verify(FindBaseSpawnHex(map, primary.Hex, 5, hex), "No reachable free hex for Den companion", index);
+    bool leader = index == 0;
     dict<CritterProperty, any> props = {{CritterProperty::BagId, int(Bags::Empty)},
-                                        {CritterProperty::DialogId, "den_defense_companion".hstr()},
+                                        {CritterProperty::DialogId, leader ? "den_defense_leader".hstr() : "den_defense_companion".hstr()},
                                         {CritterProperty::DenDefenseGeneration, Game.DenDefenseGeneration},
                                         {CritterProperty::DenDefenseRole, ROLE_COMPANION},
                                         {CritterProperty::ReplicationTime, -1},
                                         // Итоговые ОЖ 103/91: ещё +50% к прежним 69/61, с округлением вниз.
                                         {CritterProperty::MaxLifeBase, index % 2 == 0 ? 70 : 58}};
-    Critter companion = map.AddCritter("DenDefenseCompanion".hstr(), hex, HDIR_Random, props);
+    // Главный заменяет первого из четырёх спутников, не увеличивая силу отряда.
+    hstring proto = leader ? "DenDefenseLeader".hstr() : "DenDefenseCompanion".hstr();
+    Critter companion = map.AddCritter(proto, hex, HDIR_Random, props);
     companion.MakePersistent(true);
     auto ids = Game.DenDefenseCompanionIds.clone();
     ids.insertLast(companion.Id);
@@ -414,7 +417,7 @@ bool CanCommand(Critter player, Critter npc)
 void Follow(Critter player, Critter npc)
 {
     if (CanControlCompanion(player, npc)) {
-        npc.MercWaitForMaster = false;
+        Merc::SetBehaviorParameter(player, npc, CritterProperty::MercWaitForMaster, 0);
     }
 }
 
@@ -422,8 +425,7 @@ void Follow(Critter player, Critter npc)
 void Wait(Critter player, Critter npc)
 {
     if (CanControlCompanion(player, npc)) {
-        npc.MercWaitForMaster = true;
-        NpcPlanes::DropPlanes(npc);
+        Merc::SetBehaviorParameter(player, npc, CritterProperty::MercWaitForMaster, 1);
     }
 }
 
@@ -431,7 +433,7 @@ void Wait(Critter player, Critter npc)
 void ToggleDefend(Critter player, Critter npc)
 {
     if (CanControlCompanion(player, npc)) {
-        npc.MercDefendMaster = !npc.MercDefendMaster;
+        Merc::SetBehaviorParameter(player, npc, CritterProperty::MercDefendMaster, npc.MercDefendMaster ? 0 : 1);
     }
 }
 
@@ -439,7 +441,7 @@ void ToggleDefend(Critter player, Critter npc)
 void ToggleAssist(Critter player, Critter npc)
 {
     if (CanControlCompanion(player, npc)) {
-        npc.MercAssistMaster = !npc.MercAssistMaster;
+        Merc::SetBehaviorParameter(player, npc, CritterProperty::MercAssistMaster, npc.MercAssistMaster ? 0 : 1);
     }
 }
 

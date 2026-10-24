@@ -15,7 +15,9 @@ Smitty's former trader/dialog behavior is intentionally replaced for this scenar
   base. `DenDefense::ResumeController` can create a missing Den in an existing world; it does not
   regenerate that world or select a new primary on load.
 - [`den_defense_smitty.fodlg`](../Dialogs/den_defense_smitty.fodlg) owns briefing, supplies, rest and
-  final claims. [`den_defense_companion.fodlg`](../Dialogs/den_defense_companion.fodlg) owns orders.
+  final claims. [`den_defense_companion.fodlg`](../Dialogs/den_defense_companion.fodlg) owns individual
+  orders; [`den_defense_leader.fodlg`](../Dialogs/den_defense_leader.fodlg) exposes the same commands
+  for the whole squad.
   Neither requires a minimum Intelligence/Charisma. Russian and English text are authored together.
   Client approach and server dialog validation use the NPC's `TalkDistance` plus the initiator's
   `Multihex`, not the player's own talk radius; Smitty's five-hex radius must work on both sides.
@@ -70,8 +72,11 @@ no existing serialized identifier is removed/renamed and no migration rule/engin
 - Participant and companion placement searches nearby hex rings, rejects occupied hexes and requires
   a route to the workshop through openable unlocked doors. A locally free pocket between cars is not
   a valid spawn; failure to find a connected hex aborts placement instead of trapping an actor.
-- Each companion uses [`Critters/DenDefenseCompanion.focr`](../Critters/DenDefenseCompanion.focr):
-  the long-haired leather-jacket model `hmlmax`, level 3 / 3,000 XP and SPECIAL `8/4/5/4/5/10/4`
+- The four-person squad has exactly one leader (the first companion), using
+  [`Critters/DenDefenseLeader.focr`](../Critters/DenDefenseLeader.focr): the bald leather-armor
+  model `hmlthr`, inheriting the ordinary companion's stats and starting sledgehammer.
+  The other three use [`Critters/DenDefenseCompanion.focr`](../Critters/DenDefenseCompanion.focr):
+  the long-haired leather-jacket model `hmlmax`. All start at level 3 / 3,000 XP and SPECIAL `8/4/5/4/5/10/4`
   (40 points, the five remaining stats split as evenly as integers allow). Tagged skills are Melee
   Weapons, First Aid and Small Guns. All affordable level-up points go through
   `Parameters::SpendSkillPoints` into Melee Weapons using the same tag bonus and cost bands as players:
@@ -87,7 +92,18 @@ no existing serialized identifier is removed/renamed and no migration rule/engin
 - Ordinary and super stimpaks declare both `IsCanUse` (inventory self-use) and `IsCanUseOnSmth`
   (use on another critter). `CritterActions.UseItemOn` checks these capabilities before dispatching
   to `Main.CritterUseItem` -> `Drugs.UseDrug` / `UseDrugOn`; one unit is consumed through `ItemStacks`.
-- The `hmlmax` model supports Knife, Club and Hammer frames for all four starting weapons.
+- The leader's existing follow/wait/defend/assist commands use
+  [`Dialogs/den_defense_leader.fodlg`](../Dialogs/den_defense_leader.fodlg) and the same `DenDefense`
+  callbacks as ordinary companions. `Merc::SetBehaviorParameter` applies the leader's **final value**
+  to every currently owned NPC mercenary, including those waiting on other maps; differing prior
+  toggle states therefore converge. Only the changed setting is copied. Wait also drops each NPC's
+  current plans. Commands through an ordinary companion remain individual. No new combat orders,
+  automatic leader replacement or ongoing synchronization of later recruits is introduced.
+  `Merc::ROLE_LEADER` reserves `NpcRole = 1000001` in the existing persistent role property; ordinary
+  `Merc::SetMercParameter` / `WaitMaster` / `FollowMaster` dialogs use the same propagation path.
+  Master identity, contract type and expiry are not squad behavior settings. No new entity property,
+  RemoteCall or save migration is required; new attempts create the leader prototype.
+- Both `hmlthr` and `hmlmax` support Knife, Club and Hammer frames for the starting weapons.
   The narrow companion-only Club-to-Knife fallback in [`CritterAnims.fos`](../Scripts/CritterAnims.fos)
   remains for older tribal companions; it does not admit unsupported weapons for unrelated NPCs.
   Visual suitability still needs in-client acceptance.

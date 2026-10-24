@@ -1,0 +1,9 @@
+[ProtoCritter]
+$Name = DenDefenseLeader
+$Parent = DenDefenseCompanion
+
+NpcRole = 1000001
+ModelName = art/critters/hmlthraa.frm
+
+$Text russ = "Главный наёмник"
+$Text engl = "Mercenary leader"

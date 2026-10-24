@@ -1,0 +1,43 @@
+[Comment]
+Den squad leader. Uses the existing companion commands; Merc forwards their final values to the owner's squad.
+
+[Dialog]
+Speech 1
+  Answer 2
+    Demand Script DenDefense::CanCommand
+  Answer Exit
+
+Speech 2
+  Answer Exit
+    Result Script DenDefense::Follow
+  Answer Exit*
+    Result Script DenDefense::Wait
+  Answer Exit**
+    Result Script DenDefense::ToggleDefend
+  Answer Exit***
+    Result Script DenDefense::ToggleAssist
+  Answer Exit****
+
+[Text russ]
+{Name}{}{Главный наёмник}
+{Speech 1}{}{Я старший в нашем отряде. Какие будут приказы?}
+{Speech 1 Answer 2}{}{Передай приказ всем моим наёмникам.}
+{Speech 1 Answer Exit}{}{Ничего.}
+{Speech 2}{}{Слушаю. Все твои наёмники получат тот же приказ, что и я. Защиту и помощь в атаке можно переключать независимо.}
+{Speech 2 Answer Exit}{}{Всем следовать за мной.}
+{Speech 2 Answer Exit*}{}{Всем ждать на месте.}
+{Speech 2 Answer Exit**}{}{Переключи защиту меня от нападений у всего отряда.}
+{Speech 2 Answer Exit***}{}{Переключи помощь в моих атаках у всего отряда.}
+{Speech 2 Answer Exit****}{}{Пока без изменений.}
+
+[Text engl]
+{Name}{}{Mercenary leader}
+{Speech 1}{}{I lead our squad. What are your orders?}
+{Speech 1 Answer 2}{}{Pass my order to all my mercenaries.}
+{Speech 1 Answer Exit}{}{Nothing.}
+{Speech 2}{}{I am listening. All your mercenaries will receive the same order as me. Defend and assist can be toggled independently.}
+{Speech 2 Answer Exit}{}{Everyone, follow me.}
+{Speech 2 Answer Exit*}{}{Everyone, wait where you are.}
+{Speech 2 Answer Exit**}{}{Toggle defending me against attackers for the whole squad.}
+{Speech 2 Answer Exit***}{}{Toggle assisting my attacks for the whole squad.}
+{Speech 2 Answer Exit****}{}{No changes for now.}
