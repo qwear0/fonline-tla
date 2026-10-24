@@ -274,9 +274,27 @@ lines. Its stock bags supply knives/switchblades/shivs, jet, flowers and caps; d
 carry beer/booze and rocks. Bags are filled once, not refreshed during combat; city quest state is
 not copied to these attackers.
 
+Each newly spawned wave-1 enemy independently has a **30%** chance to take an initial non-aggressive
+walk, owned by [`Scripts/DenWander.fos`](../Scripts/DenWander.fos). It chooses a random free, reachable
+hex on the yard in front of Smitty (`x=299..318`, `y=148..158`, outside the workshop), using the actual
+NPC's door-aware path and zero stopping radius. While walking it can retaliate only against actors
+that actually attacked that NPC, including missed attacks; it does not select other defenders or
+Smitty opportunistically. Both plan admission and actual combat/damage pass through the same
+`DenDefense.CanAttack` restriction. A high-priority attacked handler records the aggressor before
+`Main` admits the ordinary retaliation plan. With no usable aggressor, the enemy resumes the yard walk.
+Every five real seconds a blocked/occupied goal can be replaced by another reachable yard hex;
+if none is available, it waits without becoming aggressive or teleporting.
+
+On reaching the exact goal hex it says one uniformly selected line from `DenWander/Arrival1..9`
+in `Texts/Text.{russ,engl}.fotxt`, once, and returns to normal scenario target selection. The own walk
+completion event handles arrival; the combat controller also checks the exact position. Waves 2/3
+are unchanged. Goal, active flag, aggressor IDs and path-check deadline are transient server-only
+critter properties; no public property, RemoteCall or rename/removal migration is added.
+
 The first enemy is admitted when the 10:00 rest transition finishes. Subsequent admissions use a
-separate generation-guarded `SpawnTick` map timer with a uniform **750–2250 real ms** delay
-(mean **1500 ms**, half the former 3000 ms); the one-second combat controller does not quantize it.
+separate generation-guarded `SpawnTick` map timer with a uniform **3000–9000 real ms** delay
+(mean **6000 ms**). Both the mean and range width are four times their previous 1500 ms / 1500 ms
+values; the one-second combat controller does not quantize the interval.
 Each wave reinstalls the controller and replaces its spawn timer. Spawn selection uniformly samples
 all currently free/reachable hexes from explicit indoor sets: the original three rooms, the warehouse
 below Smitty (`316:188` through `324:202`), the house beside the Brotherhood bunker (`260:172`
@@ -284,8 +302,8 @@ through `264:180`) and the farther eastern house (rooms around `242:160` and `24
 Every candidate needs a route toward the workshop through openable, unlocked doors. An occupied or
 unreachable room never forces a street spawn or unlocking. If all candidates are blocked, the same
 cursor retries with another randomized delay and logs periodically;
-this is not a kill. Visible reachable participants/companions distract attackers; otherwise they
-walk toward living Smitty.
+this is not a kill. Outside the wave-1 initial yard walk, visible reachable participants/companions
+distract attackers; otherwise they walk toward living Smitty.
 Stale/invisible distractions return to that objective. `MainPlanes.CanOpenDoor` is shared by target
 reachability, actual NPC movement and `MainPlanes` door reactions: AI permission is required, and
 non-openable or locked doors without a key remain blocked (broken locks need no key). Movement

@@ -1,0 +1,151 @@
+// DenWander — растерянные враги первой волны сначала идут на площадку перед Смитти.
+// SERVER: 30% при создании, достижимый случайный гекс, только самооборона до прибытия.
+// Цель, список напавших и срок перепроверки пути хранятся на NPC; общих таблиц нет.
+// Связи: DenDefense (создание, выбор цели и запрет агрессии), NpcPlanes, Messaging.
+namespace DenWander
+{
+
+#if SERVER
+
+///@ Property Critter Server bool DenWanderActive Mutable
+///@ Property Critter Server mpos DenWanderGoal Mutable
+///@ Property Critter Server ident[] DenWanderAttackerIds Mutable
+///@ Property Critter Server nanotime DenWanderRecheckAt Mutable
+
+bool IsYardHex(mpos hex)
+{
+    // Открытая площадка за дверью 303:147, до ограды двора; мастерская не входит.
+    return hex.x >= 299 && hex.x <= 318 && hex.y >= 148 && hex.y <= 158;
+}
+
+bool PickGoal(Critter npc, Map map)
+{
+    mpos[] candidates = {};
+    for (int x = 299; x <= 318; x++) {
+        for (int y = 148; y <= 158; y++) {
+            mpos hex = mpos(x, y);
+            if (map.IsHexesMovable(hex, npc.Multihex) && map.GetCritterOnHex(hex) == null) {
+                candidates.insertLast(hex);
+            }
+        }
+    }
+    // Случайная перестановка без повторов: первый достижимый гекс равновероятен.
+    // Не ищем путь ко всем точкам, если уже нашли подходящую.
+    while (!candidates.isEmpty()) {
+        int index = Game.Random(0, candidates.length() - 1);
+        mpos hex = candidates[index];
+        candidates[index] = candidates[candidates.length() - 1];
+        candidates.removeLast();
+        if (map.GetPathLength(npc, hex, 0, MainPlanes::CanOpenDoor) > 0) {
+            npc.DenWanderGoal = hex;
+            return true;
+        }
+    }
+    npc.DenWanderGoal = mpos();
+    return false;
+}
+
+void TryStart(Critter npc)
+{
+    if (Game.DenDefenseWave != 1 || Game.Random(1, 100) > 30) {
+        return;
+    }
+    npc.DenWanderActive = true;
+    npc.OnNpcPlaneEnd.Subscribe(WalkEnd);
+}
+
+bool CanAttack(Critter npc, Critter target)
+{
+    return !npc.DenWanderActive || npc.DenWanderAttackerIds.exists(target.Id);
+}
+
+void OnAttacked(Critter npc, Critter attacker)
+{
+    if (!npc.DenWanderActive || !DenDefense::IsWaveEnemy(npc) || !npc.IsAlive() || !DenDefense::CanAct(npc) || npc.MapId != attacker.MapId ||
+        (!DenDefense::IsParticipant(attacker) && (!DenDefense::IsActor(attacker) || attacker.DenDefenseRole == DenDefense::ROLE_ENEMY))) {
+        return;
+    }
+    auto ids = npc.DenWanderAttackerIds.clone();
+    if (!ids.exists(attacker.Id)) {
+        ids.insertLast(attacker.Id);
+        npc.DenWanderAttackerIds = ids;
+    }
+}
+
+void Arrive(Critter npc)
+{
+    npc.DenWanderActive = false;
+    npc.DenWanderAttackerIds = {};
+    Messaging::Say(npc, TextPackKey(TextPackName::Text, "DenWander", "Arrival" + Game.Random(1, 9)));
+}
+
+// Говорим при завершении именно своего маршрута, не при остановке на соседнем гексе.
+[[Event]]
+void WalkEnd(Critter npc, int planeId, int reason, Critter? someCr, Item? someItem)
+{
+    NpcPlanes::NpcPlane? plane = NpcPlanes::GetCritterPlane(npc, planeId);
+    if (npc.DenWanderActive && DenDefense::IsWaveEnemy(npc) && npc.IsAlive() && DenDefense::CanAct(npc) && Game.DenDefenseStage == DenDefense::STAGE_FIGHTING &&
+        plane != null && plane.Identifier == "DenWander".hstr() && reason == NpcPlanes::REASON_SUCCESS && npc.Hex == npc.DenWanderGoal) {
+        Arrive(npc);
+    }
+}
+
+// true подавляет обычный выбор жертвы; после прибытия DenDefense продолжает штатный ИИ.
+bool Process(Critter npc, Map map)
+{
+    if (!npc.DenWanderActive) {
+        return false;
+    }
+    if (IsYardHex(npc.DenWanderGoal) && npc.Hex == npc.DenWanderGoal) {
+        npc.StopMoving();
+        NpcPlanes::DropPlanes(npc);
+        Arrive(npc);
+        return false;
+    }
+
+    Critter? best = null;
+    int nearest = 2147483647;
+    for (int i = 0; i < npc.DenWanderAttackerIds.length(); i++) {
+        Critter? attacker = Game.GetCritter(npc.DenWanderAttackerIds[i]);
+        if (attacker == null || attacker.IsDead() || !DenDefense::CanAttack(npc, attacker) || !npc.IsSee(attacker)) {
+            continue;
+        }
+        int distance = Game.GetDistance(npc, attacker);
+        int cut = 1 + npc.Multihex + attacker.Multihex;
+        if (distance < nearest && (distance <= cut || map.GetPathLength(npc, attacker.Hex, cut, MainPlanes::CanOpenDoor) > 0)) {
+            best = attacker;
+            nearest = distance;
+        }
+    }
+    NpcPlanes::NpcPlane[]? planes = NpcPlanes::GetPlanes(npc);
+    if (best != null) {
+        if (planes == null || planes[0].Type != NpcPlanes::AI_PLANE_ATTACK || planes[0].Attack_TargId != best.Id) {
+            npc.StopMoving();
+            NpcPlanes::DropPlanes(npc);
+            NpcPlanes::AddAttackPlane(npc, 0, best);
+        }
+        return true;
+    }
+    if (planes != null && planes[0].Type == NpcPlanes::AI_PLANE_ATTACK) {
+        npc.StopMoving();
+        NpcPlanes::DropPlanes(npc);
+    }
+    // Занятую или перекрытую точку заменяем, не превращая задержку в внезапную агрессию.
+    if (Game.FrameTime >= npc.DenWanderRecheckAt) {
+        npc.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
+        if (!IsYardHex(npc.DenWanderGoal) || map.GetCritterOnHex(npc.DenWanderGoal) != null ||
+            map.GetPathLength(npc, npc.DenWanderGoal, 0, MainPlanes::CanOpenDoor) == 0) {
+            npc.StopMoving();
+            NpcPlanes::DropPlanes(npc);
+            PickGoal(npc, map);
+        }
+    }
+    if (IsYardHex(npc.DenWanderGoal) && NpcPlanes::GetPlanes(npc, "DenWander".hstr()) == null) {
+        NpcPlanes::AddWalkPlane(npc, 0, "DenWander".hstr(), 0, npc.DenWanderGoal, Game.GetDirection(npc.Hex, npc.DenWanderGoal), false, 0);
+    }
+    return true;
+}
+
+#endif
+
+}

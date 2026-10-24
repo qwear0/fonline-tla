@@ -2,7 +2,7 @@
 // SERVER: подтверждённый вход, поколения попыток, участники, спутники, отдых, волны и вещи.
 // CLIENT: затемнение отдыха и блокировка действий при провале без ролика и скрытия тела.
 // Состояние хранится в свойствах Game/Critter/Map; загрузка сама по себе не начинает попытку.
-// Связи: PlayerRegistration, Main, Merc, DenCleanup, NpcPlanes; диалоги den_defense_*.
+// Связи: PlayerRegistration, Main, Merc, DenCleanup, DenWander, NpcPlanes; диалоги den_defense_*.
 namespace DenDefense
 {
 
@@ -604,6 +604,9 @@ bool CanAttack(Critter attacker, Critter target)
             return false;
         }
     }
+    if (!DenWander::CanAttack(attacker, target)) {
+        return false;
+    }
     if (IsActor(attacker) && attacker.DenDefenseRole == ROLE_SMITTY) {
         return IsWorkshopHex(attacker.Hex) && IsWorkshopHex(target.Hex);
     }
@@ -929,8 +932,8 @@ void SpawnEnemy()
             }
         }
     }
-    // Раньше было 3000 мс; среднее равномерного интервала 750..2250 равно 1500 мс.
-    timespan interval = Time::Milliseconds(Game.Random(750, 2250));
+    // Среднее и ширина диапазона вчетверо больше прежних 750..2250 мс: теперь 3..9 с.
+    timespan interval = Time::Milliseconds(Game.Random(3000, 9000));
     map.DenDefenseNextSpawn = Game.FrameTime + interval;
     map.StartTimeEvent(interval, SpawnTick, Game.DenDefenseGeneration);
     if (!found) {
@@ -1034,6 +1037,7 @@ void SpawnEnemy()
         enemy.LastWeaponNotFound = false;
         ItemStacks::AddItem(enemy, Content::Item::brass_knuckles, 1);
     }
+    DenWander::TryStart(enemy);
     ChooseTarget(enemy);
 }
 
@@ -1048,6 +1052,9 @@ void ChooseTarget(Critter npc)
     Map? map = npc.GetMap();
     verify(map != null && map.Id == Game.DenDefenseMapId, "Scenario actor left Den", npc);
     bool enemy = npc.DenDefenseRole == ROLE_ENEMY;
+    if (enemy && DenWander::Process(npc, map)) {
+        return;
+    }
     Critter? best = null;
     int distance = 100000;
     auto candidates = enemy ? Game.DenDefenseParticipantIds.clone() : Game.DenDefenseEnemyIds.clone();
@@ -1172,6 +1179,8 @@ bool CancelRestWithoutSmitty()
 [[Event]]
 void HandleCritterAttack(Critter cr, Critter attacker)
 {
+    // До обычной реакции Main: растерянный NPC вправе ответить только напавшему.
+    DenWander::OnAttacked(cr, attacker);
     if (IsActor(cr) && cr.DenDefenseRole == ROLE_SMITTY && cr.IsAlive() && CanAct(cr) && cr.MapId == attacker.MapId &&
         (IsParticipant(attacker) || IsCompanion(attacker))) {
         EnemyStack::AddEnemyToStack(cr, attacker.Id);
