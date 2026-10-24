@@ -1313,3 +1313,9 @@ P.S. Чузенов просьба не беспокоить.}
 # Склад пончиков
 {70060}{}{Эту стелу воздвигли друзья и знакомые Пончика в знак любви и уважения. Ниже нацарапано гвоздем: враки, это он сам сделал (друзья и знакомые).} 
 {70061}{}{Вы съели столько пончиков, что почуствовали себя немного сильнее. Переносимый вес увеличен на +1 фунт.}
+
+# Mercenary refusal when the loot is too heavy
+{MercLoot}{Overweight1}{Ugh, I cannot carry that much.}
+{MercLoot}{Overweight2}{All right, this is too much.}
+{MercLoot}{Overweight3}{What do we need all this junk for?}
+{MercLoot}{Overweight4}{Fetch this, carry that... I am tired of it.}

@@ -103,9 +103,12 @@ no existing serialized identifier is removed/renamed and no migration rule/engin
   `Merc::SetMercParameter` / `WaitMaster` / `FollowMaster` dialogs use the same propagation path.
   Master identity, contract type and expiry are not squad behavior settings. New attempts create the
   leader prototype. No new RemoteCall or removal/rename migration rule is required.
-- Every companion dialog offers explicit **holster outside combat** and **keep weapons ready** orders.
-  Leader wording addresses the whole squad; ordinary wording addresses only that NPC. The server-only
-  persistent `Critter.MercWeaponReady` property (group `Mercs`, default false) stores this choice.
+- Every companion dialog shows only the weapon order that changes its current readiness setting:
+  **holster outside combat** when ready, or **keep weapons ready** when holstered. `CanHolsterWeapons`
+  and `CanReadyWeapons` gate the answers; their plain `CanChangeWeaponReadiness` helper also guards
+  the results. Combat's temporary weapon drawing does not change the saved preference. Leader wording
+  addresses the whole squad; ordinary wording addresses only that NPC. The server-only persistent
+  `Critter.MercWeaponReady` property (group `Mercs`, default false) stores this choice.
   `FavoriteItem::OnCritterIdle` delegates a hired NPC's main hand to `Merc::UpdateWeaponReady`, even
   while following/walking or with favorite-item maintenance disabled; other equipment slots retain
   their ordinary behavior. Outside combat, false holsters the main-hand item; true retains the held
@@ -123,8 +126,15 @@ no existing serialized identifier is removed/renamed and no migration rule/engin
   player/companion corpse, hidden/gag or no-loot item is harvested. Containers are carried intact.
   No value/category filter discards ordinary loot. Collected items stay in the collecting mercenary's
   inventory, using ordinary carry weight and stack splitting/merging; nothing is cloned or teleported.
+  A corpse is looted in one **take-all** batch with one AP charge/action, not one item per idle tick.
+  Before moving anything, the collector checks the total weight of all eligible corpse items with
+  overflow-safe remaining-capacity arithmetic. If the whole batch would exceed carry weight, nothing
+  is taken: the corpse is skipped for that order, its claim is released and the NPC says one random
+  localized refusal from `Texts/Text.{russ,engl}.fotxt` (`MercLoot/Overweight1..4`). Other collectors may
+  still take that corpse if they have capacity. Ordinary item-movement vetoes remain in force; ground
+  pickups retain the existing ordinary partial-stack behavior.
   Exact target IDs are claimed in each collector's transient `MercLoot*` properties. Other collectors
-  on the map skip a reserved corpse/item; a corpse stays reserved across its item transfers. Workers
+  on the map skip a reserved corpse/item; a corpse stays reserved throughout its take-all batch. Workers
   wait for claimed targets to be released rather than racing for the same loot. Thirty seconds without
   a successful transfer releases/skips a stalled target for that order. Real NPC walk plans handle
   routes/doors; adjacent pickups spend ordinary AP and use normal item-movement checks/events.

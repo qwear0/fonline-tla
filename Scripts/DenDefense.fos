@@ -445,10 +445,27 @@ void ToggleAssist(Critter player, Critter npc)
     }
 }
 
+bool CanChangeWeaponReadiness(Critter player, Critter npc, bool ready)
+{
+    return CanControlCompanion(player, npc) && npc.MercWeaponReady != ready;
+}
+
+[[DialogDemand]]
+bool CanHolsterWeapons(Critter player, Critter npc)
+{
+    return CanChangeWeaponReadiness(player, npc, false);
+}
+
+[[DialogDemand]]
+bool CanReadyWeapons(Critter player, Critter npc)
+{
+    return CanChangeWeaponReadiness(player, npc, true);
+}
+
 [[DialogResult]]
 void HolsterWeapons(Critter player, Critter npc)
 {
-    if (CanControlCompanion(player, npc)) {
+    if (CanChangeWeaponReadiness(player, npc, false)) {
         Merc::SetBehaviorParameter(player, npc, CritterProperty::MercWeaponReady, 0);
     }
 }
@@ -456,7 +473,7 @@ void HolsterWeapons(Critter player, Critter npc)
 [[DialogResult]]
 void ReadyWeapons(Critter player, Critter npc)
 {
-    if (CanControlCompanion(player, npc)) {
+    if (CanChangeWeaponReadiness(player, npc, true)) {
         Merc::SetBehaviorParameter(player, npc, CritterProperty::MercWeaponReady, 1);
     }
 }

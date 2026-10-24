@@ -18,8 +18,10 @@ Speech 2
     Result Script DenDefense::ToggleAssist
   Answer Exit****
   Answer Exit*****
+    Demand Script DenDefense::CanHolsterWeapons
     Result Script DenDefense::HolsterWeapons
   Answer Exit******
+    Demand Script DenDefense::CanReadyWeapons
     Result Script DenDefense::ReadyWeapons
   Answer Exit*******
     Result Script DenDefense::CollectLoot

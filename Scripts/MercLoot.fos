@@ -83,15 +83,43 @@ int TakeCount(Critter merc, Item item)
     return int(Math::Min(int64(item.Count), free / item.Weight));
 }
 
-Item? FindCorpseItem(Critter merc, Critter corpse)
+// Take all включает все обычные вещи трупа, а не только те, что помещаются по одной.
+Item[] GetCorpseItems(Critter corpse)
 {
+    Item[] result = {};
     Item[] items = corpse.GetItems();
     for (int i = 0; i < items.length(); i++) {
-        if (TakeCount(merc, items[i]) > 0) {
-            return items[i];
+        if (!items[i].Hidden && !items[i].IsGag && !items[i].IsNoLoot) {
+            result.insertLast(items[i]);
         }
     }
-    return null;
+    return result;
+}
+
+// Проверяем весь набор до первого переноса. Вычитание из остатка не переполняется
+// даже для больших стопок; ровно допустимый переносимый вес разрешён.
+bool CanCarryAll(Critter merc, Item[] items)
+{
+    int64 free = int64(merc.CarryWeight) - Parameters::CritterGetItemsWeightLimited(merc, int64(merc.CarryWeight));
+    if (free < 0) {
+        return false;
+    }
+    for (int i = 0; i < items.length(); i++) {
+        Item item = items[i];
+        verify(item.Count > 0 && item.Weight >= 0, "Invalid loot stack weight", item);
+        if (item.Weight > 0 && int64(item.Count) > free / item.Weight) {
+            return false;
+        }
+        free -= int64(item.Weight) * item.Count;
+    }
+    return true;
+}
+
+void RefuseHeavyCorpse(Critter merc)
+{
+    Skip(merc, merc.MercLootTargetId);
+    ReleaseTarget(merc);
+    Messaging::Say(merc, TextPackKey(TextPackName::Text, "MercLoot", "Overweight" + Game.Random(1, 4)));
 }
 
 bool IsWaveCorpse(Critter corpse)
@@ -134,7 +162,7 @@ bool SelectTarget(Critter merc, Map map, bool& pending)
     Critter[] corpses = map.GetCrittersInRadius(merc.MercLootCenter, RADIUS, CritterFindType::DeadNpc);
     for (int i = 0; i < corpses.length(); i++) {
         Critter corpse = corpses[i];
-        if (!IsWaveCorpse(corpse) || IsSkipped(merc, corpse.Id) || FindCorpseItem(merc, corpse) == null || !CanReach(merc, map, corpse.Hex)) {
+        if (!IsWaveCorpse(corpse) || IsSkipped(merc, corpse.Id) || GetCorpseItems(corpse).isEmpty() || !CanReach(merc, map, corpse.Hex)) {
             continue;
         }
         if (IsReserved(merc, map, corpse.Id)) {
@@ -227,10 +255,12 @@ bool Process(Critter merc)
 
     Critter? corpse = merc.MercLootCorpse ? Game.GetCritter(merc.MercLootTargetId) : null;
     Item? item = null;
+    Item[] corpseItems = {};
     mpos hex;
     if (merc.MercLootCorpse) {
         if (corpse != null && corpse.MapId == map.Id && IsWaveCorpse(corpse)) {
-            item = FindCorpseItem(merc, corpse);
+            corpseItems = GetCorpseItems(corpse);
+            item = !corpseItems.isEmpty() ? corpseItems[0] : null;
             hex = corpse.Hex;
         }
     }
@@ -243,7 +273,7 @@ bool Process(Critter merc)
             item = null;
         }
     }
-    if (item == null || Game.GetDistance(merc.MercLootCenter, hex) > RADIUS || TakeCount(merc, item) == 0) {
+    if (item == null || Game.GetDistance(merc.MercLootCenter, hex) > RADIUS || (!merc.MercLootCorpse && TakeCount(merc, item) == 0)) {
         ReleaseTarget(merc);
         return true;
     }
@@ -261,38 +291,42 @@ bool Process(Critter merc)
     RemoveWalk(merc, "MercLoot".hstr());
     merc.StopMoving();
     bool ground = !merc.MercLootCorpse;
+    if (!ground && !CanCarryAll(merc, corpseItems)) {
+        RefuseHeavyCorpse(merc);
+        return true;
+    }
     int ap = ground ? Settings.Movement.RtApCostPickItem : Settings.Movement.RtApCostMoveItemContainer;
     if (!CritterActions::ProcessAp(merc, ap)) {
         return true;
     }
 
+    if (!ground) {
+        // Одна операция take all, одно списание AP и целые стопки через обычные проверки переноса.
+        merc.Action(CritterAction::OperateContainer, CritterActions::EncodeContainerActionExt(TransferTypes::CritLoot, true, true), null);
+        ItemMovement::MoveItems(corpseItems, merc);
+        if (!merc.IsDestroyed && merc.MercLootActive) {
+            // Запрет отдельного переноса не запускает бесконечный повтор обыска того же тела.
+            Skip(merc, merc.MercLootTargetId);
+            ReleaseTarget(merc);
+        }
+        return true;
+    }
+
     ident itemId = item.Id;
     int before = item.Count;
-    if (ground) {
-        // Точный экземпляр, не первый предмет того же прототипа на гексе. Обычные обработчики
-        // подбора сохраняются, включая особые предметы, запреты и проверку переносимого веса.
-        merc.Action(CritterAction::PickItem, 0, item);
-        Game.OnCritterUseSkill.Fire(merc, CritterProperty::SpecialSkillPickOnGround, null, item, null);
-    }
-    else {
-        merc.Action(CritterAction::PickCritter, 0, null);
-        ItemMovement::MoveItem(item, TakeCount(merc, item), merc);
-    }
+    // Точный экземпляр, не первый предмет того же прототипа на гексе. Обычные обработчики
+    // подбора сохраняются, включая особые предметы, запреты и проверку переносимого веса.
+    merc.Action(CritterAction::PickItem, 0, item);
+    Game.OnCritterUseSkill.Fire(merc, CritterProperty::SpecialSkillPickOnGround, null, item, null);
     if (merc.IsDestroyed || !merc.MercLootActive) {
         return true;
     }
     Item? remaining = Game.GetItem(itemId);
-    bool moved = remaining == null || remaining.Ownership != (ground ? ItemOwnership::MapHex : ItemOwnership::CritterInventory) ||
-                 (ground ? remaining.MapId != map.Id : corpse == null || remaining.CritterId != corpse.Id) || remaining.Count < before;
+    bool moved = remaining == null || remaining.Ownership != ItemOwnership::MapHex || remaining.MapId != map.Id || remaining.Count < before;
     if (!moved) {
         Skip(merc, itemId);
     }
-    else {
-        merc.MercLootTargetUntil = Game.FrameTime + Time::Seconds(TARGET_TIMEOUT_SECONDS);
-    }
-    if (ground) {
-        ReleaseTarget(merc);
-    }
+    ReleaseTarget(merc);
     return true;
 }
 
