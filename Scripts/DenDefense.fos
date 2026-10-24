@@ -378,6 +378,11 @@ void CreateCompanion(Critter primary, Map map, int index)
     // Главный заменяет первого из четырёх спутников, не увеличивая силу отряда.
     hstring proto = leader ? "DenDefenseLeader".hstr() : "DenDefenseCompanion".hstr();
     Critter companion = map.AddCritter(proto, hex, HDIR_Random, props);
+    // Main::CritterInit пересоздаёт Level/MaxLifeBase из регистрационных полей:
+    // возвращаем уровень прототипа и добавляем заданный сценарием запас ОЖ к сгенерированной базе.
+    companion.Level = Game.GetProtoCritter(proto).Level;
+    companion.MaxLifeBase += int(props[CritterProperty::MaxLifeBase]);
+    companion.CurrentHp = companion.MaxLife;
     companion.MakePersistent(true);
     auto ids = Game.DenDefenseCompanionIds.clone();
     ids.insertLast(companion.Id);

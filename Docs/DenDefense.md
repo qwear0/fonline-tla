@@ -93,7 +93,8 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   (40 points, the five remaining stats split as evenly as integers allow). Tagged skills are Melee
   Weapons, First Aid and Small Guns. Their 30 starting skill points and one level-3 perk remain
   unspent; neither creation nor later level-ups automatically choose skills or perks. The owner uses
-  **“Let's see what you can do”** in each companion's dialog (including the leader) to open the ordinary
+  **“Let's see what you can do”** in each companion's visible order menu (`Speech 2`, including the
+  leader; `Speech 1` is a hidden entry router, not a player-facing menu) to open the ordinary
   Character/SPECIAL sheet and manually allocate skills or choose an available perk. SPECIAL values
   remain read-only, as on the player's sheet. Confirming skills uses the ordinary tag bonus and cost
   bands; canceling leaves pending skill allocations unspent. A perk is applied only after explicit
@@ -104,7 +105,9 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   to the squad. Existing companions retain previously spent points; no automatic respec is performed.
   The same sheet entry is available in the ordinary `all_mercenary` dialog. Deploy matching client/server
   Scripts and Metadata packs for the new RemoteCalls; snapshot state is client-local and requires no
-  saved-property migration.
+  saved-property migration. `CreateCompanion` restores the prototype level and scenario HP reserve
+  after `Main::CritterInit` regenerates registration fields, before calculating unspent points/perks;
+  otherwise the common initializer resets the level to 1 and discards the scenario's HP reserve.
   Each starts with **five consumable stimpaks** and exactly one equipped weapon, in squad order:
   **sledgehammer, combat knife, crowbar, club**. Smitty does not equip or resupply companions.
   Maximum/starting HP are **103/91/103/91**, another 50% over the previous 69/61/69/61 with integer

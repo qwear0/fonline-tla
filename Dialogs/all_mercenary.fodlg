@@ -3,6 +3,10 @@
 
 [Dialog]
 Speech 1 # Преддиалоговые установки
+  Answer 2
+    Demand Script MercProgression::CanOpen
+
+Speech 2
   Answer Exit
     Demand Script MercProgression::CanOpen
     Result Script MercProgression::Show
@@ -10,9 +14,11 @@ Speech 1 # Преддиалоговые установки
 [Text russ]
 {Name}{}{Наёмник}
 {Speech 1}{}{Преддиалоговые установки}
-{Speech 1 Answer Exit}{}{Давай посмотрим что ты умеешь.}
+{Speech 2}{}{Что хочешь узнать?}
+{Speech 2 Answer Exit}{}{Давай посмотрим что ты умеешь.}
 
 [Text engl]
 {Name}{}{Mercenary}
 {Speech 1}{}{Initial preferences}
-{Speech 1 Answer Exit}{}{Let's see what you can do.}
+{Speech 2}{}{What would you like to know?}
+{Speech 2 Answer Exit}{}{Let's see what you can do.}
