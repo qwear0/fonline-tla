@@ -1,5 +1,5 @@
 // DenCleanup — Тодд убирает тела врагов после завершённых волн обороны Дэна.
-// SERVER: подход вплотную, секунда обыска и перенос оставшейся добычи в ящик Смитти.
+// SERVER: пауза после волны, подход вплотную, секунда обыска и оставшаяся добыча на земле.
 // Задание и пропущенные недоступные тела хранятся на NPC; изменяемых глобальных таблиц нет.
 // Связи: DenDefense (стадии и поколения), MercLoot (резерв тела), NpcPlanes, ItemStacks.
 namespace DenCleanup
@@ -9,6 +9,7 @@ namespace DenCleanup
 
 ///@ Property Critter Server ident DenCleanupTargetId Mutable
 ///@ Property Critter Server nanotime DenCleanupReadyAt Mutable
+///@ Property Critter Server nanotime DenCleanupStartAt Mutable
 ///@ Property Critter Server nanotime DenCleanupTargetUntil Mutable
 ///@ Property Critter Server int32 DenCleanupGeneration Mutable
 ///@ Property Critter Server int32 DenCleanupWave Mutable
@@ -136,6 +137,10 @@ void Idle(Critter todd)
         todd.DenCleanupGeneration = Game.DenDefenseGeneration;
         todd.DenCleanupWave = Game.DenDefenseWave;
         todd.DenCleanupSkippedIds = {};
+        todd.DenCleanupStartAt = Game.FrameTime + Time::Seconds(Game.Random(7, 15));
+    }
+    if (Game.FrameTime < todd.DenCleanupStartAt) {
+        return;
     }
     if (todd.DenCleanupTargetId != ZERO_IDENT && Game.FrameTime >= todd.DenCleanupTargetUntil) {
         auto skipped = todd.DenCleanupSkippedIds.clone();
@@ -173,15 +178,16 @@ void Idle(Critter todd)
         MercLoot::RemoveWalk(todd, "DenCleanup".hstr());
         todd.StopMoving();
         todd.SetDir(Game.GetDirection(todd.Hex, corpse.Hex));
-        todd.Action(CritterAction::OperateContainer, CritterActions::EncodeContainerActionExt(TransferTypes::CritLoot, true, true), null);
+        // У nmlosr нет кадров PickUp/Use: остаёмся лицом к телу, не скрывая NPC отсутствующей анимацией.
         todd.DenCleanupReadyAt = Game.FrameTime + Time::Seconds(1);
-        if (Game.Random(1, 100) <= 20) {
-            Messaging::Say(todd, MsgStr::DialogTextKey(todd.DialogId, Game.Random(100, 109)));
+        if (Game.Random(1, 100) <= 33) {
+            // DialogBaker сохраняет авторский ключ буквально, без прежнего числового смещения.
+            Messaging::Say(todd, TextPackKey(TextPackName::Dialogs, todd.DialogId, "" + Game.Random(100, 109)));
         }
         return;
     }
     if (Game.FrameTime >= todd.DenCleanupReadyAt) {
-        StoreItems(corpse.GetItems(), map);
+        verify(DenDefense::SpillLoot(corpse), "Unable to spill Den corpse inventory", corpse);
         Game.DestroyCritter(corpse);
         ReleaseTarget(todd);
     }

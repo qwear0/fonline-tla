@@ -29,6 +29,7 @@ namespace DenDefense
 ///@ Property Game Server int32 DenDefenseWave Mutable Persistent
 ///@ Property Game Server int32 DenDefenseSpawned Mutable Persistent
 ///@ Property Game Server int32 DenDefenseSpawnTotal Mutable Persistent
+///@ Property Game Server int32[] DenDefenseSpawnGroups Mutable Persistent
 ///@ Property Game Server ident[] DenDefenseEnemyIds Mutable Persistent
 ///@ Property Game Server ident[] DenDefenseEnemyHistory Mutable Persistent
 ///@ Property Map Server nanotime DenDefenseNextSpawn Mutable
@@ -236,6 +237,7 @@ void StartAttempt(Critter primary)
     Game.DenDefenseWave = 0;
     Game.DenDefenseSpawned = 0;
     Game.DenDefenseSpawnTotal = 0;
+    Game.DenDefenseSpawnGroups = {};
     Game.DenDefenseRestPhase = 0;
     Game.DenDefenseSpawnRetries = 0;
     Game.DenDefenseRestUsed = false;
@@ -793,12 +795,24 @@ void StartAfterRest(any value)
     BroadcastRest(2);
     Game.DenDefenseWave = Game.DenDefenseWave + 1;
     Game.DenDefenseSpawned = 0;
-    Game.DenDefenseSpawnTotal = Game.DenDefenseWave == 1 ? 50 : (Game.DenDefenseWave == 2 ? 30 : 44);
+    Game.DenDefenseSpawnTotal = Game.DenDefenseWave == 2 ? 30 : 44;
+    int[] groups = {};
+    if (Game.DenDefenseWave == 1) {
+        Game.DenDefenseSpawnTotal = 0;
+        // Сохраняем 50 выходов, но каждый теперь даёт равновероятную группу из 1..3 врагов.
+        // Размер заранее выбранной группы не меняется при повторе из-за занятых домов.
+        for (int i = 0; i < 50; i++) {
+            int size = Game.Random(1, 3);
+            groups.insertLast(size);
+            Game.DenDefenseSpawnTotal = Game.DenDefenseSpawnTotal + size;
+        }
+    }
+    Game.DenDefenseSpawnGroups = groups;
     Game.DenDefenseEnemyIds = {};
     map.StopTimeEvent(SpawnTick);
     Game.DenDefenseDawn = ZERO_SYNCTIME;
     Game.Log("Den defense wave started, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave + " total=" + Game.DenDefenseSpawnTotal);
-    // Первого атакующего (во второй волне — тройку) выпускаем сразу, остальных — по таймеру карты.
+    // Первую группу выпускаем сразу, остальные — по таймеру карты.
     map.StopTimeEvent(Controller);
     map.StartTimeEvent(Time::Seconds(1), Time::Seconds(1), Controller, Game.DenDefenseGeneration);
     SpawnBatch();
@@ -825,6 +839,7 @@ void ResumeController()
     Game.DenDefenseWave = 0;
     Game.DenDefenseSpawned = 0;
     Game.DenDefenseSpawnTotal = 0;
+    Game.DenDefenseSpawnGroups = {};
     Game.DenDefenseSpawnRetries = 0;
     Game.DenDefenseRestUsed = false;
     Game.DenDefenseRestPhase = 0;
@@ -912,13 +927,15 @@ void SpawnBatch()
                                mpos(280, 142), mpos(282, 142), mpos(316, 188), mpos(320, 188), mpos(324, 190), mpos(328, 194), mpos(318, 198), mpos(324, 202),
                                mpos(260, 172), mpos(262, 172), mpos(264, 174), mpos(260, 176), mpos(262, 178), mpos(264, 180), mpos(242, 160), mpos(246, 160),
                                mpos(250, 160), mpos(242, 168), mpos(246, 166), mpos(250, 166)};
-    int batchSize = Game.DenDefenseWave == 2 ? 3 : 1;
-    verify(Game.DenDefenseSpawnTotal - Game.DenDefenseSpawned >= batchSize && approaches.length() % 6 == 0, "Invalid Den spawn batch size");
+    verify(Game.DenDefenseWave != 1 || !Game.DenDefenseSpawnGroups.isEmpty(), "Missing Den wave-1 spawn group");
+    int batchSize = Game.DenDefenseWave == 1 ? Game.DenDefenseSpawnGroups[0] : (Game.DenDefenseWave == 2 ? 3 : 1);
+    verify(batchSize >= 1 && batchSize <= 3 && Game.DenDefenseSpawnTotal - Game.DenDefenseSpawned >= batchSize && approaches.length() % 6 == 0,
+           "Invalid Den spawn batch size");
     Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
     verify(smitty != null, "Smitty disappeared during spawn");
     mpos[] candidates = {};
     int availableRooms = 0;
-    // Каждые шесть точек — одна комната/дом. Тройке заранее нужны три свободных выхода:
+    // Каждые шесть точек — одна комната/дом. Группе заранее нужны свободные выходы:
     // не выпускаем половину группы и не разбрасываем её по разным зданиям.
     for (int first = 0; first < approaches.length(); first += 6) {
         mpos[] room = {};
@@ -940,7 +957,8 @@ void SpawnBatch()
         }
     }
     // Первая/третья волны: 3..9 с, вторая: 9..27 с между тройками (среднее 18 с).
-    timespan interval = Time::Milliseconds(Game.Random(3000 * batchSize, 9000 * batchSize));
+    int intervalScale = Game.DenDefenseWave == 2 ? 3 : 1;
+    timespan interval = Time::Milliseconds(Game.Random(3000 * intervalScale, 9000 * intervalScale));
     map.DenDefenseNextSpawn = Game.FrameTime + interval;
     map.StartTimeEvent(interval, SpawnTick, Game.DenDefenseGeneration);
     if (candidates.length() < batchSize) {
@@ -956,6 +974,11 @@ void SpawnBatch()
         mpos hex = candidates[index];
         candidates.removeAt(index);
         SpawnEnemy(map, hex);
+    }
+    if (Game.DenDefenseWave == 1) {
+        auto groups = Game.DenDefenseSpawnGroups.clone();
+        groups.removeAt(0);
+        Game.DenDefenseSpawnGroups = groups;
     }
 }
 

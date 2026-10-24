@@ -209,21 +209,26 @@ Owner: `Scripts/DenCleanup.fos`; authored inputs: `Maps/den.fomap`,
 
 - The existing drunkard at `289:147`, outside Smitty's fence, is renamed Todd; no duplicate NPC is
   created. Authored initialization and attempt setup also support an older saved Den map.
-- Only after a wave is fully spawned and its registered enemies are all dead does Todd select a
-  reachable current-generation wave corpse. He walks with ordinary door-aware NPC plans to the
-  normal corpse-looting distance (one hex plus both multihex radii), faces it and plays the loot action.
+- Once a wave is fully spawned and its registered enemies are all dead, Todd waits a uniformly
+  selected **7–15 real seconds** before selecting a reachable current-generation wave corpse.
+  He walks with ordinary door-aware NPC plans to the normal corpse-looting distance (one hex plus
+  both multihex radii) and faces it. His `nmlosr` model has no pickup/use frames, so the one-second
+  cleanup pause keeps his standing sprite instead of starting an unavailable animation.
   After one real second at that distance, the body disappears. Players, companions and ordinary
   inhabitants are never cleanup targets. MercLoot reservations are respected at selection and removal.
-- Each cleanup action has a 20% chance of one uniformly selected bark from the ten requested lines
-  (`100..109`, Russian and English). A 250 ms idle timer handles the one-second deadline; busy/dialog
-  time can delay completion. Unreachable bodies are ignored; a stalled selected target is skipped
-  after 30 seconds for that wave. Rest, a new active wave, failure or Todd's death cancels his task;
+- Each cleanup action has a **33%** chance of one uniformly selected bark from the ten requested lines
+  (`100..109`, Russian and English). These use literal `Dialogs/den_defense_todd/100..109` keys,
+  matching DialogBaker, without the obsolete numeric offset. A 250 ms idle timer handles the initial
+  delay and one-second deadline; busy/dialog time can delay completion. Unreachable bodies are ignored;
+  a stalled selected target is skipped after 30 seconds for that wave.
+  Rest, a new active wave, failure or Todd's death cancels his task;
   a subsequent completed wave makes remaining reachable bodies eligible again.
-- Remaining ordinary corpse items go intact into Smitty's crate at `300:141` before body deletion.
-  The same crate holds workshop supplies. Moving stacks uses `ItemStacks`, asserts on failed moves
-  and does not destroy unclaimed loot. The crate inherits the wooden-crate presentation with an
-  enlarged capacity. Old saves without it create exactly one crate on demand.
-- New server-only transient `DenCleanup*` critter properties hold target/deadline/generation/skips;
+- Remaining ordinary corpse items are spilled intact onto the corpse's hex before body deletion,
+  through `DenDefense.SpillLoot` and `ItemStacks`; failed moves assert instead of deleting unclaimed
+  loot. Todd does not move these items into Smitty's crate. The crate at `300:141` still holds workshop
+  supplies gathered during setup. It inherits the wooden-crate presentation with an enlarged capacity;
+  old saves without it create exactly one crate on demand.
+- Server-only transient `DenCleanup*` critter properties hold target/start/deadline/generation/skips;
   no public property, RemoteCall or removal/rename migration is introduced.
 
 ## Global rest and time domains
@@ -261,7 +266,7 @@ unrelated caravan/encounter NPCs that happen to use bounty-hunter prototypes.
 
 | Wave | Composition and equipment |
 | --- | --- |
-| 1 | 50 attackers cycling Prostitute, Drunkard and Madman; original Den models/dialogs, one-shot stock bags 26/11, plus alcohol/rocks for drunkards |
+| 1 | 50 groups of 1–3 attackers (uniform size; 50–150 total, mean 100), cycling Prostitute, Drunkard and Madman; original Den models/dialogs, one-shot stock bags 26/11, plus alcohol/rocks for drunkards |
 | 2 | 30 tribals in ten simultaneous groups of three: exactly six spears, twenty-four unarmed; meat/flowers/healing powder |
 | 3 | 42 unarmed townspeople and Chuck/Buck Dunton; each brother has brass knuckles and a `10mm_pistol` with **one loaded + four spare rounds**; money/alcohol/miscellaneous loot |
 
@@ -296,15 +301,20 @@ completion event handles arrival; the combat controller also checks the exact po
 are unchanged. Goal, active flag, aggressor IDs and path-check deadline are transient server-only
 critter properties; no public property, RemoteCall or rename/removal migration is added.
 
-The first batch is admitted when the 10:00 rest transition finishes. Waves 1/3 admit one enemy per
-batch with a uniform **3000–9000 real ms** delay (mean **6000 ms**). Wave 2 admits **three enemies
-at once**, with a uniform **9000–27000 real ms** delay between groups (mean **18000 ms**, three times
-longer). A separate generation-guarded `SpawnTick` map timer schedules once per batch; the one-second
-combat controller does not quantize the interval. Each wave reinstalls the controller and replaces
-its spawn timer. Waves 1/3 uniformly sample all currently free/reachable indoor candidates. Wave 2
-randomly chooses one eligible room/building and three distinct free/reachable candidates inside it;
-all three positions must be available before any group member is created, otherwise the whole group
-waits for the next randomized retry. Counts and equipment still advance per enemy, not per batch.
+The first batch is admitted when the 10:00 rest transition finishes. Wave 1 admits **1–3 enemies
+at once**, each size equally likely, over the original **50 batches**. Sizes are rolled once at wave
+start into the server-only persistent `DenDefenseSpawnGroups` queue; their sum is the exact enemy
+completion total, and blocked batches retain their selected size. A new attempt/server-start reset
+clears the queue. Wave 3 still admits one enemy per batch. Both waves keep the uniform
+**3000–9000 real ms** delay (mean **6000 ms**), independent of group size. Wave 2 admits **three
+enemies at once**, with its unchanged uniform **9000–27000 real ms** delay between groups (mean
+**18000 ms**). A separate generation-guarded `SpawnTick` map timer schedules once per batch; the
+one-second combat controller does not quantize the interval. Each wave reinstalls the controller
+and replaces its spawn timer. Single-enemy batches uniformly sample all currently free/reachable
+indoor candidates. Multi-enemy batches randomly choose one eligible room/building and distinct
+free/reachable candidates inside it; every position must be available before any group member is
+created, otherwise the whole group waits for the next randomized retry. Counts and equipment still
+advance per enemy, not per batch. No existing property is renamed or removed.
 The explicit indoor sets cover the original three rooms, the warehouse
 below Smitty (`316:188` through `324:202`), the house beside the Brotherhood bunker (`260:172`
 through `264:180`) and the farther eastern house (rooms around `242:160` and `246:166`).
