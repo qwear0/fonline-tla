@@ -26,8 +26,11 @@ See the engine's [runtime/updater contract](../Engine/Docs/en/explanation/runtim
 
 ## Build and assemble
 
-Build matching sources/configuration in both native build trees before packaging.
-For the local Linux build and an already configured Windows cross-build, for example:
+Start with [FastBuild.md](FastBuild.md) to select the minimum adequate work. Resource-only updates can
+reuse verified unchanged native outputs and package the server/feed alone; a separate Windows client
+distribution is not needed for every restart. When native outputs need rebuilding, build matching
+sources/configuration in both native build trees before packaging. For the local Linux build and an
+already configured Windows cross-build, for example:
 
 ```sh
 cmake --build Build/Auto --config RelWithDebInfo --target BakeResources TLA_Server TLA_ServerHeadless
