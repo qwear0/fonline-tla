@@ -161,8 +161,8 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   purges map items. Smitty's remaining ordinary inventory is spilled before re-equipping him. Hidden/
   gag system items are not exposed. Failed moves assert before actor deletion.
 - Preserve ground loot, acquired rewards and living player inventories across attempts. There is no
-  expiry, anti-farming rule, provenance ledger or arbitrary per-wave experience bonus. Memory storage
-  does **not** preserve this state across process shutdown.
+  expiry, anti-farming rule, provenance ledger or arbitrary per-wave experience bonus. LAN SQLite
+  preserves this state across process shutdown; profiles still using Memory do **not**.
 
 ## Global rest and time domains
 

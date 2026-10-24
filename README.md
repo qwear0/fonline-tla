@@ -438,7 +438,7 @@ Subconfigs:
 | --------- | ------- |
 | `Unpackaged` | Development-oriented unpackaged startup. Disables music, adds artificial lag, enables render debug, and adjusts timeout/debug settings. |
 | `LocalTest` | Local development shard used by launch tasks. Keeps the base localhost/default-port settings and disables the login timeout. |
-| `LAN` | Packaged Windows client/Linux server on `192.168.1.168:4008`, with built-in resource/DLL updates; development keys and Memory storage only. |
+| `LAN` | Packaged Windows client/Linux server on `192.168.1.168:4008`, with built-in resource/DLL updates, development keys and persistent SQLite outside the package; siege progress resets on server start. |
 | `PublicGame` | Public-game profile with a public port and server UI collapse behavior. |
 
 Apply a subconfig at runtime with:
@@ -523,7 +523,9 @@ After building/baking both platforms, assemble the LAN distribution with
 `cmake --build Build/Auto --config RelWithDebInfo --target MakePackage-LAN`.
 Players run `FOnlineTLA.exe` directly; the packaged server supplies resources and
 native DLLs over the game connection. See [Windows LAN client updates](Docs/ClientUpdates.md)
-for activation, native-version boundaries and the required approval before stopping a Memory session.
+for activation, external SQLite storage, native-version boundaries and the required approval before
+switching an older Memory session to persistent storage. `MakePackage-LAN` deletes `TLA-LAN/`;
+never run it underneath a live server. The LAN database stays in `TLA-Storage/LAN/`, not that package.
 
 The archived workflow describes the former release process; local builds do not currently publish a release. Historical release asset names:
 
@@ -540,7 +542,7 @@ Project documents:
 - [Docs/README.md](Docs/README.md) - maintained game guide index.
 - [Docs/Systems.md](Docs/Systems.md) - gameplay ownership and content/generation boundaries.
 - [Docs/FOSquadWorkspace.md](Docs/FOSquadWorkspace.md) - two-repository setup and bounded compatibility evidence.
-- [Docs/ClientUpdates.md](Docs/ClientUpdates.md) - Windows LAN resource/DLL updates, packaging and Memory-safe activation.
+- [Docs/ClientUpdates.md](Docs/ClientUpdates.md) - Windows LAN resource/DLL updates, packaging, persistent SQLite and safe activation.
 - [Nullability.md](Nullability.md) - script/native nullable contracts and existing checks.
 - [CLAUDE.md](CLAUDE.md) - compatibility pointer to `AGENTS.md`.
 

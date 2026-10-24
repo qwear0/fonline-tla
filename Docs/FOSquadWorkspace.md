@@ -89,7 +89,10 @@ cmake --build --preset fosquad-linux --target BakeResources
 ./Binaries/Client-Linux-x64/TLA_Client --ApplySubConfig LocalTest
 ```
 
-The existing `Server.DbStorage = Memory` is for development, not durable online-player progress. Production persistence and deployment are separate work.
+The base `Server.DbStorage = Memory` remains for local development, not durable online-player progress.
+The packaged `LAN` profile overrides it with SQLite in `TLA-Storage/LAN/`, outside the package; saved
+characters survive restarts while Den siege progress resets. See [ClientUpdates.md](ClientUpdates.md)
+for activation and storage paths. Public production keys and deployment remain separate work.
 
 ## Verification policy after unit-suite removal
 
