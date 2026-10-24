@@ -92,17 +92,28 @@ no existing serialized identifier is removed/renamed and no migration rule/engin
 - Ordinary and super stimpaks declare both `IsCanUse` (inventory self-use) and `IsCanUseOnSmth`
   (use on another critter). `CritterActions.UseItemOn` checks these capabilities before dispatching
   to `Main.CritterUseItem` -> `Drugs.UseDrug` / `UseDrugOn`; one unit is consumed through `ItemStacks`.
-- The leader's existing follow/wait/defend/assist commands use
+- Follow/wait/defend/assist and weapon-readiness commands use
   [`Dialogs/den_defense_leader.fodlg`](../Dialogs/den_defense_leader.fodlg) and the same `DenDefense`
   callbacks as ordinary companions. `Merc::SetBehaviorParameter` applies the leader's **final value**
   to every currently owned NPC mercenary, including those waiting on other maps; differing prior
   toggle states therefore converge. Only the changed setting is copied. Wait also drops each NPC's
-  current plans. Commands through an ordinary companion remain individual. No new combat orders,
+  current plans. Commands through an ordinary companion remain individual. No new attack-target orders,
   automatic leader replacement or ongoing synchronization of later recruits is introduced.
   `Merc::ROLE_LEADER` reserves `NpcRole = 1000001` in the existing persistent role property; ordinary
   `Merc::SetMercParameter` / `WaitMaster` / `FollowMaster` dialogs use the same propagation path.
-  Master identity, contract type and expiry are not squad behavior settings. No new entity property,
-  RemoteCall or save migration is required; new attempts create the leader prototype.
+  Master identity, contract type and expiry are not squad behavior settings. New attempts create the
+  leader prototype. No new RemoteCall or removal/rename migration rule is required.
+- Every companion dialog offers explicit **holster outside combat** and **keep weapons ready** orders.
+  Leader wording addresses the whole squad; ordinary wording addresses only that NPC. The server-only
+  persistent `Critter.MercWeaponReady` property (group `Mercs`, default false) stores this choice.
+  `FavoriteItem::OnCritterIdle` delegates a hired NPC's main hand to `Merc::UpdateWeaponReady`, even
+  while following/walking or with favorite-item maintenance disabled; other equipment slots retain
+  their ordinary behavior. Outside combat, false holsters the main-hand item; true retains the held
+  weapon or draws a usable last-used, favorite or inventory weapon. It does not create weapons or ammo.
+  Dead/unconscious, unmapped and action-frozen companions are not re-equipped. Active attack plans and
+  the battle timeout defer either order to the end of combat, leaving normal AI weapon selection intact.
+  The existing second-based equipment timer reapplies the choice after combat; the command also
+  attempts an immediate update. Old entities without the new property default to holstering.
 - Both `hmlthr` and `hmlmax` support Knife, Club and Hammer frames for the starting weapons.
   The narrow companion-only Club-to-Knife fallback in [`CritterAnims.fos`](../Scripts/CritterAnims.fos)
   remains for older tribal companions; it does not admit unsupported weapons for unrelated NPCs.

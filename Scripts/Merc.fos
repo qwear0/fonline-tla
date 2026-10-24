@@ -7,12 +7,15 @@
 // а также набор диалоговых условий и результатов для квестов и найма.
 // Параметры мерков хранятся в Property-декларациях группы Mercs на криттере.
 // Главный мерк (NpcRole = ROLE_LEADER) передаёт диалоговые настройки всем меркам хозяина.
+// FavoriteItem вызывает поддержание выбранной готовности оружия вне боя.
 // Связи: NpcPlanes (боевые/ходовые планы), GlobalmapGroupExtended (группы на
 // глобале), Entrance/Teams/CritterState/PlayerRegistration, Tla (общие enum'ы).
 namespace Merc
 {
 
 #if SERVER
+
+///@ Property Critter Server bool MercWeaponReady Mutable Persistent Group = Mercs
 
 // Общая роль главного мерка; хранится в существующем NpcRole, без нового свойства.
 const int ROLE_LEADER = 1000001;
@@ -842,13 +845,56 @@ void CancelPlayerMerc(Critter player, Critter? npc)
     CancelMerc(npc);
 }
 
+// В бою оружием распоряжается боевой ИИ; вне боя соблюдаем приказ даже при следовании.
+void UpdateWeaponReady(Critter merc)
+{
+    if (!merc.IsAlive() || merc.GetMap() == null || !DenDefense::CanAct(merc) || Time::IsTimeoutActive(merc.TimeoutBattle) ||
+        NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK)) {
+        return;
+    }
+
+    Item? hand = merc.GetItem(ItemProperty::CritterSlot, CritterItemSlot::Main);
+    if (!merc.MercWeaponReady) {
+        if (hand != null) {
+            merc.ChangeItemSlot(hand.Id, CritterItemSlot::Inventory);
+        }
+        return;
+    }
+    if (hand != null) {
+        return;
+    }
+
+    // Сначала возвращаем оружие из последнего боя, затем избранное и доступное из рюкзака.
+    Item? weapon = null;
+    if (merc.LastWeaponId != ZERO_IDENT) {
+        weapon = merc.GetItem(merc.LastWeaponId);
+    }
+    if (weapon == null || !MainPlanes::CheckBattleWeapon(merc, weapon)) {
+        hstring favorite = FavoriteItem::GetFavoriteItemPid(merc, CritterItemSlot::Main);
+        weapon = favorite != EMPTY_HSTRING ? merc.GetItem(favorite) : null;
+    }
+    if (weapon == null || !MainPlanes::CheckBattleWeapon(merc, weapon)) {
+        weapon = null;
+        Item[] weapons = merc.GetItems(ItemProperty::Type, ItemType::Weapon);
+        for (int i = 0; i < weapons.length(); i++) {
+            if (MainPlanes::CheckBattleWeapon(merc, weapons[i])) {
+                weapon = weapons[i];
+                break;
+            }
+        }
+    }
+    if (weapon != null) {
+        merc.ChangeItemSlot(weapon.Id, CritterItemSlot::Main);
+    }
+}
+
 // Только настройки поведения передаются от главного мерка отряду: хозяин,
 // тип контракта и срок службы остаются индивидуальными.
 bool IsBehaviorParameter(CritterProperty param)
 {
     return param == CritterProperty::MercAlwaysRun || param == CritterProperty::MercCancelOnAttack || param == CritterProperty::MercLoseDist ||
            param == CritterProperty::MercMasterDist || param == CritterProperty::MercDefendMaster || param == CritterProperty::MercAssistMaster ||
-           param == CritterProperty::MercCancelOnGlobal || param == CritterProperty::MercWaitForMaster;
+           param == CritterProperty::MercCancelOnGlobal || param == CritterProperty::MercWaitForMaster || param == CritterProperty::MercWeaponReady;
 }
 
 void ApplyBehaviorParameter(Critter merc, CritterProperty param, int value)
@@ -856,6 +902,9 @@ void ApplyBehaviorParameter(Critter merc, CritterProperty param, int value)
     merc.SetAsInt(param, value);
     if (param == CritterProperty::MercWaitForMaster && merc.MercWaitForMaster) {
         NpcPlanes::DropPlanes(merc);
+    }
+    if (param == CritterProperty::MercWeaponReady) {
+        UpdateWeaponReady(merc);
     }
 }
 

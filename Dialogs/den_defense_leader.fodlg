@@ -17,6 +17,10 @@ Speech 2
   Answer Exit***
     Result Script DenDefense::ToggleAssist
   Answer Exit****
+  Answer Exit*****
+    Result Script DenDefense::HolsterWeapons
+  Answer Exit******
+    Result Script DenDefense::ReadyWeapons
 
 [Text russ]
 {Name}{}{Главный наёмник}
@@ -29,6 +33,8 @@ Speech 2
 {Speech 2 Answer Exit**}{}{Переключи защиту меня от нападений у всего отряда.}
 {Speech 2 Answer Exit***}{}{Переключи помощь в моих атаках у всего отряда.}
 {Speech 2 Answer Exit****}{}{Пока без изменений.}
+{Speech 2 Answer Exit*****}{}{Не светите пушками, нарваться хотите?}
+{Speech 2 Answer Exit******}{}{Так, че расслабились - кулаки размяли, оружие к бою}
 
 [Text engl]
 {Name}{}{Mercenary leader}
@@ -41,3 +47,5 @@ Speech 2
 {Speech 2 Answer Exit**}{}{Toggle defending me against attackers for the whole squad.}
 {Speech 2 Answer Exit***}{}{Toggle assisting my attacks for the whole squad.}
 {Speech 2 Answer Exit****}{}{No changes for now.}
+{Speech 2 Answer Exit*****}{}{Stop flashing your guns. Looking for trouble?}
+{Speech 2 Answer Exit******}{}{Getting soft, are we? Flex those fists, weapons ready!}

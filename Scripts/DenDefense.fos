@@ -445,6 +445,22 @@ void ToggleAssist(Critter player, Critter npc)
     }
 }
 
+[[DialogResult]]
+void HolsterWeapons(Critter player, Critter npc)
+{
+    if (CanControlCompanion(player, npc)) {
+        Merc::SetBehaviorParameter(player, npc, CritterProperty::MercWeaponReady, 0);
+    }
+}
+
+[[DialogResult]]
+void ReadyWeapons(Critter player, Critter npc)
+{
+    if (CanControlCompanion(player, npc)) {
+        Merc::SetBehaviorParameter(player, npc, CritterProperty::MercWeaponReady, 1);
+    }
+}
+
 // При провале игроки могут только выйти и войти заново; обычные городские NPC не замораживаются.
 bool CanAct(Critter cr)
 {
