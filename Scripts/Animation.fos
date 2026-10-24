@@ -95,7 +95,7 @@ void OnCritterAnimationFrames(hstring modelName, CritterStateAnim stateAnim, Cri
 // Имя криттера задаёт каталог и спец-обработку (турель/транспорт/фрик/мозг), цвет — постфиксы [n,R,G,B].
 string ProcessTactics(string crTypeName, int stateAnim, int actionAnim, int& pass, uint& flags, int& ox, int& oy)
 {
-    // Todo: Implement overlays
+    // TODO: реализовать наложения.
 
     // breadcrumb миграции: раньше имя типа получали через GetCritterTypeName(crType); теперь это ModelName
     // string@ crTypeName = GetCritterTypeName( crType );//теперь это ModelName
@@ -193,14 +193,14 @@ string ProcessTactics(string crTypeName, int stateAnim, int actionAnim, int& pas
 
     // Турель
     if (isTurret) {
-        // Todo:
+        // TODO: добавить остальные анимации турели.
         animName += "StandArmed.spr";
         return animName;
     }
 
     // Транспорт
     if (isVehicle) {
-        // Todo:
+        // TODO: добавить остальные анимации транспорта.
         animName += "Idle.spr";
         return animName;
     }
@@ -241,7 +241,7 @@ string ProcessTactics(string crTypeName, int stateAnim, int actionAnim, int& pas
 
         // Действие -> суффикс имени анимации
         switch (actionAnim) {
-        // Todo: Climb, Climbdown, Climbup
+        // TODO: добавить действия Climb, Climbdown, Climbup.
         case CritterActionAnim::Walk:
             animName += "Walk";
             break;
@@ -1207,8 +1207,9 @@ void PlayAnimSound(hstring modelName, int gender, CritterStateAnim stateAnim, Cr
     sound += " ";
     sound[sound.length() - 1] = abc[fActionAnim];
 
-    // "ha" -> "hm" / "hf" по полу
-    if (sound[0] == "h" && sound[1] == "a") {
+    // Пол берём у персонажа: алиасы женских моделей тоже ведут к мужскому донору hmjmps.
+    // Для любого человеческого донора выбираем "hm" / "hf" до поиска файла и общей маски.
+    if (sound[0] == "h") {
         sound[1] = (isFemale ? "f" : "m");
     }
 

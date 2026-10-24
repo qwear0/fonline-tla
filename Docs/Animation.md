@@ -21,6 +21,21 @@ last frame and, for a two-part death, selects its final pose directly instead of
 again. This prevents the client's looping 2D idle from replaying death on a corpse, including Smitty.
 The marker is a transient game animation-selection bit, not a new saved property or an engine edit.
 
+## Fallout animation sounds (game script)
+
+On CLIENT, `Scripts/Animation.fos::OnCritterAnimationProcess` calls `PlayAnimSound` with the
+critter's `ModelName` and `Gender`. `Scripts/CritterAnims.fos::GetCritterSound` resolves the sound
+donor; many female models (including Den attackers `nftrmp` and `nfprim`) share the male `hmjmps`
+donor. For human sound donors (`h*`), `PlayAnimSound` therefore sets the `hf` / `hm` prefix from
+`Gender` **after** donor resolution, before trying either the specific file or the generic
+`hfxxxx` / `hmxxxx` mask. The donor's sex must not override the character's voice.
+
+`Scripts/Sounds.fos::Play` resolves the resulting legacy name to an exact baked resource path.
+The existing male fallback is used only when a female sound for that action is absent; non-human
+donors keep their model-specific lookup. This is client presentation only, with no saved-property,
+prototype, animation-frame alias or engine contract change. Verification requires rebaking scripts;
+a live client is needed to confirm audible playback.
+
 ## Root motion in the baked image format
 
 `ImageImport::FrameShot` (see `Engine/Source/Tools/ImageImport.h`) carries per-frame metadata for an
