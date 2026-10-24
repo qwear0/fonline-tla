@@ -129,6 +129,20 @@ bool IsCompanion(Critter cr)
     return IsActor(cr) && cr.DenDefenseRole == ROLE_COMPANION;
 }
 
+// Ослабляем весь рукопашный урон врагов волны, а не только бонус от силы.
+int ScaleEnemyMeleeDamage(Critter cr, int damage)
+{
+    return IsActor(cr) && cr.DenDefenseRole == ROLE_ENEMY ? Math::Max(1, damage * 34 / 100) : damage;
+}
+
+// Применяется один раз при создании: меняем итоговый максимум, сохраняя формулу характеристик.
+void ScaleSpawnHealth(Critter cr, int percent)
+{
+    int maxLife = cr.MaxLife;
+    cr.MaxLifeBase += Math::Max(1, maxLife * percent / 100) - maxLife;
+    cr.CurrentHp = cr.MaxLife;
+}
+
 bool IsPrimary(Critter cr)
 {
     return IsParticipant(cr) && cr.Id == Game.DenDefensePrimaryId;
@@ -351,6 +365,7 @@ void CreateCompanion(Critter primary, Map map, int index)
     ids.insertLast(companion.Id);
     Game.DenDefenseCompanionIds = ids;
     verify(Merc::Merc2Player(primary, companion, true, false, 0, 3, Merc::MERC_CUSTOM, true, true), "Unable to assign Den companion", companion);
+    ScaleSpawnHealth(companion, 150);
     companion.StopTimeEvent(NpcBags::OnCritterIdle);
     companion.IsNoEnemyStack = true;
     companion.IsNoLoot = false;
@@ -881,6 +896,7 @@ void SpawnEnemy()
                                         {CritterProperty::DenDefenseBrother, brother},
                                         {CritterProperty::TeamId, int(Teams::Mob0)}};
     Critter enemy = map.AddCritter(proto, hex, HDIR_Random, props);
+    ScaleSpawnHealth(enemy, 50);
     if (cursor == 0) {
         Game.Log("Den defense first enemy spawned, wave=" + Game.DenDefenseWave + " id=" + enemy.Id + " hex=" + hex.x + ":" + hex.y);
     }

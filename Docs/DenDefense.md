@@ -70,9 +70,14 @@ no existing serialized identifier is removed/renamed and no migration rule/engin
   a route to the workshop through openable unlocked doors. A locally free pocket between cars is not
   a valid spawn; failure to find a connected hex aborts placement instead of trapping an actor.
 - Each of the four companions starts with one crowbar and two actual consumable stimpaks.
+  Their maximum and starting HP are 150% of the normal prototype-derived maximum, applied once at
+  creation; rest and reconnects do not compound the increase.
   [`Merc.fos`](../Scripts/Merc.fos) retains ownership through death and exempts these companions from
   ordinary dismissal/expiry. Scenario-only Charisma counting in `Merc`/`GlobalmapGroup` does not enlarge
   vehicle seating or exempt unrelated recruits.
+- Ordinary and super stimpaks declare both `IsCanUse` (inventory self-use) and `IsCanUseOnSmth`
+  (use on another critter). `CritterActions.UseItemOn` checks these capabilities before dispatching
+  to `Main.CritterUseItem` -> `Drugs.UseDrug` / `UseDrugOn`; one unit is consumed through `ItemStacks`.
 - The tribal models lack Club frames. The server's narrow companion exception in
   [`CritterAnims.fos`](../Scripts/CritterAnims.fos) admits the existing `Animation` Club-to-Knife fallback
   for these companions; it does not allow other NPCs to use unsupported weapons. Visual suitability
@@ -121,6 +126,14 @@ client `MapTime`/`DayColor` follow synchronized time for lighting.
 | 1 | 25 varied unarmed addicts; alcohol and miscellaneous loot |
 | 2 | 15 tribals: exactly three spears, twelve unarmed; meat/flowers/healing powder |
 | 3 | 20 unarmed townspeople and Bobby/Billy Dunton; each brother has brass knuckles and a single-shot `springer_rifle` with **one loaded + four spare rounds**; money/alcohol/miscellaneous loot |
+
+Every newly spawned wave enemy, including the Dunton brothers, starts at 50% of its normal maximum
+HP, with the maximum reduced by the same amount. `Combat.CombatAttack` passes the full unarmed/melee
+damage range (weapon plus melee bonus) through `DenDefense.ScaleEnemyMeleeDamage`, keeping 34% before
+critical and armor calculations. Ranged damage, Smitty, players and NPCs outside this scenario are
+unchanged. Health and melee scaling round down to whole points, with a minimum of one. Existing
+spawned actors keep their HP until a new attempt creates replacements; the melee modifier is applied
+at attack time.
 
 The first enemy is admitted when the dawn transition finishes; subsequent admissions are spaced by
 three real seconds. Each wave reinstalls the map controller. Spawn selection rotates explicit indoor

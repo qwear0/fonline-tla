@@ -1,6 +1,7 @@
 // Combat — серверная механика боя: расчёт попадания, урона, критов и рассылка результатов клиентам.
 // Отвечает за проведение атак (CombatAttack), применение урона (ApplyDamage/InjureCritter), критические промахи, взрывы (CommenceExplosion), прицельные выстрелы, очереди и выбор случайной цели.
 // Только сторона SERVER; результаты боя собираются в дерево CombatRes и отправляются игрокам через PlayerClientCall.CombatResult.
+// DenDefense задаёт ослабление рукопашного урона только для врагов своих волн.
 namespace Combat
 {
 
@@ -339,6 +340,8 @@ void CombatAttack(Critter cr, Critter target, AbstractItem weapon, int weaponMod
 
     if (isHthAttack) {
         attack.DmgMax += cr.MeleeDamage;
+        attack.DmgMin = DenDefense::ScaleEnemyMeleeDamage(cr, attack.DmgMin);
+        attack.DmgMax = DenDefense::ScaleEnemyMeleeDamage(cr, attack.DmgMax);
     }
 
     if (weaponSubtype == WS_GUN) {
@@ -2907,8 +2910,8 @@ int RawToHit(Critter cr, Critter target, Item? weapon, int weaponUse, ProtoItem?
 
 void NotifyOops(Critter cr, Critter t1, Critter? t2, CombatRes[] results)
 {
-    // если (t2==null), выводится "cr critically missed and hit randomly."
-    // иначе выводится "oops! t2 was hit instead of t1!"
+    // Если t2 == null, сообщаем, что критический промах cr привёл к случайному попаданию.
+    // Иначе сообщаем, что вместо t1 удар пришёлся по t2.
     if (t2 == null) {
         any[] allEff = {MessageSpecifications::HitRandomly, cr.Id};
         Critter[] crits = cr.GetCritters(CritterSeeType::WhoSeeMe, CritterFindType::Players);
@@ -2990,9 +2993,9 @@ const int LK = CritterProperty::Luck;
 const int[] CriticalTable =
 {
     // 30240
-    // Roll 0 - 20                                                21 - 45                                                       46 - 70                                                       71 - 90                                                       91 - 100                                                      100+
-    // DamageMultiplier Effects StatCheck CheckModifier FailureEffect Message FailureMessage
-    // DM  Effects     Stat  Check FailEffects Mess  FailMess
+    // Бросок: 0–20, 21–45, 46–70, 71–90, 91–100, 100+.
+    // Поля: множитель урона, эффекты, проверяемая характеристика, модификатор проверки,
+    // эффекты провала, сообщение, сообщение провала.
 // Мужчины
 /* Head */ 4, 0x00000000,   -1,    0, 0x00000000, 5001, 5000,            4, 0x00000800,   EN,    0, 0x00000001, 5002, 5003,            5, 0x00000800,   EN,   -3, 0x00000001, 5002, 5003,            5, 0x00000802,   EN,   -3, 0x00000001, 5004, 5003,            6, 0x00000801,   LK,    0, 0x00000040, 5005, 5006,            6, 0x00000080,   -1,    0, 0x00000000, 5007, 5000,
     /* LArm */ 3, 0x00000000,   -1,    0, 0x00000000, 5008, 5000,            3, 0x00008000,   -1,    0, 0x00000000, 5009, 5000,            4, 0x00000000,   EN,   -3, 0x00000010, 5010, 5011,            4, 0x00000810,   -1,    0, 0x00000000, 5012, 5000,            4, 0x00000810,   -1,    0, 0x00000000, 5012, 5000,            4, 0x00000810,   -1,    0, 0x00000000, 5013, 5000,
