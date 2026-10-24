@@ -9,7 +9,7 @@
 //  две половины ручной прокрутки карты (от курсора у края экрана и от стрелок; движок хранит в карте только
 //  итоговое направление, Map.SetManualScroll, а половины меняются своими событиями ввода), включённость
 //  прокрутки курсором для полноэкранного и оконного режимов (F8, начальные значения — из настроек Hex.*)
-//  и показ справки (F1).
+//  и показ справки (F1) и имён НПЦ (F11). Выбор отображения действует до перезапуска клиента.
 namespace InputHandler
 {
 
@@ -20,6 +20,7 @@ ScrollDirection KeyboardScroll = ScrollDirection::None;
 bool FullscreenEdgeScroll = true;
 bool WindowedEdgeScroll = false;
 bool HelpInfoShown = false;
+bool NpcNamesShown = true;
 
 // Точка входа модуля: регистрирует колбэки ввода при старте клиента.
 [[ModuleInit]]
@@ -44,6 +45,12 @@ bool IsEdgeScrollEnabled()
 bool IsHelpInfoShown()
 {
     return HelpInfoShown;
+}
+
+// Показывать ли имена НПЦ над головами (переключается F11).
+bool IsNpcNamesShown()
+{
+    return NpcNamesShown;
 }
 
 // Направления прокрутки одним набором флагов.
@@ -181,9 +188,9 @@ bool HandleHotkeys(KeyCode key)
         case KeyCode::F10:
             break;
 
-        // Полноэкранный режим
+        // Показ имён НПЦ над головами
         case KeyCode::F11:
-            Game.ToggleFullscreen();
+            NpcNamesShown = !NpcNamesShown;
             break;
         // Свернуть окно
         case KeyCode::F12:

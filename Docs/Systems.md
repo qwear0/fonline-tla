@@ -107,6 +107,7 @@ operations rather than raw engine add/move/destroy/clone calls. Cursor visuals a
 | `DayColor` | shared helpers, C/M updates | Evaluate authored day curves and push `Map.SetDayColors` each frame |
 | `MapTime` / `GameTime` | shared helpers, S clock setter | One scaled TLA calendar, future dates and forward-only shared dawn advance; frame callbacks retain their real delays |
 | `UserOptions` | C | Persist player choices as qualified `Group.Name` local settings |
+| `InputHandler` / `MapText` | C | F11 toggles overhead NPC names, initially shown; the choice lasts until client restart. Player names and speech remain visible. F11 no longer toggles fullscreen. |
 | `AiControl` | S/C | Client observation/control and explicitly gated server QA commands; [AiControl.md](AiControl.md) |
 | `MapperMain` | M | Editor tabs/tools and mapper lifecycle |
 | `Migration` | S metadata | Current property remove/rename `///@ MigrationRule` declarations |

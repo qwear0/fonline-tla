@@ -2451,7 +2451,6 @@ ing  in
 #
 ####################################################################################################################################
 
-# F7 - on/off NPC name illuminating.
 # F9 - on/off bullet tracing.
 
 {2000000000}{}{
@@ -2464,6 +2463,7 @@ F4 - Text input panels toggle.
 F5 - Expanded message window toggle.
 F6 - Player names display toggle.
 F8 - Mouse scrolling toggle (helps in window mode).
+F11 - Toggle NPC names above their heads.
 F12 - Minimize client window.
 Arrow keys - Map scrolling.
 Esc - Menu.

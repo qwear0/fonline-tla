@@ -1,6 +1,7 @@
 // MapText — текст на карте: реплики над головами криттеров и всплывающий/статичный текст в гексах.
 // SERVER: рассылает текст клиентам, которые видят криттера или гекс, через ReceiveMapText.
 // CLIENT: хранит активные подписи, анимирует их (всплытие, прозрачность) и отрисовывает в интерфейсе.
+//  Показ имён НПЦ берёт из InputHandler (F11); имена игроков и реплики не скрывает.
 // COMMON: набор перегрузок AddText/AddFlyingText даёт единый вызов для серверной и клиентской сторон.
 namespace MapText
 {
@@ -261,6 +262,10 @@ void DrawCritterText(Critter cr)
     }
 
     bool drawSpeech = Game.FrameTime < cr.TextOnHeadEndTime;
+    if (!drawSpeech && !cr.ControlledByPlayer && !InputHandler::IsNpcNamesShown()) {
+        return;
+    }
+
     string text = drawSpeech ? cr.TextOnHead : (cr.IsOffline() ? cr.Name + Settings.Gui.PlayerOffAppendix : cr.Name);
 
     FontType textFont = FontType::Default;
