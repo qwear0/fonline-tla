@@ -146,10 +146,15 @@ bool HandleHotkeys(KeyCode key)
         }
     }
 
-    if (key == KeyCode::A && Input::IsCtrlDown() && !Input::IsAltDown() && !Input::IsShiftDown() && !inputFocused) {
+    if (key == KeyCode::A && Input::IsCtrlDown() && !Input::IsAltDown() && !inputFocused) {
         Gui::Screen? screen = Gui::GetActiveScreen();
         if (screen != null && screen.Num == GuiScreen::Game) {
-            DenAutoAttack::Request();
+            if (Input::IsShiftDown()) {
+                DenAutoAttack::ToggleAutomaticAttack();
+            }
+            else {
+                DenAutoAttack::Request();
+            }
             return true;
         }
     }

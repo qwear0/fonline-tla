@@ -187,7 +187,7 @@ Only confirmed deaths of current-generation enemies on the scenario map retire o
 Incomplete spawning, map loss, disappearance, escape and unrelated deaths do not clear a wave; a lost
 outstanding actor fails diagnostically instead of awarding a false victory.
 
-## One-shot player autoattack
+## Player autoattack
 
 `Ctrl+A` on the Game screen asks `DenAutoAttack` to select a visible, usable target from
 **current-generation Den defense enemies only**. Eligible enemies with `CurrentHp > 0` take priority
@@ -204,7 +204,7 @@ exact hex with the existing action queue and pathfinder. A reachable radius behi
 enemies without a usable position are skipped. The approach retains a usable destination while moving
 and reevaluates it if it becomes blocked or no longer has range/trace to the target. Ranged/throwing
 only selects an in-range, unobstructed target and never approaches. Holding the key does not repeat
-attacks; there is no automatic reload or retarget.
+attacks in this one-shot mode; there is no automatic reload or retarget.
 If no eligible target exists, unrelated queued actions are left alone. Weapon changes, lost/dead targets,
 failed paths and stale target-selection replies cancel the automatic command. The server rechecks
 scenario eligibility, range and trace before the actual attack. The client also rechecks range/trace
@@ -212,8 +212,22 @@ for melee and ranged attacks before weapon animation, AP prediction and dispatch
 Ordinary `A`, aimed mouse attacks and damage rules are unchanged; bursts/explosions still follow the
 existing collateral-damage rules.
 
-Owners: `Scripts/InputHandler.fos` (hotkey), `Scripts/DenAutoAttack.fos` (selection RPC and execution
-guard), `Scripts/ChosenActions.fos` (queue), `Scripts/Tla.fos` (client action codes).
+`Ctrl+Shift+A` toggles a client-session repeat mode, shown by a green **Autoattack / Автоатака**
+status tab using the same HUD presentation as Sneak. With the Game screen active, it requests the same
+one-shot command once enough current AP is available for the active main-hand weapon/use (including
+empty-hand attacks), calculating the cost without aiming. Every repeat selects a target anew under
+the same Den-only rules. Changing weapon/use affects the next request; the saved aiming mode is untouched.
+The mode waits while moving, busy, performing queued actions, using other screens or the console, or
+while the defense is resting/frozen. It does not reload, attack with empty/broken weapons or repeatedly
+issue unusable attacks with injured arms. Target requests are spaced by at least 500 ms; an unanswered
+request expires after 2 seconds. Manual actions invalidate pending selection replies and take priority.
+Toggling off also cancels queued automatic attacks/approaches. Map load, disconnect, death or changing
+the controlled critter disables the mode; it is not saved in user options.
+
+Owners: `Scripts/InputHandler.fos` (hotkeys), `Scripts/DenAutoAttack.fos` (repeat state, selection RPC
+and execution guard), `Scripts/ChosenActions.fos` (queue), `Scripts/ChosenTabs.fos` (HUD),
+`Scripts/MsgStr.fos` and `Texts/Game.{engl,russ}.fotxt` (localized status title),
+`Scripts/Tla.fos` (client action codes).
 Role/generation properties remain server-only;
 client/server outputs must be rebaked/rebuilt together for the added RemoteCalls.
 

@@ -1,7 +1,7 @@
-// DenAutoAttack — одиночная неприцельная атака врага обороны Дэна по Ctrl+A: сначала цели с ОЖ > 0, затем ближайшая.
-// CLIENT: запрашивает цель и передаёт одну атаку существующей очереди ChosenActions.
+// DenAutoAttack — неприцельная атака врага обороны Дэна: Ctrl+A — один раз, Ctrl+Shift+A — повтор при накоплении ОД.
+// CLIENT: запрашивает цель и передаёт атаки существующей очереди ChosenActions; сначала цели с ОЖ > 0, затем ближайшая.
 // SERVER: выбирает только видимых врагов текущего сценария и проверяет их перед CritterActions::Attack.
-// Глобальное состояние — номер и снимок ожидающего запроса клиентской сессии: нужны для отбрасывания запоздалых ответов.
+// Глобальное состояние клиентской сессии: режим повтора и его персонаж, таймеры запросов и снимок для отбрасывания запоздалых ответов.
 namespace DenAutoAttack
 {
 
@@ -92,31 +92,124 @@ bool FindAutoAttackPosition(Map map, Critter cr, Critter target, int reach, mpos
 
 uint AutoAttackRequestId = 0;
 any[] PendingAutoAttack = {}; // id персонажа, id карты, id оружия, pid оружия, исходный режим
+bool AutomaticAttackEnabled = false;
+ident AutomaticAttackChosenId = ZERO_IDENT;
+bool PendingAutomaticAttack = false;
+nanotime NextAutomaticAttackRequest = ZERO_NANOTIME;
+nanotime AutomaticAttackRequestDeadline = ZERO_NANOTIME;
 
 [[ModuleInit]]
 void InitDenAutoAttack()
 {
     Game.OnMapLoaded.Subscribe(ClearDenAutoAttack);
     Game.OnDisconnected.Subscribe(ClearDenAutoAttack);
+    Game.OnLoop.Subscribe(ProcessAutomaticAttack);
+}
+
+bool IsAutomaticAttackEnabled()
+{
+    return AutomaticAttackEnabled;
+}
+
+void ToggleAutomaticAttack()
+{
+    if (AutomaticAttackEnabled) {
+        StopAutomaticAttack();
+    }
+    else if (HasChosen && HasCurMap && Chosen.IsAlive()) {
+        AutomaticAttackEnabled = true;
+        AutomaticAttackChosenId = Chosen.Id;
+        NextAutomaticAttackRequest = ZERO_NANOTIME;
+    }
+}
+
+// Не вытесняем ручные команды и не отправляем запрос до накопления ОД на выбранный неприцельный удар.
+bool CanRepeatAttack()
+{
+    if (!HasChosen || !HasCurMap || !Chosen.IsAlive() || Game.DenDefenseClientFrozen || Game.DenDefenseClientResting || Gui::IsConsoleActive()) {
+        return false;
+    }
+    Gui::Screen? screen = Gui::GetActiveScreen();
+    if (screen == null || screen.Num != GuiScreen::Game) {
+        return false;
+    }
+    Critter chosen = Chosen;
+    if (chosen.IsMoving() || !ChosenActions::IsFree(chosen)) {
+        return false;
+    }
+    AbstractItem weapon = CritterItem::GetActive(chosen);
+    Item? held = chosen.GetItem(ItemProperty::CritterSlot, CritterItemSlot::Main);
+    int mode = CritterItem::GetActiveMode(chosen);
+    if (!MatchesAutoAttackWeapon(chosen, held != null ? held.Id : ZERO_IDENT, weapon.ProtoId, mode)) {
+        return false;
+    }
+    int attackMode = WeaponHelpers::MakeWeaponMode(WeaponHelpers::WeaponModeUse(mode), HitLocations::LocationNone);
+    int apCost = Parameters::GetItemUseApCost(chosen, weapon, attackMode);
+    if (chosen.ActionPoints < apCost || chosen.CurrentAp / Tla::AP_DIVIDER < apCost ||
+        (!chosen.IsUnlimitedAmmo && weapon.Weapon_MaxAmmoCount > 0 && weapon.AmmoCount == 0) || (weapon.Deteriorable && weapon.IsBroken) ||
+        (weapon.Weapon_IsTwoHanded && (chosen.IsDamagedRightArm || chosen.IsDamagedLeftArm)) ||
+        (held != null && chosen.IsDamagedRightArm && chosen.IsDamagedLeftArm)) {
+        return false;
+    }
+    any[] actions = {};
+    return ChosenActions::GetChosenActions(actions) == 0;
+}
+
+[[Event]]
+void ProcessAutomaticAttack()
+{
+    if (!AutomaticAttackEnabled) {
+        return;
+    }
+    if (!HasChosen || !HasCurMap || !Chosen.IsAlive() || Chosen.Id != AutomaticAttackChosenId) {
+        StopAutomaticAttack();
+        return;
+    }
+    if (Game.FrameTime < NextAutomaticAttackRequest) {
+        return;
+    }
+    // Потерянный ответ не останавливает режим навсегда; номер нового запроса отсекает старый ответ.
+    if (!PendingAutoAttack.isEmpty()) {
+        if (Game.FrameTime < AutomaticAttackRequestDeadline) {
+            return;
+        }
+        CancelRequest();
+    }
+    if (CanRepeatAttack()) {
+        Request(true);
+        NextAutomaticAttackRequest = Game.FrameTime + Time::Milliseconds(500);
+    }
 }
 
 void CancelRequest()
 {
     PendingAutoAttack.clear();
+    PendingAutomaticAttack = false;
 }
 
 [[Event]]
 void ClearDenAutoAttack()
 {
+    StopAutomaticAttack();
+}
+
+void StopAutomaticAttack()
+{
+    AutomaticAttackEnabled = false;
+    AutomaticAttackChosenId = ZERO_IDENT;
+    NextAutomaticAttackRequest = ZERO_NANOTIME;
     CancelRequest();
     any[] actions = {};
     ChosenActions::GetChosenActions(actions);
     if (actions.length() > 0 && (int(actions[0]) == Tla::ChosenDenAutoAttack || int(actions[0]) == Tla::ChosenDenAutoMove)) {
+        if (int(actions[0]) == Tla::ChosenDenAutoMove && HasChosen) {
+            Chosen.StopMove();
+        }
         ChosenActions::SetChosenActions({});
     }
 }
 
-void Request()
+void Request(bool automatic = false)
 {
     CancelRequest();
     if (!HasChosen || !HasCurMap || !Chosen.IsAlive() || Game.DenDefenseClientFrozen || Game.DenDefenseClientResting) {
@@ -131,6 +224,8 @@ void Request()
         return;
     }
     PendingAutoAttack = {chosen.Id, CurMap.Id, weaponId, weapon.ProtoId, mode};
+    PendingAutomaticAttack = automatic;
+    AutomaticAttackRequestDeadline = Game.FrameTime + Time::Seconds(2);
     AutoAttackRequestId++;
     CurPlayer.ServerCall.FindDenAutoAttackTarget(AutoAttackRequestId, chosen.Id, CurMap.Id, weaponId, weapon.ProtoId, mode);
 }
@@ -141,8 +236,12 @@ void DenAutoAttackTarget(uint requestId, ident targetId)
     if (requestId != AutoAttackRequestId || PendingAutoAttack.isEmpty()) {
         return;
     }
+    bool automatic = PendingAutomaticAttack;
     any[] request = PendingAutoAttack.clone();
     CancelRequest();
+    if (automatic && (!AutomaticAttackEnabled || !CanRepeatAttack())) {
+        return;
+    }
     if (targetId == ZERO_IDENT || !HasChosen || !HasCurMap || !Chosen.IsAlive() || Chosen.Id != ident(request[0]) || CurMap.Id != ident(request[1]) ||
         Game.DenDefenseClientFrozen || Game.DenDefenseClientResting) {
         return;
