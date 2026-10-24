@@ -143,7 +143,9 @@ Common.SecretSettingTokens = secret token password apikey
 Critter.CritterIdleTick = 10000
 Critter.MaxAddUnstackableItems = 10
 Critter.CritterSlotEnabled = True True True True
-Critter.CritterSlotSendData = True False True True
+
+# Порядок слотов: рюкзак, основная рука, вторая рука, броня. Окружающим видна только экипировка.
+Critter.CritterSlotSendData = False True True True
 Critter.CritterSlotMultiItem = True False False False
 
 CritterView.NameOffset = 0

@@ -181,7 +181,12 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   map departure, master departure or dismissal also release it. Completion resumes the previous
   follow/wait behavior. These jobs/reservations do not survive server restart; no new RemoteCall or
   serialized-property removal/rename migration is needed. Client gameplay acceptance remains manual.
-- Both `hmlthr` and `hmlmax` support Knife, Club and Hammer frames for the starting weapons.
+- Weapon stance comes from the actual main-hand item on the client (`Animation::GetStateAnim`).
+  `TLA.fomain` sets `Critter.CritterSlotSendData = False True True True` in slot order
+  Inventory/Main/Secondary/Armor: other critters' equipped items are synchronized both on entering
+  view and after slot changes; backpack contents stay private. Disabling Main makes an armed
+  companion appear unarmed between action animations, even when its model has the required frames.
+  Both `hmlthr` and `hmlmax` support Knife, Club and Hammer frames for the starting weapons.
   The narrow companion-only Club-to-Knife fallback in [`CritterAnims.fos`](../Scripts/CritterAnims.fos)
   remains for older tribal companions; it does not admit unsupported weapons for unrelated NPCs.
   Visual suitability still needs in-client acceptance.
