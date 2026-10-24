@@ -2455,6 +2455,10 @@ namespace Game
                 Item? realWeapon = chosen.GetItem(ItemProperty::CritterSlot, CritterItemSlot::Main);
                 int mode = (realWeapon != null && useItem != null ? useItem.Mode : chosen.HandsItemMode);
                 if (cr != null) {
+                    // Труп не выбирается оружием, в том числе для экрана прицеливания.
+                    if (isAttack && cr.IsDead()) {
+                        return;
+                    }
                     if (isAttack && ::WeaponHelpers::WeaponModeAim(mode) != 0) {
                         //IsCritterCanAim( chosen.ModelName ) &&
                         if (!chosen.IsNoAim) {
@@ -16054,8 +16058,6 @@ namespace Cursor
         Sprite::Sprite CursorUseSkill;
         Sprite::Sprite[] CursorMoveScreen = {};
 
-        ucolor CurCrittersCountour;
-
         void OnConstruct() override
         {
             SetHasOnDraw(true);
@@ -16090,7 +16092,17 @@ namespace Cursor
             }
 
             int cursor = Gui::Cursor;
-            // Game scroll
+            // Обновляем и при неизменном курсоре: цель могла умереть или только появиться.
+            ucolor contour = (cursor == CursorType::UseWeapon ? ucolor(255, 0, 0, 255) : ZERO_UCOLOR);
+            Critter[] visibleCritters = CurMap.GetCritters(CritterFindType::Any);
+            for (int i = 0; i < visibleCritters.length(); i++) {
+                Critter cr = visibleCritters[i];
+                ucolor targetContour = cr.IsDead() ? ZERO_UCOLOR : contour;
+                if (cr.Contour != targetContour) {
+                    cr.Contour = targetContour;
+                }
+            }
+            // Прокрутка карты
             bool scrollLeft = ::InputHandler::IsMouseScrolling(ScrollDirection::Left);
             bool scrollRight = ::InputHandler::IsMouseScrolling(ScrollDirection::Right);
             bool scrollUp = ::InputHandler::IsMouseScrolling(ScrollDirection::Up);
@@ -16126,17 +16138,7 @@ namespace Cursor
             if (hasMouseScroll) {
                 return;
             }
-            // Attack contours
-            ucolor contour = (cursor == CursorType::UseWeapon ? ucolor(255, 0, 0, 255) : ZERO_UCOLOR);
-            if (contour != CurCrittersCountour) {
-                CurCrittersCountour = contour;
-                Critter[] critters = CurMap.GetCritters(CritterFindType::Any);
-                for (int i = 0; i < critters.length(); i++) {
-                    critters[i].Contour = CurCrittersCountour;
-                }
-            }
-
-            // Other cursors
+            // Остальные курсоры
             if (cursor == CursorType::UseWeapon) {
                 CursorAttack.Draw(Game.MousePos, isize(), 0, 0);
 
@@ -16146,7 +16148,7 @@ namespace Cursor
                 Critter chosen = Chosen;
 
                 Critter? cr = CurMap.GetCritterAtScreenPos(ipos(Game.MousePos.x, Game.MousePos.y));
-                if (cr == null || cr is chosen) {
+                if (cr == null || cr is chosen || cr.IsDead()) {
                     return;
                 }
 

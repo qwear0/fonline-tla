@@ -119,6 +119,10 @@
                 Item? realWeapon = chosen.GetItem(ItemProperty::CritterSlot, CritterItemSlot::Main);
                 int mode = (realWeapon != null && useItem != null ? useItem.Mode : chosen.HandsItemMode);
                 if (cr != null) {
+                    // Труп не выбирается оружием, в том числе для экрана прицеливания.
+                    if (isAttack && cr.IsDead()) {
+                        return;
+                    }
                     if (isAttack && ::WeaponHelpers::WeaponModeAim(mode) != 0) {
                         //IsCritterCanAim( chosen.ModelName ) &&
                         if (!chosen.IsNoAim) {

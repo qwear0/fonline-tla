@@ -1,12 +1,13 @@
 // DenDefense — общий старт у Смитти и единственный владелец состояния обороны Дэна.
 // SERVER: подтверждённый вход, поколения попыток, участники, спутники, отдых, волны и вещи.
-// CLIENT: затемнение всех клиентов и показ провала без права менять серверную стадию.
+// CLIENT: затемнение отдыха и блокировка действий при провале без ролика и скрытия тела.
 // Состояние хранится в свойствах Game/Critter/Map; загрузка сама по себе не начинает попытку.
 // Связи: PlayerRegistration, Main, Merc, NpcPlanes; диалоги den_defense_*.
 namespace DenDefense
 {
 
 ///@ Property Game Client bool DenDefenseClientFrozen Mutable
+// Прежний флаг ролика сохраняем в метаданных для совместимости, но больше не используем.
 ///@ Property Game Client bool DenDefenseClientShowFailure Mutable
 ///@ Property Game Client int32 DenDefenseClientGeneration Mutable
 ///@ Property Game Client bool DenDefenseClientResting Mutable
@@ -37,6 +38,7 @@ namespace DenDefense
 ///@ Property Game Server synctime DenDefenseDawn Mutable Persistent
 ///@ Property Game Server bool DenDefenseDawnLocked Mutable Persistent
 ///@ Property Game Server bool DenDefenseRestUsed Mutable Persistent
+// Зарезервированный флаг прежнего показа ролика: сохраняем сериализованный контракт.
 ///@ Property Game Server bool DenDefenseFailurePresented Mutable Persistent
 
 ///@ Property Critter Server int32 DenDefenseGeneration Mutable Persistent
@@ -225,7 +227,6 @@ void StartAttempt(Critter primary)
     Game.StopTimeEvent(FinishRest);
     Game.StopTimeEvent(StartAfterRest);
     Game.StopTimeEvent(CloseRestDialogs);
-    Game.StopTimeEvent(PresentFailure);
     Game.DenDefenseWave = 0;
     Game.DenDefenseSpawned = 0;
     Game.DenDefenseSpawnTotal = 0;
@@ -614,14 +615,6 @@ void StopScenarioActions()
     }
 }
 
-void FadeAll(bool toBlack)
-{
-    Player[] online = Game.GetOnlinePlayers();
-    for (int i = 0; i < online.length(); i++) {
-        online[i].ClientCall.DoFadeScreen(toBlack ? ZERO_UCOLOR : ucolor(0, 0, 0, 255), toBlack ? ucolor(0, 0, 0, 255) : ZERO_UCOLOR, Time::Seconds(1));
-    }
-}
-
 [[DialogResult]]
 void Rest(Critter player, Critter npc)
 {
@@ -872,7 +865,8 @@ void SpawnEnemy()
     int brother = Game.DenDefenseWave == 3 && cursor >= 20 ? cursor - 19 : 0;
     hstring proto;
     if (Game.DenDefenseWave == 1) {
-        proto = cursor % 2 == 0 ? Content::Critter::Loser : Content::Critter::Loser2;
+        // Местные Проститутка (nftrmp), Алкоголик и Псих (nmlosr), как в den.fomap.
+        proto = cursor % 3 == 0 ? Content::Critter::Loser2 : Content::Critter::Loser;
     }
     else if (Game.DenDefenseWave == 2) {
         proto = cursor % 2 == 0 ? Content::Critter::Wilder : Content::Critter::Wilder2;
@@ -885,9 +879,9 @@ void SpawnEnemy()
         // У nmbpea есть J (ружьё), у nmbsnp — нет; оба брата должны реально стрелять.
         proto = brother > 0 ? Content::Critter::WeakPeasant : townspeople[cursor % townspeople.length()];
     }
-    // Готовые пакеты с обычными боевыми репликами: племя / бандиты / горожане.
-    // У прото Loser/WeakPeasant пакет 25 без речи; глобальную таблицу AiSettings не меняем.
-    int aiId = Game.DenDefenseWave == 2 ? 1 : (brother > 0 ? 13 : 14);
+    // Штатные реплики проститутки / зависимых, племени, бандитов и горожан.
+    // Таблицы звуков и анимаций наследуются от моделей; общие прото и AiSettings не меняем.
+    int aiId = Game.DenDefenseWave == 1 ? (cursor % 3 == 0 ? 45 : 11) : (Game.DenDefenseWave == 2 ? 1 : (brother > 0 ? 13 : 14));
     dict<CritterProperty, any> props = {{CritterProperty::BagId, int(Bags::Empty)},
                                         {CritterProperty::AiId, aiId},
                                         {CritterProperty::ReplicationTime, -1},
@@ -896,7 +890,8 @@ void SpawnEnemy()
                                         {CritterProperty::DenDefenseBrother, brother},
                                         {CritterProperty::TeamId, int(Teams::Mob0)}};
     Critter enemy = map.AddCritter(proto, hex, HDIR_Random, props);
-    ScaleSpawnHealth(enemy, 50);
+    // Первая волна: ещё вдвое меньше прежних 50%; остальные волны без изменений.
+    ScaleSpawnHealth(enemy, Game.DenDefenseWave == 1 ? 25 : 50);
     if (cursor == 0) {
         Game.Log("Den defense first enemy spawned, wave=" + Game.DenDefenseWave + " id=" + enemy.Id + " hex=" + hex.x + ":" + hex.y);
     }
@@ -914,7 +909,21 @@ void SpawnEnemy()
     enemy.IsNoSteal = false;
     enemy.IsUnlimitedAmmo = false;
     enemy.IsGeck = true;
-    if (Game.DenDefenseWave == 2) {
+    if (Game.DenDefenseWave == 1) {
+        const hstring[] dialogs = {Content::Dialog::all_prostitute, Content::Dialog::all_alco, Content::Dialog::den_crazy_man};
+        enemy.DialogId = dialogs[cursor % dialogs.length()];
+        // Сумки 26/11 — те же, что у этих жителей den.fomap. Наполняем один раз,
+        // не включая обновление сумки и не копируя квестовое состояние городских NPC.
+        auto bagItems = NpcBags::GetBag(cursor % 3 == 0 ? 26 : 11).GetBagItems();
+        for (int i = 0; i < bagItems.length(); i++) {
+            bagItems[i].AddCritterItem(enemy);
+        }
+        if (cursor % 3 == 1) {
+            ItemStacks::AddItem(enemy, cursor % 2 == 0 ? Content::Item::beer : Content::Item::booze, 1);
+            ItemStacks::AddItem(enemy, Content::Item::rock, Game.Random(1, 3));
+        }
+    }
+    else if (Game.DenDefenseWave == 2) {
         if (cursor < 3) {
             Item spear = ItemStacks::AddItem(enemy, Content::Item::spear, 1);
             enemy.ChangeItemSlot(spear.Id, CritterItemSlot::Main);
@@ -1031,13 +1040,13 @@ bool CheckDefenders()
     Critter? primary = Game.GetCritter(Game.DenDefensePrimaryId);
     Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
     if ((primary != null && primary.IsDead()) || smitty == null || smitty.MapId != Game.DenDefenseMapId) {
-        FailAttempt(primary != null && primary.IsDead());
+        FailAttempt();
         return false;
     }
     return true;
 }
 
-void FailAttempt(bool primaryDeath = false)
+void FailAttempt()
 {
     if (Game.DenDefenseStage == STAGE_FAILED) {
         return;
@@ -1055,44 +1064,9 @@ void FailAttempt(bool primaryDeath = false)
     for (int i = 0; i < online.length(); i++) {
         online[i].ClientCall.DenDefenseTransition(Game.DenDefenseGeneration, 1);
     }
-    if (primaryDeath) {
-        FadeAll(true);
-        Game.StartTimeEvent(Time::Seconds(1), PresentFailure, Game.DenDefenseGeneration);
-    }
+    // Оставляем труп на карте: вещи выпадают через HandleCritterDeath,
+    // а новое поколение и оживление запускаются только подтверждённым входом.
     Game.Log("Den defense failed, generation=" + Game.DenDefenseGeneration);
-}
-
-[[TimeEvent]]
-void PresentFailure(any value)
-{
-    if (int(value) != Game.DenDefenseGeneration || Game.DenDefenseStage != STAGE_FAILED || Game.DenDefenseFailurePresented) {
-        return;
-    }
-    Game.DenDefenseFailurePresented = true;
-    Player[] online = Game.GetOnlinePlayers();
-    for (int i = 0; i < online.length(); i++) {
-        online[i].ClientCall.DenDefenseTransition(Game.DenDefenseGeneration, 2);
-    }
-}
-
-[[TimeEvent]]
-void ReviveSecondary(any[] values)
-{
-    if (int(values[0]) != Game.DenDefenseGeneration || Game.DenDefenseStage == STAGE_FAILED) {
-        return;
-    }
-    Critter? cr = Game.GetCritter(ident(values[1]));
-    if (cr == null || !IsParticipant(cr) || IsPrimary(cr) || !cr.IsDead()) {
-        return;
-    }
-    if (!SpillLoot(cr)) {
-        verify(PlacePlayer(cr), "Unable to map secondary before inventory spill", cr);
-        verify(SpillLoot(cr), "Unable to spill dead secondary inventory", cr);
-    }
-    verify(PlacePlayer(cr), "Unable to revive secondary at Den base", cr);
-    CritterState::ToAlive(cr);
-    cr.CurrentHp = cr.MaxLife;
-    cr.CurrentAp = cr.ActionPoints * Tla::AP_DIVIDER;
 }
 
 // Смерть Смитти не замораживает мир и не начинает новую попытку при следующем входе.
@@ -1128,7 +1102,7 @@ void HandleCritterDeath(Critter cr, Critter? killer)
 {
     bool keyDefender = IsPrimary(cr);
     if (keyDefender) {
-        FailAttempt(true); // Провал фиксируем до переноса вещей и любых ошибок представления.
+        FailAttempt(); // Провал фиксируем до переноса вещей; тело остаётся видимым.
     }
     if (IsActor(cr) && cr.DenDefenseRole == ROLE_SMITTY) {
         cr.StopMoving();
@@ -1138,11 +1112,7 @@ void HandleCritterDeath(Critter cr, Critter? killer)
     if (IsParticipant(cr)) {
         SpillLoot(cr);
     }
-    if (!keyDefender && IsParticipant(cr)) {
-        any[] values = {Game.DenDefenseGeneration, cr.Id};
-        Game.StartTimeEvent(Time::Seconds(3), ReviveSecondary, values);
-    }
-    else if (IsActor(cr) && cr.DenDefenseRole == ROLE_ENEMY) {
+    if (IsActor(cr) && cr.DenDefenseRole == ROLE_ENEMY) {
         ConfirmEnemyDeath(cr);
     }
 }
@@ -1172,7 +1142,7 @@ void ConfirmEnemyDeath(Critter cr)
 [[ModuleInit]]
 void InitDenDefenseClient()
 {
-    Game.OnRenderIface.Subscribe(DrawFailure, EventPriority::Lowest);
+    Game.OnRenderIface.Subscribe(DrawRest, EventPriority::Lowest);
     Game.OnDisconnected.Subscribe(ClearFailurePresentation);
 }
 
@@ -1182,17 +1152,11 @@ void DenDefenseTransition(int generation, int state)
     if (generation < Game.DenDefenseClientGeneration) {
         return;
     }
-    if (state == 0) {
-        StopFailureVideo(true);
-    }
     Game.DenDefenseClientGeneration = generation;
     Game.DenDefenseClientFrozen = state != 0;
-    Game.DenDefenseClientShowFailure = state == 2;
+    Game.DenDefenseClientShowFailure = false;
     Game.DenDefenseClientResting = false;
     ChosenActions::SetChosenActions({});
-    if (state == 2) {
-        Game.PlayVideo("video/TheLifeAfterHell.ogv|video/TheLifeAfterHell.ogg", true, false);
-    }
 }
 
 [[ClientRemoteCall]]
@@ -1208,22 +1172,9 @@ void DenDefenseRestTransition(int generation, int phase, timespan remaining)
     ChosenActions::SetChosenActions({});
 }
 
-void StopFailureVideo(bool resumeMusic)
-{
-    if (!Game.DenDefenseClientShowFailure) {
-        return;
-    }
-    Game.PlayVideo("", true, false);
-    Game.PlayMusic("", Time::Milliseconds(1));
-    if (resumeMusic && HasCurMap && CurMap.Music.length() > 0) {
-        Game.PlayMusic(CurMap.Music[0], Time::Milliseconds(1));
-    }
-}
-
 [[Event]]
 void ClearFailurePresentation()
 {
-    StopFailureVideo(false);
     Game.DenDefenseClientResting = false;
     Game.DenDefenseClientFrozen = false;
     Game.DenDefenseClientShowFailure = false;
@@ -1231,7 +1182,7 @@ void ClearFailurePresentation()
 }
 
 [[Event]]
-void DrawFailure()
+void DrawRest()
 {
     if (Game.DenDefenseClientResting) {
         int remaining = Game.DenDefenseClientBlackAt > Game.FrameTime ? (Game.DenDefenseClientBlackAt - Game.FrameTime).milliseconds : 0;
@@ -1239,12 +1190,6 @@ void DrawFailure()
         int alpha = Game.DenDefenseClientRestPhase == 0 ? 255 - progress : progress;
         Effects::DrawFullscreenOverlay(ucolor(0, 0, 0, alpha));
     }
-    if (!Game.DenDefenseClientShowFailure || Game.IsVideoPlaying() || !HasChosen || !Gui::IsScreenActive(GuiScreen::Game)) {
-        return;
-    }
-    Effects::DrawFullscreenOverlay(ucolor(0, 0, 0, 255));
-    string text = Game.GetText(MsgStr::DialogTextKey("den_defense_smitty".hstr(), 1000));
-    Game.DrawText(text, ipos(40, ScreenSize.height / 2), isize(ScreenSize.width - 80, 150), Color::White, TextFormat(FontType::Big, FontFlag(0), 0));
 }
 
 #endif

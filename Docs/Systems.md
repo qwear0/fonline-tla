@@ -93,8 +93,10 @@ hex with `MercMasterDist` as the stop radius. It does not queue historical playe
 Unchanged active walk routes are not restarted every AI tick; attack plans retain priority.
 
 The engine handles individual item instances and never merges stacks. Use `ItemStacks::` for quantity
-operations rather than raw engine add/move/destroy/clone calls. Cursor visuals also involve
-`Gui/Cursor.fogui`; generated callbacks are not authored owners.
+operations rather than raw engine add/move/destroy/clone calls. `Gui/Cursor.fogui` refreshes weapon
+contours against current death state each frame: corpses have no red outline or hit-chance label.
+`Gui/Game.fogui` rejects dead weapon targets before aiming or queuing an attack; non-weapon corpse
+interactions remain available. Generated callbacks are not authored owners.
 
 ### Infrastructure and presentation
 

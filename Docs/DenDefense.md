@@ -3,7 +3,7 @@
 ## Scope and entrypoints
 
 Owner: [`Scripts/DenDefense.fos`](../Scripts/DenDefense.fos), server-authoritative scenario with
-client-only fades and failure presentation. It uses the existing shared `den` location/map and its
+client-only rest fades and failure input blocking. It uses the existing shared `den` location/map and its
 original Smitty, not a private base or a replacement city. Ordinary inhabitants and map items are not
 reset. Smitty's former trader/dialog behavior is intentionally replaced for this scenario.
 
@@ -48,10 +48,10 @@ run as secondaries; living inventories, builds, experience and levels are retain
 Primary death fails the run, including after Victory. Smitty's death does **not** fail/freeze the run,
 show a movie, revive him or trigger a reset on login. An already active wave can finish, but no living
 Smitty means no briefing, next rest/wave or reward dialog. Death during Resting cancels that rest and
-clears the blackout without starting another wave. Secondary death does not fail the run: that
-character returns alive at the base after a three-real-second callback (or confirmed re-entry if
-unloaded). Dead companions stay dead until reset. Disconnecting, ordinary Active/Victory login,
-loading the server and completing/skipping a movie do not select another primary. A replacement
+clears the blackout without starting another wave. Secondary death does not fail the run, but the
+character stays dead until confirmed re-entry; there is no timed automatic revival. Dead companions
+stay dead until reset. Disconnecting, ordinary Active/Victory login and loading the server do not
+select another primary. A replacement
 generation after primary death still sets up Smitty and the squad anew.
 
 `Game` properties persist generation, IDs, stage, wave cursor, outstanding/history IDs and rest target/
@@ -123,17 +123,23 @@ client `MapTime`/`DayColor` follow synchronized time for lighting.
 
 | Wave | Composition and equipment |
 | --- | --- |
-| 1 | 25 varied unarmed addicts; alcohol and miscellaneous loot |
+| 1 | 25 attackers cycling Prostitute, Drunkard and Madman; original Den models/dialogs, one-shot stock bags 26/11, plus alcohol/rocks for drunkards |
 | 2 | 15 tribals: exactly three spears, twelve unarmed; meat/flowers/healing powder |
 | 3 | 20 unarmed townspeople and Bobby/Billy Dunton; each brother has brass knuckles and a single-shot `springer_rifle` with **one loaded + four spare rounds**; money/alcohol/miscellaneous loot |
 
-Every newly spawned wave enemy, including the Dunton brothers, starts at 50% of its normal maximum
-HP, with the maximum reduced by the same amount. `Combat.CombatAttack` passes the full unarmed/melee
+New wave-2/3 enemies, including the Dunton brothers, start at 50% of their normal maximum HP.
+Wave 1 halves that already reduced maximum once more (50% of its previous balance); both maximum
+and current HP are reduced to 25% of the prototype maximum, rounding down with a minimum of one.
+`Combat.CombatAttack` passes the full unarmed/melee
 damage range (weapon plus melee bonus) through `DenDefense.ScaleEnemyMeleeDamage`, keeping 34% before
 critical and armor calculations. Ranged damage, Smitty, players and NPCs outside this scenario are
 unchanged. Health and melee scaling round down to whole points, with a minimum of one. Existing
 spawned actors keep their HP until a new attempt creates replacements; the melee modifier is applied
-at attack time.
+at attack time. Wave 1 reuses `Loser2`/`Loser` models (`nftrmp`/`nmlosr`) and their existing animation
+and sound selection, with `all_prostitute`, `all_alco` and `den_crazy_man` names/descriptions/dialog
+lines. Its stock bags supply knives/switchblades/shivs, jet, flowers and caps; drunkards additionally
+carry beer/booze and rocks. Bags are filled once, not refreshed during combat; city quest state is
+not copied to these attackers.
 
 The first enemy is admitted when the dawn transition finishes; subsequent admissions are spaced by
 three real seconds. Each wave reinstalls the map controller. Spawn selection rotates explicit indoor
@@ -169,8 +175,9 @@ reviving or moving the corpse.
 `NpcPlanes` and `ItemMovement` prevent synthetic ammo refill for attackers/tagged brother rifles.
 Normal weapon selection rejects an exhausted rifle and falls back to knuckles/unarmed. Both brothers
 use a model supporting shotgun frames. `Combat` emits their additional randomized localized threats at
-actual firearm ammo expenditure. Wave actors select existing voiced AI packets (1/13/14), rather than
-silent packet 25; the shared bark tables and ordinary combat-text path remain unchanged.
+actual firearm ammo expenditure. Wave actors select existing voiced AI packets (45/11 for wave 1,
+1 for tribals, 13/14 for wave 3), rather than silent packet 25; the shared bark tables and ordinary
+combat-text path remain unchanged.
 
 Only confirmed deaths of current-generation enemies on the scenario map retire outstanding IDs.
 Incomplete spawning, map loss, disappearance, escape and unrelated deaths do not clear a wave; a lost
@@ -179,14 +186,15 @@ outstanding actor fails diagnostically instead of awarding a false victory.
 ## Failure presentation and verification limits
 
 All online participants are action-frozen on actual failure; Smitty's death alone is not failure.
-Primary death fades all online clients and plays `video/TheLifeAfterHell.ogv` with its
-matching `.ogg`; skip/completion leaves Failed intact. This existing cinematic is a **provisional
-selection**, not a confirmed village-destruction scene. A replacement run/disconnect stops its stale
-presentation. Text uses the localized Smitty dialog pack.
+Primary death leaves the body visible on the map: no fade, movie, black failure overlay or music
+replacement. Participant inventory still spills at the death hex. The next confirmed login after
+primary death creates a fresh attempt and revives the returning participant without restoring lost
+items. The old failure-presentation property declarations remain reserved for metadata/save
+compatibility; no movie callback is scheduled. Rest retains its separate dawn fade.
 
 Use the existing script compiler, resource baker, nullable/quality validators and affected native
 build targets from [AGENTS.md](../AGENTS.md#build-and-verify). Technical checks do not establish live
-routes, door boundaries, balance, animation fallback or cinematic image/audio suitability. Gameplay
+routes, door boundaries, balance, corpse targeting, death presentation or animation fallback. Gameplay
 acceptance belongs to the user; do not substitute a client/AiControl session without their instruction.
 
 Before deploying matching baked resources/binaries, protect any running Memory server: shutdown loses
