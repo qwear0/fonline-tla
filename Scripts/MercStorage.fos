@@ -1,0 +1,372 @@
+// MercStorage — разовая разгрузка добычи наёмников в четыре ящика мастерской Смитти.
+// SERVER: категории, личный запас, обычный подход к ящикам и пауза при непосредственной угрозе.
+// Задание и время последней атаки хранятся на криттере; изменяемых глобальных таблиц нет.
+// Связи: DenDefense (диалог), DenCleanup (мастерская), Merc (idle), MercLoot, ItemStacks.
+namespace MercStorage
+{
+
+#if SERVER
+
+///@ Property Critter Server bool MercStorageActive Mutable
+///@ Property Critter Server ident MercStorageMapId Mutable
+///@ Property Critter Server int32 MercStorageCategory Mutable
+///@ Property Critter Server nanotime MercStorageUntil Mutable
+///@ Property Critter Server nanotime MercStorageThreatUntil Mutable
+
+const int Melee = 0;
+const int Ranged = 1;
+const int SelfUse = 2;
+const int Other = 3;
+const int CategoryCount = 4;
+const int StimpakReserve = 30;
+
+[[ModuleInit]]
+void Init()
+{
+    Game.OnCritterAttack.Subscribe(OnAttack, EventPriority::High);
+    Game.OnCritterAttacked.Subscribe(OnAttacked, EventPriority::High);
+}
+
+void MarkThreat(Critter cr)
+{
+    if (DenDefense::IsCompanion(cr)) {
+        // Прицельный огонь игрока и уже завершённый выстрел не представлены NPC-планом.
+        cr.MercStorageThreatUntil = Game.FrameTime + Time::Seconds(2);
+        if (cr.MercStorageActive) {
+            ReleaseWalk(cr);
+        }
+    }
+}
+
+[[Event]]
+void OnAttack(Critter attacker, Critter target, Item weapon, int weaponMode, ProtoItem? ammo)
+{
+    MarkThreat(attacker);
+    MarkThreat(target);
+}
+
+[[Event]]
+void OnAttacked(Critter cr, Critter attacker)
+{
+    MarkThreat(cr);
+    MarkThreat(attacker);
+}
+
+hstring ContainerProto(int category)
+{
+    const hstring[] protos = {"DenStorageMelee".hstr(), "DenStorageRanged".hstr(), "DenStorageSelfUse".hstr(), "DenStorageOther".hstr()};
+    return protos[category];
+}
+
+mpos ContainerHex(int category)
+{
+    // На экране больший x идёт влево. Точка доступа на ряд перед стеной,
+    // а Offset возвращает рисунок на прежнее место без перекрытия текстурой стены.
+    return category == Melee || category == SelfUse ? mpos(35, 59) : mpos(33, 59);
+}
+
+Item? FindContainer(Map map, int category)
+{
+    Item[] items = map.GetItemsInRadius(ContainerHex(category), 0, ContainerProto(category));
+    verify(items.length() <= 1, "Duplicate Sierra storage container", category);
+    return items.isEmpty() ? null : items[0];
+}
+
+int Category(Item item)
+{
+    if (item.Type == ItemType::Weapon) {
+        return WeaponHelpers::IsWeaponHthAttack(item, 0) ? Melee : Ranged;
+    }
+    if (item.Type == ItemType::Ammo) {
+        return Ranged;
+    }
+    // Контейнеры открываются через Use, но не являются применяемыми на себя расходниками.
+    if (item.Type != ItemType::Container &&
+        (item.IsCanUse || item.Type == ItemType::Drug || item.ProtoId == Content::Item::first_aid_kit || item.ProtoId == Content::Item::doctors_bag ||
+         item.ProtoId == Content::Item::field_medic_kit || item.ProtoId == Content::Item::paramedics_bag)) {
+        return SelfUse;
+    }
+    return Other;
+}
+
+void Setup(Map map)
+{
+    for (int category = 0; category < CategoryCount; category++) {
+        Item? existing = FindContainer(map, category);
+        Item crate = existing != null ? existing : ItemStacks::AddItem(map, ContainerHex(category), ContainerProto(category), 1);
+        crate.DrawOrderSubLayer = category < SelfUse ? 1 : 2;
+        crate.NoHighlight = false;
+        ipos offset;
+        Game.GetHexInterval(crate.Hex, mpos(crate.Hex.x, 58), offset);
+        crate.Offset = ipos16(int16(offset.x), int16(offset.y));
+    }
+    // Левая видимая пара прежде была одной статичной декорацией, а не доступными ящиками.
+    StaticItem? decoration = map.GetStaticItemOnHex(mpos(35, 58), "generic_4282".hstr());
+    if (decoration != null) {
+        verify(map.RemoveStaticItem(decoration), "Unable to expose Sierra storage");
+    }
+    // На старой карте заменяем правую пару, сохраняя всё её содержимое.
+    const hstring[] legacyProtos = {"tool_board".hstr(), "workbench".hstr()};
+    for (int i = 0; i < legacyProtos.length(); i++) {
+        Item[] old = map.GetItemsInRadius(mpos(33, 58), 0, legacyProtos[i]);
+        for (int k = 0; k < old.length(); k++) {
+            Item[] contents = old[k].GetItems(Tla::RootContainerStack());
+            for (int j = 0; j < contents.length(); j++) {
+                Item item = contents[j];
+                Item? crate = FindContainer(map, Category(item));
+                verify(crate != null, "Sierra storage missing during furniture conversion");
+                Item? stored = ItemStacks::MoveItem(item, item.Count, crate, Tla::RootContainerStack());
+                verify(stored != null && stored.ContainerId == crate.Id, "Unable to preserve workshop contents", item);
+            }
+            verify(old[k].GetItems(Tla::RootContainerStack()).isEmpty(), "Workshop contents remain in obsolete furniture");
+            ItemStacks::DestroyItem(old[k], 1);
+        }
+    }
+}
+
+// Развитый навык превышает стартовую формулу SPECIAL; один лишь природный бонус не считается прокачкой.
+bool IsTrained(Critter merc, CritterProperty skill)
+{
+    if (Parameters::IsTagSkill(merc, skill)) {
+        return true;
+    }
+    int base = 0;
+    if (skill == CritterProperty::SkillSmallGuns) {
+        base = 5 + 4 * merc.AgilityBase;
+    }
+    else if (skill == CritterProperty::SkillBigGuns || skill == CritterProperty::SkillEnergyWeapons) {
+        base = 2 * merc.AgilityBase;
+    }
+    else if (skill == CritterProperty::SkillUnarmed || skill == CritterProperty::SkillMeleeWeapons) {
+        base = (skill == CritterProperty::SkillUnarmed ? 30 : 20) + 2 * (merc.AgilityBase + merc.StrengthBase);
+    }
+    else if (skill == CritterProperty::SkillThrowing) {
+        base = 4 * merc.AgilityBase;
+    }
+    else {
+        return false;
+    }
+    return merc.GetAsInt(skill) > base - (merc.IsTraitGoodNatured ? 10 : 0);
+}
+
+Item[] PersonalWeapons(Critter merc)
+{
+    const CritterProperty[] skills = {CritterProperty::SkillSmallGuns,
+                                      CritterProperty::SkillBigGuns,
+                                      CritterProperty::SkillEnergyWeapons,
+                                      CritterProperty::SkillUnarmed,
+                                      CritterProperty::SkillMeleeWeapons,
+                                      CritterProperty::SkillThrowing};
+    Item[] weapons = merc.GetItems(ItemProperty::Type, ItemType::Weapon);
+    Item[] keep = {};
+    for (int i = 0; i < skills.length(); i++) {
+        if (!IsTrained(merc, skills[i])) {
+            continue;
+        }
+        Item? best = null;
+        int bestDamage = -1;
+        for (int j = 0; j < weapons.length(); j++) {
+            Item weapon = weapons[j];
+            if (weapon.Hidden || weapon.IsGag || !MainPlanes::CheckBattleWeapon(merc, weapon)) {
+                continue;
+            }
+            for (int use = 0; use < weapon.Weapon_ActiveUses; use++) {
+                if (WeaponHelpers::WeaponSkill(weapon, use) != skills[i]) {
+                    continue;
+                }
+                int damage = WeaponHelpers::WeaponDamageMin(weapon, use) + WeaponHelpers::WeaponDamageMax(weapon, use);
+                if (best == null || damage > bestDamage || (damage == bestDamage && weapon.CritterSlot == CritterItemSlot::Main)) {
+                    best = weapon;
+                    bestDamage = damage;
+                }
+            }
+        }
+        if (best != null && keep.find(best) < 0) {
+            keep.insertLast(best);
+        }
+    }
+    return keep;
+}
+
+int KeepCount(Item item, Item[] weapons, int& stimpaks)
+{
+    if (item.Hidden || item.IsGag || item.IsNoLoot || (item.Type != ItemType::Weapon && item.CritterSlot != CritterItemSlot::Inventory)) {
+        return item.Count;
+    }
+    if (item.ProtoId == Content::Item::stimpak) {
+        int keep = Math::Min(stimpaks, item.Count);
+        stimpaks -= keep;
+        return keep;
+    }
+    if (item.Type == ItemType::Weapon) {
+        return weapons.find(item) >= 0 ? 1 : 0;
+    }
+    if (item.Type == ItemType::Ammo) {
+        for (int i = 0; i < weapons.length(); i++) {
+            if (weapons[i].Weapon_MaxAmmoCount > 0 && weapons[i].Weapon_Caliber == item.Ammo_Caliber) {
+                return item.Count;
+            }
+        }
+    }
+    return 0;
+}
+
+void ReleaseWalk(Critter merc)
+{
+    bool walking = NpcPlanes::GetPlanes(merc, "MercStorage".hstr()) != null;
+    MercLoot::RemoveWalk(merc, "MercStorage".hstr());
+    if (walking && !NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK)) {
+        merc.StopMoving();
+    }
+    merc.MercStorageUntil = ZERO_NANOTIME;
+}
+
+void Cancel(Critter merc)
+{
+    if (!merc.MercStorageActive) {
+        return;
+    }
+    ReleaseWalk(merc);
+    merc.MercStorageActive = false;
+    merc.MercStorageMapId = ZERO_IDENT;
+}
+
+bool HasAttackPlan(Critter cr, ident targetId)
+{
+    NpcPlanes::NpcPlane[]? planes = NpcPlanes::GetPlanes(cr);
+    if (planes != null) {
+        for (int i = 0; i < planes.length(); i++) {
+            NpcPlanes::NpcPlane plan = planes[i].GetCurPlane();
+            if (plan.Type == NpcPlanes::AI_PLANE_ATTACK && (targetId == ZERO_IDENT || plan.Attack_TargId == targetId)) {
+                Critter? target = Game.GetCritter(plan.Attack_TargId);
+                if (target != null && target.IsAlive() && target.MapId == cr.MapId && DenDefense::CanAttack(cr, target)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool IsEngaged(Critter merc, Map map)
+{
+    if (Game.FrameTime < merc.MercStorageThreatUntil || HasAttackPlan(merc, ZERO_IDENT)) {
+        return true;
+    }
+    Critter[] npcs = map.GetCritters(CritterFindType::NonDeadNpc);
+    for (int i = 0; i < npcs.length(); i++) {
+        if (npcs[i].Id != merc.Id && HasAttackPlan(npcs[i], merc.Id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Start(Critter player, Critter merc)
+{
+    if (!DenDefense::CanControlCompanion(player, merc) || merc.MapId != Game.DenDefenseMapId) {
+        return;
+    }
+    MercLoot::Cancel(merc);
+    Cancel(merc);
+    MercLoot::RemoveWalk(merc, "MercFollow".hstr());
+    if (!NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK)) {
+        merc.StopMoving();
+    }
+    merc.MercFormationReserved = false;
+    merc.MercStorageMapId = merc.MapId;
+    merc.MercStorageCategory = Melee;
+    merc.MercStorageActive = true;
+}
+
+// true подавляет только следование; атакующие планы и прежний follow/wait остаются нетронутыми.
+bool Process(Critter merc)
+{
+    if (!merc.MercStorageActive) {
+        return false;
+    }
+    Map? map = merc.GetMap();
+    Critter? master = Game.GetCritter(merc.MercMasterId);
+    if (!merc.IsAlive() || !DenDefense::CanAct(merc) || map == null || master == null || master.IsDead() || master.MapId != merc.MapId ||
+        merc.MapId != merc.MercStorageMapId || merc.MapId != Game.DenDefenseMapId) {
+        Cancel(merc);
+        return false;
+    }
+    if (IsEngaged(merc, map)) {
+        ReleaseWalk(merc);
+        return true;
+    }
+    if (CritterState::IsBusy(merc) || Dialogs::IsTalking(merc)) {
+        return true;
+    }
+    Item[] weapons = PersonalWeapons(merc);
+    Item[] items = merc.GetItems();
+    while (merc.MercStorageCategory < CategoryCount) {
+        int category = merc.MercStorageCategory;
+        int stimpaks = StimpakReserve;
+        Item[] moving = {};
+        int[] counts = {};
+        for (int i = 0; i < items.length(); i++) {
+            int count = items[i].Count - KeepCount(items[i], weapons, stimpaks);
+            if (count > 0 && Category(items[i]) == category) {
+                moving.insertLast(items[i]);
+                counts.insertLast(count);
+            }
+        }
+        if (moving.isEmpty()) {
+            ReleaseWalk(merc);
+            merc.MercStorageCategory = category + 1;
+            continue;
+        }
+        Item? crate = FindContainer(map, category);
+        if (crate == null || (merc.MercStorageUntil != ZERO_NANOTIME && Game.FrameTime >= merc.MercStorageUntil)) {
+            Cancel(merc); // Пропавший/недоступный ящик не превращает приказ в вечное ожидание.
+            return false;
+        }
+        int cut = 1 + merc.Multihex;
+        if (Game.GetDistance(merc.Hex, crate.Hex) > cut) {
+            if (merc.MercStorageUntil == ZERO_NANOTIME) {
+                merc.MercStorageUntil = Game.FrameTime + Time::Seconds(30);
+            }
+            if (NpcPlanes::GetPlanes(merc, "MercStorage".hstr()) == null) {
+                NpcPlanes::AddWalkPlane(merc,
+                                        NpcPlanes::AI_PLANE_PICK_PRIORITY,
+                                        "MercStorage".hstr(),
+                                        0,
+                                        crate.Hex,
+                                        Game.GetDirection(merc.Hex, crate.Hex),
+                                        false,
+                                        cut);
+            }
+            return true;
+        }
+        ReleaseWalk(merc);
+        if (!CritterActions::IsContainerAccessOpen(crate.Container_Changeble, crate.Opened)) {
+            Cancel(merc);
+            return false;
+        }
+        if (!CritterActions::ProcessAp(merc, Settings.Movement.RtApCostMoveItemContainer)) {
+            return true;
+        }
+        merc.Action(CritterAction::OperateContainer, CritterActions::EncodeContainerActionExt(TransferTypes::HexContUp, false, true), null);
+        for (int i = 0; i < moving.length(); i++) {
+            if (!CritterActions::CanPutItemsInContainer(crate, {moving[i]}, false, counts[i]) || CritterActions::WouldCreateContainerCycle(moving[i], crate)) {
+                Cancel(merc);
+                return false;
+            }
+            // Обычный запрет переноса оставляет вещь у мерка, а не теряет её и не зацикливает приказ.
+            ItemMovement::MoveItem(moving[i], counts[i], crate, Tla::RootContainerStack());
+            if (merc.IsDestroyed || !merc.MercStorageActive) {
+                return true;
+            }
+        }
+        merc.MercStorageCategory = category + 1;
+        return true;
+    }
+    Cancel(merc);
+    return false;
+}
+
+#endif
+
+}

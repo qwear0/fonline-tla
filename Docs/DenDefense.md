@@ -10,11 +10,15 @@ renaming the existing `DenDefense*` properties, script owners or dialog resource
 on the right of the truck (`51:51`), Todd beside the truck at `50:56`, and supplies at `35:60`.
 Initial participant placement searches around `43:55`; companions use the same connected-hex search.
 The workshop door at `40:57` is reopened for each attempt. Its interior is `x=33..47`, `y=58..68`.
-The tool board and workbench share `33:58`: their draw sublayers are respectively **1** and **2**,
-above same-depth wall segments and with the tabletop in front of the board's lower edge. Both enable
-hover highlighting and remain ordinary usable containers, retaining their authored contents. These
-are Sierra-only map overrides; `DenCleanup::SetupWorkshopContainer` reapplies them to existing saved
-instances at attempt setup, without moving/recreating furniture or removing its blocking footprint.
+The two visible workshop pairs are four named usable containers: screen-left melee/self-use supplies
+and screen-right ranged weapons/ammunition/other loot. Left is map `35:59`, right `33:59` (increasing
+hex x projects left); upper shelves use draw sublayer **1**, lower drawers **2**, with highlighting.
+Their interaction anchors sit one row in front of the old wall-side `y=58` anchors; `Offset=-16 -12`
+preserves the artwork's screen position while drawing it in front of the occluding wall. The left
+pair used to be the single non-container scenery `generic_4282` (`SEWRKBNCH.FRM`) at `35:58`;
+it is replaced, not duplicated. `MercStorage::Setup`, called by `DenCleanup::Setup`, supplies missing
+containers on older maps, removes that exact decoration and sorts the original right pair's contents
+before removing the old furniture. Other scenery and its blocking footprint are unchanged.
 The seven original AutoCannons stay visible but use `DenDefense::DisableTurret`: no scanning timer,
 appearance/attack-plane subscriptions or active plans, no enemy stack, and invulnerable.
 Attempt setup also disables saved turrets and removes other entrance NPCs except Smitty and Todd,
@@ -250,6 +254,30 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   map departure, master departure or dismissal also release it. Completion resumes the previous
   follow/wait behavior. These jobs/reservations do not survive server restart; no new RemoteCall or
   serialized-property removal/rename migration is needed. Client gameplay acceptance remains manual.
+- **Store loot at the base** uses `DenDefense::StoreLoot` -> [`MercStorage.fos`](../Scripts/MercStorage.fos).
+  The ordinary dialog orders that companion; the leader orders himself and every living owned siege
+  companion on the same map. It replaces a collection order (and collection replaces storage), without
+  changing the saved follow/wait setting. Each NPC walks to the relevant workshop containers and puts
+  only surplus belongings into them: upper-left melee weapons, upper-right ranged/throwing weapons and
+  all ammunition, lower-left self-usable items (including drugs and medical kits), lower-right the rest.
+  Containers/bags are carried intact rather than recursively unpacked. Equipped non-weapons and hidden,
+  gag or no-loot items stay with the NPC. All four storage prototypes have localized labels and capacity
+  `1000000`; no global tool-board/workbench prototype or unrelated map is changed.
+  The personal reserve is **up to 30 ordinary stimpaks total**, **one usable weapon per tagged or trained
+  combat skill**, and all carried ammunition compatible with those retained weapons. Trained means a
+  value above the natural SPECIAL starting formula, adjusted for Good Natured; natural skill alone is
+  not investment. Selection reuses `MainPlanes::CheckBattleWeapon` (animation, condition, arms, ammo),
+  prefers the highest min+max damage for that skill and the main-hand weapon on a tie; duplicate weapons
+  and excess thrown-weapon units are stored. Worn armor is not stripped.
+  Storage ignores the general battle timeout: it pauses only for a valid outgoing attack plan, another
+  living NPC's attack plan targeting the merc, or the two-second guard after an actual attack involving
+  him. The attack events cover player fire too. Pausing removes only the storage walk, never combat
+  plans; an unengaged merc can unload during an ongoing wave. Transfers require adjacency, ordinary AP,
+  open-container/capacity/cycle checks and `ItemMovement` vetoes. Thirty seconds of stalled travel or a
+  missing/full/closed crate ends the order without discarding items. Follow/wait, rest/failure, death,
+  dismissal or map/master departure cancels it; completion resumes the previous follow/wait behavior.
+  `MercStorage*` job/threat properties are transient; no new RemoteCall or property removal/rename is
+  needed. Offline compilation/baking cannot establish in-client visibility and gameplay acceptance.
 - Weapon stance comes from the actual main-hand item on the client (`Animation::GetStateAnim`).
   `TLA.fomain` sets `Critter.CritterSlotSendData = False True True True` in slot order
   Inventory/Main/Secondary/Armor: other critters' equipped items are synchronized both on entering

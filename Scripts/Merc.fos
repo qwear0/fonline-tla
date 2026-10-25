@@ -8,7 +8,7 @@
 // Параметры мерков хранятся в Property-декларациях группы Mercs на криттере.
 // Главный мерк (NpcRole = ROLE_LEADER) передаёт диалоговые настройки всем меркам хозяина.
 // FavoriteItem вызывает поддержание выбранной готовности оружия вне боя.
-// MercLoot временно ведёт перемещение по разовому приказу собрать добычу.
+// MercLoot и MercStorage временно ведут перемещение по разовым приказам сбора и разгрузки добычи.
 // При ОЖ ниже половины мерк применяет «Санитара» к себе с обычными затратами AP и кулдауном.
 // Только в бою, если «Санитар» недоступен, расходует свой обычный стимпак, а при его отсутствии — суперстимпак.
 // Боевое самолечение останавливает движение и планы до накопления ОД; цель и очередь планов сохраняются.
@@ -207,6 +207,7 @@ void MercSmthAttacked(Critter merc, Critter fromCr, Critter attacker)
 void MercDeadImpl(Critter merc, Critter killer)
 {
     MercLoot::Cancel(merc);
+    MercStorage::Cancel(merc);
     if (DenDefense::IsCompanion(merc)) {
         NpcPlanes::DropPlanes(merc);
         return;
@@ -236,6 +237,7 @@ void MercSmthDeadImpl(Critter merc, Critter fromCr, Critter killer)
 {
     if (fromCr.Id == merc.MercMasterId) {
         MercLoot::Cancel(merc);
+        MercStorage::Cancel(merc);
         if (DenDefense::IsCompanion(merc)) {
             NpcPlanes::DropPlanes(merc);
             return;
@@ -287,9 +289,8 @@ Item? GetSelfStimpak(Critter merc)
 // Запасной вариант в бою после недоступного «Санитара»: только свои стимпаки и обычная стоимость действия.
 bool TrySelfStimpak(Critter merc)
 {
-    if (merc.ControlledByPlayer || !merc.IsAlive() || merc.MapId == ZERO_IDENT || int64(merc.CurrentHp) * 2 >= merc.MaxLife ||
-        !IsInCombat(merc) || CritterState::IsBusy(merc) || !DenDefense::CanAct(merc) ||
-        merc.CurrentAp / Tla::AP_DIVIDER < Settings.Movement.RtApCostUseItem) {
+    if (merc.ControlledByPlayer || !merc.IsAlive() || merc.MapId == ZERO_IDENT || int64(merc.CurrentHp) * 2 >= merc.MaxLife || !IsInCombat(merc) ||
+        CritterState::IsBusy(merc) || !DenDefense::CanAct(merc) || merc.CurrentAp / Tla::AP_DIVIDER < Settings.Movement.RtApCostUseItem) {
         return false;
     }
 
@@ -351,8 +352,8 @@ bool TryCombatSelfHeal(Critter merc)
 // Травмы лечим только вне боя. Неудачная попытка тоже расходует AP и запускает кулдаун.
 bool TrySelfDoctor(Critter merc)
 {
-    if (merc.ControlledByPlayer || !merc.IsAlive() || merc.MapId == ZERO_IDENT || !Tla::IsCritterInjured(merc) ||
-        IsInCombat(merc) || Time::IsTimeoutActive(merc.TimeoutSkDoctor) || CritterState::IsBusy(merc) || !DenDefense::CanAct(merc) ||
+    if (merc.ControlledByPlayer || !merc.IsAlive() || merc.MapId == ZERO_IDENT || !Tla::IsCritterInjured(merc) || IsInCombat(merc) ||
+        Time::IsTimeoutActive(merc.TimeoutSkDoctor) || CritterState::IsBusy(merc) || !DenDefense::CanAct(merc) ||
         merc.CurrentAp / Tla::AP_DIVIDER < Settings.Movement.RtApCostUseSkill) {
         return false;
     }
@@ -380,6 +381,7 @@ void MercIdleImpl(Critter merc)
 
     if (DenDefense::IsCompanion(merc) && (merc.IsDead() || Game.DenDefenseStage == DenDefense::STAGE_FAILED)) {
         MercLoot::Cancel(merc);
+        MercStorage::Cancel(merc);
         return;
     }
 
@@ -391,6 +393,7 @@ void MercIdleImpl(Critter merc)
     Critter? master = Game.GetCritter(masterId);
     if (master == null) {
         MercLoot::Cancel(merc);
+        MercStorage::Cancel(merc);
         return;
     }
 
@@ -407,10 +410,10 @@ void MercIdleImpl(Critter merc)
         return;
     }
 
-    if (merc.MercWaitForMaster || merc.MercLootActive) {
+    if (merc.MercWaitForMaster || merc.MercLootActive || merc.MercStorageActive) {
         merc.MercFormationReserved = false;
     }
-    if (MercLoot::Process(merc)) {
+    if (MercStorage::Process(merc) || MercLoot::Process(merc)) {
         return;
     }
 
@@ -617,6 +620,7 @@ void CancelMerc(Critter merc)
     }
 
     MercLoot::Cancel(merc);
+    MercStorage::Cancel(merc);
     for (int i = 0; i < CritterPropertyGroup::Mercs.length(); i++) {
         merc.SetAsInt(CritterPropertyGroup::Mercs[i], 0);
     }
@@ -1046,6 +1050,7 @@ void ApplyBehaviorParameter(Critter merc, CritterProperty param, int value)
     merc.SetAsInt(param, value);
     if (param == CritterProperty::MercWaitForMaster) {
         MercLoot::Cancel(merc);
+        MercStorage::Cancel(merc);
         if (merc.MercWaitForMaster) {
             NpcPlanes::DropPlanes(merc);
         }

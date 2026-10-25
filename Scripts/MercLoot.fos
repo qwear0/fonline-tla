@@ -208,6 +208,7 @@ void Start(Critter player, Critter merc, mpos center, int delaySeconds)
         return;
     }
     Cancel(merc);
+    MercStorage::Cancel(merc);
     RemoveWalk(merc, "MercFollow".hstr());
     if (!NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK)) {
         merc.StopMoving();

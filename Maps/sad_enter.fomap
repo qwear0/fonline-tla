@@ -1511,34 +1511,36 @@ Hex = 111 57
 
 [$Name/Item]
 $Id = 4294966581
-$Proto = workbench
+$Proto = DenStorageOther
 DrawOrderSubLayer = 2
-Hex = 33 58
+Hex = 33 59
 NoHighlight = False
+Offset = -16 -12
 
 [$Name/Item]
 $Id = 4294966580
-$Proto = tool_board
+$Proto = DenStorageRanged
 DrawOrderSubLayer = 1
-Hex = 33 58
+Hex = 33 59
 NoHighlight = False
+Offset = -16 -12
 
 [$Name/Item]
 $Id = 4294966578
 $Proto = first_aid_kit
-ContainerId = 4294966580
+ContainerId = 1003
 Ownership = ItemContainer
 
 [$Name/Item]
 $Id = 4294966577
 $Proto = stimpak
-ContainerId = 4294966580
+ContainerId = 1003
 Ownership = ItemContainer
 
 [$Name/Item]
 $Id = 4294966576
 $Proto = sledgehammer
-ContainerId = 4294966580
+ContainerId = 4294965508
 Ownership = ItemContainer
 
 [$Name/Item]
@@ -3562,8 +3564,19 @@ MultihexMesh = \
 
 [$Name/Item]
 $Id = 4294965508
-$Proto = generic_4282
-Hex = 35 58
+$Proto = DenStorageMelee
+DrawOrderSubLayer = 1
+Hex = 35 59
+NoHighlight = False
+Offset = -16 -12
+
+[$Name/Item]
+$Id = 1003
+$Proto = DenStorageSelfUse
+DrawOrderSubLayer = 2
+Hex = 35 59
+NoHighlight = False
+Offset = -16 -12
 
 [$Name/Item]
 $Id = 4294964379

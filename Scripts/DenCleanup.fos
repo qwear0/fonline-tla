@@ -65,17 +65,6 @@ void Init(Critter todd, bool firstTime)
     todd.StartTimeEvent(Time::Milliseconds(250), Time::Milliseconds(250), Idle);
 }
 
-// Старая сохранённая карта не получает новые свойства объектов из авторского .fomap.
-// Стена остаётся в нулевом подслое, полка идёт перед ней, а верстак — перед нижним краем полки.
-void SetupWorkshopContainer(Map map, hstring protoId, int8 subLayer)
-{
-    Item[] containers = map.GetItemsInRadius(mpos(33, 58), 0, protoId);
-    verify(containers.length() == 1, "Sierra workshop container is missing or ambiguous", protoId);
-    Item container = containers[0];
-    container.DrawOrderSubLayer = subLayer;
-    container.NoHighlight = false;
-}
-
 void Setup(Map map)
 {
     Critter? todd = null;
@@ -103,8 +92,7 @@ void Setup(Map map)
     todd.TransferToMap(map, home, HDIR_Random);
     todd.HomeMapId = map.Id;
     todd.HomeHex = home;
-    SetupWorkshopContainer(map, "tool_board".hstr(), 1);
-    SetupWorkshopContainer(map, "workbench".hstr(), 2);
+    MercStorage::Setup(map);
     StoreGroundSupplies(map);
 }
 

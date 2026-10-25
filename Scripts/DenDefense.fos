@@ -548,6 +548,24 @@ void CollectLoot(Critter player, Critter npc)
     }
 }
 
+[[DialogResult]]
+void StoreLoot(Critter player, Critter npc)
+{
+    if (!CanControlCompanion(player, npc)) {
+        return;
+    }
+    MercStorage::Start(player, npc);
+    if (npc.NpcRole == Merc::ROLE_LEADER) {
+        Critter[] mercs = {};
+        Merc::GetPlayerMercs(player, mercs);
+        for (int i = 0; i < mercs.length(); i++) {
+            if (mercs[i].Id != npc.Id) {
+                MercStorage::Start(player, mercs[i]);
+            }
+        }
+    }
+}
+
 // При провале игроки могут только выйти и войти заново; обычные городские NPC не замораживаются.
 bool CanAct(Critter cr)
 {
@@ -718,6 +736,7 @@ void StopScenarioActions()
         if (cr != null) {
             cr.StopMoving();
             if (!cr.ControlledByPlayer) {
+                MercStorage::Cancel(cr);
                 NpcPlanes::DropPlanes(cr);
             }
         }
@@ -967,8 +986,7 @@ void SpawnBatch()
     verify(!approaches.isEmpty(), "Sierra global exit zone is missing");
     verify(Game.DenDefenseWave != 1 || !Game.DenDefenseSpawnGroups.isEmpty(), "Missing Den wave-1 spawn group");
     int batchSize = Game.DenDefenseWave == 1 ? Game.DenDefenseSpawnGroups[0] : (Game.DenDefenseWave == 2 ? 3 : 1);
-    verify(batchSize >= 1 && batchSize <= 3 && Game.DenDefenseSpawnTotal - Game.DenDefenseSpawned >= batchSize,
-           "Invalid Den spawn batch size");
+    verify(batchSize >= 1 && batchSize <= 3 && Game.DenDefenseSpawnTotal - Game.DenDefenseSpawned >= batchSize, "Invalid Den spawn batch size");
     Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
     verify(smitty != null, "Smitty disappeared during spawn");
     mpos[] candidates = {};

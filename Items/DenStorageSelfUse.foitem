@@ -1,0 +1,11 @@
+[ProtoItem]
+$Name = DenStorageSelfUse
+$Parent = workbench
+
+Container_Volume = 1000000
+IsNoHighlight = False
+
+$Text russ = "Препараты и личные расходники"
+$Text russ Desc = "Нижний левый ящик мастерской Смитти: предметы, которые можно применить на себя."
+$Text engl = "Medicine and personal supplies"
+$Text engl Desc = "Smitty's lower-left workshop crate: items that can be used on yourself."

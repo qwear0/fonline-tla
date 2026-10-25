@@ -28,12 +28,15 @@ Speech 2
     Result Script DenDefense::ReadyWeapons
   Answer Exit*******
     Result Script DenDefense::CollectLoot
+  Answer Exit*********
+    Result Script DenDefense::StoreLoot
 
 [Text russ]
 {Name}{}{Соплеменник}
 {Speech 1}{}{Мы пришли с тобой из одного племени. Что нужно?}
 {Speech 1 Answer 2}{}{Слушай мой приказ.}
 {Speech 2 Answer Exit********}{}{Давай посмотрим что ты умеешь.}
+{Speech 2 Answer Exit*********}{}{Иди сложи добычу на базу - да не перепутай что куда!}
 {Speech 1 Answer Exit}{}{Ничего.}
 {Speech 2}{}{Я слушаю. Защита и помощь включены с самого начала; их можно переключить независимо.}
 {Speech 2 Answer Exit}{}{Следуй за мной.}
@@ -50,6 +53,7 @@ Speech 2
 {Speech 1}{}{We came from the same tribe. What do you need?}
 {Speech 1 Answer 2}{}{Listen to my orders.}
 {Speech 2 Answer Exit********}{}{Let's see what you can do.}
+{Speech 2 Answer Exit*********}{}{Go store the loot at the base - and do not mix up the crates!}
 {Speech 1 Answer Exit}{}{Nothing.}
 {Speech 2}{}{I am listening. Defend and assist are enabled initially; you can toggle them independently.}
 {Speech 2 Answer Exit}{}{Follow me.}

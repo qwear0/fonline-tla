@@ -28,12 +28,15 @@ Speech 2
     Result Script DenDefense::ReadyWeapons
   Answer Exit*******
     Result Script DenDefense::CollectLoot
+  Answer Exit*********
+    Result Script DenDefense::StoreLoot
 
 [Text russ]
 {Name}{}{Главный наёмник}
 {Speech 1}{}{Я старший в нашем отряде. Какие будут приказы?}
 {Speech 1 Answer 2}{}{Передай приказ всем моим наёмникам.}
 {Speech 2 Answer Exit********}{}{Давай посмотрим что ты умеешь.}
+{Speech 2 Answer Exit*********}{}{Скажи соплякам чтобы разложили лут на базе}
 {Speech 1 Answer Exit}{}{Ничего.}
 {Speech 2}{}{Слушаю. Все твои наёмники получат тот же приказ, что и я. Защиту и помощь в атаке можно переключать независимо.}
 {Speech 2 Answer Exit}{}{Всем следовать за мной.}
@@ -50,6 +53,7 @@ Speech 2
 {Speech 1}{}{I lead our squad. What are your orders?}
 {Speech 1 Answer 2}{}{Pass my order to all my mercenaries.}
 {Speech 2 Answer Exit********}{}{Let's see what you can do.}
+{Speech 2 Answer Exit*********}{}{Tell the runts to sort the loot at the base.}
 {Speech 1 Answer Exit}{}{Nothing.}
 {Speech 2}{}{I am listening. All your mercenaries will receive the same order as me. Defend and assist can be toggled independently.}
 {Speech 2 Answer Exit}{}{Everyone, follow me.}

@@ -1,0 +1,11 @@
+[ProtoItem]
+$Name = DenStorageRanged
+$Parent = tool_board
+
+Container_Volume = 1000000
+IsNoHighlight = False
+
+$Text russ = "Дальнобойное оружие и патроны"
+$Text russ Desc = "Верхняя правая полка мастерской Смитти: дальнобойное и метательное оружие, боеприпасы."
+$Text engl = "Ranged weapons and ammunition"
+$Text engl Desc = "Smitty's upper-right workshop shelf: ranged and throwing weapons, ammunition."

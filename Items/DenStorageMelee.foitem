@@ -1,0 +1,11 @@
+[ProtoItem]
+$Name = DenStorageMelee
+$Parent = tool_board
+
+Container_Volume = 1000000
+IsNoHighlight = False
+
+$Text russ = "Оружие ближнего боя"
+$Text russ Desc = "Верхняя левая полка мастерской Смитти: оружие ближнего боя."
+$Text engl = "Melee weapons"
+$Text engl Desc = "Smitty's upper-left workshop shelf: melee weapons."

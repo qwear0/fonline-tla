@@ -1,0 +1,11 @@
+[ProtoItem]
+$Name = DenStorageOther
+$Parent = workbench
+
+Container_Volume = 1000000
+IsNoHighlight = False
+
+$Text russ = "Прочая добыча"
+$Text russ Desc = "Нижний правый ящик мастерской Смитти: всё, для чего не подошли остальные ящики."
+$Text engl = "Other loot"
+$Text engl Desc = "Smitty's lower-right workshop crate: everything that does not belong in the other crates."
