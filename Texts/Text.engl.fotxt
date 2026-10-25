@@ -1315,6 +1315,36 @@ P.S. Чузенов просьба не беспокоить.}
 {70061}{}{Вы съели столько пончиков, что почуствовали себя немного сильнее. Переносимый вес увеличен на +1 фунт.}
 
 # Mercenary refusal when the loot is too heavy
+{Merc}{Name1}{Bishop}
+{Merc}{Name2}{Wright}
+{Merc}{Name3}{Salvatore}
+{Merc}{Name4}{Mordino}
+{Merc}{Name5}{Raines}
+{Merc}{Name6}{Kit}
+{Merc}{Name7}{Mason}
+{Merc}{Name8}{Sammy}
+{Merc}{Name9}{Carlson}
+{Merc}{Name10}{Torque}
+{Merc}{Name11}{Sid}
+{Merc}{Name12}{Duke}
+{Merc}{Name13}{Jimmy}
+{Merc}{Name14}{Joe}
+{Merc}{Name15}{Dominic}
+{Merc}{Name16}{Sergio}
+{Merc}{Name17}{Vincent}
+{Merc}{Name18}{Mark}
+{Merc}{Name19}{Louis}
+{Merc}{Name20}{Frankie}
+{Merc}{Name21}{Pete}
+{Merc}{Name22}{Ray}
+{Merc}{Name23}{Tony}
+{Merc}{Name24}{Dave}
+{Merc}{Name25}{Rocky}
+{Merc}{Name26}{Nick}
+{Merc}{Name27}{Benny}
+{Merc}{Name28}{Danny}
+{Merc}{Name29}{Freddie}
+
 {Merc}{FirstAid1}{Fuck!.. I'll still kill every last one of you!}
 {Merc}{FirstAid2}{See you in hell, but first I'll chew on another stimpack!}
 {Merc}{FirstAid3}{I'll dig this lead out and put it right in your skull!}

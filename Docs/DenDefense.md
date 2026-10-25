@@ -94,10 +94,10 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   a route to the workshop through openable unlocked doors. A locally free pocket between cars is not
   a valid spawn; failure to find a connected hex aborts placement instead of trapping an actor.
 - The four-person squad has exactly one leader (the first companion), using
-  [`Critters/DenDefenseLeader.focr`](../Critters/DenDefenseLeader.focr): the bald leather-armor
-  model `hmlthr`, inheriting the ordinary companion's stats and starting sledgehammer.
-  The other three use [`Critters/DenDefenseCompanion.focr`](../Critters/DenDefenseCompanion.focr):
-  the long-haired leather-jacket model `hmlmax`. All start at level 3 / 3,000 XP and SPECIAL `8/4/5/4/5/10/4`
+  [`Critters/DenDefenseLeader.focr`](../Critters/DenDefenseLeader.focr), inheriting the ordinary
+  companion's stats, long-haired leather-jacket model `hmlmax`, and starting sledgehammer.
+  The other three use [`Critters/DenDefenseCompanion.focr`](../Critters/DenDefenseCompanion.focr).
+  All start at level 3 / 3,000 XP and SPECIAL `8/4/5/4/5/10/4`
   (40 points, the five remaining stats split as evenly as integers allow). Tagged skills are Melee
   Weapons, First Aid and Small Guns. Their 30 starting skill points and one level-3 perk remain
   unspent; neither creation nor later level-ups automatically choose skills or perks. The owner uses
@@ -116,6 +116,15 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   saved-property migration. `CreateCompanion` restores the prototype level and scenario HP reserve
   after `Main::CritterInit` regenerates registration fields, before calculating unspent points/perks;
   otherwise the common initializer resets the level to 1 and discards the scenario's HP reserve.
+  Each newly created companion, including the leader, gets one random personal name from the
+  29-entry `Merc/Name1..29` pool in `Texts/Text.{russ,engl}.fotxt`. `CreateCompanion` stores its
+  `@text Text Merc NameN@` tag under `merc_name` in the existing public, persistent `Critter.TextArgs`;
+  the name is not rerolled on map entry/reconnect and is localized on each client. Independent draws
+  may repeat. `MsgStr::NpcName` and the DialogId/TextArgs setters keep captions and look text consistent;
+  old companions without name arguments retain their dialog/prototype fallback until replaced.
+  The leader has no title appended to his personal name. `MapText::DrawCritterText` colors only his
+  overhead name green by prototype identity (not the owner-only `NpcRole`); speech colors and F11
+  name visibility remain unchanged. Deploy matching Scripts, Texts and Protos packs.
   Each starts with **five consumable stimpaks** and exactly one equipped weapon, in squad order:
   **sledgehammer, combat knife, crowbar, club**. Smitty does not equip or resupply companions.
   Maximum/starting HP are **103/91/103/91**, another 50% over the previous 69/61/69/61 with integer
@@ -241,7 +250,7 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   Inventory/Main/Secondary/Armor: other critters' equipped items are synchronized both on entering
   view and after slot changes; backpack contents stay private. Disabling Main makes an armed
   companion appear unarmed between action animations, even when its model has the required frames.
-  Both `hmlthr` and `hmlmax` support Knife, Club and Hammer frames for the starting weapons.
+  The shared `hmlmax` model supports Knife, Club and Hammer frames for the starting weapons.
   The narrow companion-only Club-to-Knife fallback in [`CritterAnims.fos`](../Scripts/CritterAnims.fos)
   remains for older tribal companions; it does not admit unsupported weapons for unrelated NPCs.
   Visual suitability still needs in-client acceptance.
@@ -393,8 +402,9 @@ and retaliates while the aggressor is inside the workshop; the controller retain
 well as wave enemies. A new generation clears his aggression memory.
 
 [`MsgStr.fos`](../Scripts/MsgStr.fos) resolves NPC names from `[Dialogs, dialogId, Name]`, falling back
-to `[Critters, protoId]`, not numeric hash sums. Its client setter refreshes the displayed name when a
-visible NPC changes `DialogId`; combat messages consume that displayed name. Both localized Smitty
+to `[Critters, protoId]`, not numeric hash sums. Named Den companions instead resolve their personal
+name from `TextArgs`; client setters refresh names when `DialogId` or `TextArgs` changes. Combat
+messages consume that displayed name. Both localized Smitty
 names remain authored in his dialog. [`Animation.fos`](../Scripts/Animation.fos) separates one-shot
 Fallout death playback from a final-frame corpse idle, avoiding repeated falling/twitching without
 reviving or moving the corpse.

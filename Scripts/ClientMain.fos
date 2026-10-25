@@ -1135,7 +1135,7 @@ string CritterDescription(Critter& cr, CritterLookTypes lookType)
         bool defaultText = false;
 
         if (lookType == CritterLookTypes::OnlyName) {
-            result = MsgStr::NpcName(dlgId, npcPid);
+            result = MsgStr::NpcName(dlgId, npcPid, cr.TextArgs);
         }
 
         // Краткая информация
@@ -1172,18 +1172,21 @@ string CritterDescription(Critter& cr, CritterLookTypes lookType)
 
         if (defaultText) {
             // Проверяем стандартный текст
-            if (MsgStr::NpcName(dlgId, npcPid) != "") {
+            if (MsgStr::NpcName(dlgId, npcPid, cr.TextArgs) != "") {
                 if (cr.IsAlive()) {
-                    result +=
-                        Game.ReplaceText(Game.GetText(TextPackKey(TextPackName::Game, "" + (MsgStr::StrCritLookLife))), "NAME", MsgStr::NpcName(dlgId, npcPid));
+                    result += Game.ReplaceText(Game.GetText(TextPackKey(TextPackName::Game, "" + (MsgStr::StrCritLookLife))),
+                                                 "NAME",
+                                                 MsgStr::NpcName(dlgId, npcPid, cr.TextArgs));
                 }
                 else if (cr.IsKnockout()) {
-                    result +=
-                        Game.ReplaceText(Game.GetText(TextPackKey(TextPackName::Game, "" + (MsgStr::StrCritLookKo))), "NAME", MsgStr::NpcName(dlgId, npcPid));
+                    result += Game.ReplaceText(Game.GetText(TextPackKey(TextPackName::Game, "" + (MsgStr::StrCritLookKo))),
+                                                 "NAME",
+                                                 MsgStr::NpcName(dlgId, npcPid, cr.TextArgs));
                 }
                 else if (cr.IsDead()) {
-                    result +=
-                        Game.ReplaceText(Game.GetText(TextPackKey(TextPackName::Game, "" + (MsgStr::StrCritLookDead))), "NAME", MsgStr::NpcName(dlgId, npcPid));
+                    result += Game.ReplaceText(Game.GetText(TextPackKey(TextPackName::Game, "" + (MsgStr::StrCritLookDead))),
+                                                 "NAME",
+                                                 MsgStr::NpcName(dlgId, npcPid, cr.TextArgs));
                 }
             }
 

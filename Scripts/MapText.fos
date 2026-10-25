@@ -2,6 +2,7 @@
 // SERVER: рассылает текст клиентам, которые видят криттера или гекс, через ReceiveMapText.
 // CLIENT: хранит активные подписи, анимирует их (всплытие, прозрачность) и отрисовывает в интерфейсе.
 //  Показ имён НПЦ берёт из InputHandler (F11); имена игроков и реплики не скрывает.
+// Имя главного спутника Сьерры рисует зелёным; цвет реплик и остальных имён не меняет.
 // COMMON: набор перегрузок AddText/AddFlyingText даёт единый вызов для серверной и клиентской сторон.
 namespace MapText
 {
@@ -282,6 +283,9 @@ void DrawCritterText(Critter cr)
         if (cr.ControlledByPlayer) {
             int highlight = cr.PlayerKarma / 10;
             textColor = ucolor(Color::PlayerName.red + highlight, Color::PlayerName.green + highlight, Color::PlayerName.blue + highlight);
+        }
+        else if (cr.ProtoId == "DenDefenseLeader".hstr()) {
+            textColor = Color::Green;
         }
     }
 

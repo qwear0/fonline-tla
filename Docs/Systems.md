@@ -122,6 +122,11 @@ No AI attack, reload, weapon change or plan movement runs until
 healing is performed or neither option remains available. Outside combat, only skill healing runs.
 `DenDefense` no longer spends companions' stimpaks separately; `PatternCommon` and `FighterPattern`
 skip hired NPC healing so these paths cannot bypass priority or create extra stimpaks for mercs.
+New Den companions get a random localized personal name once at creation, stored as a `merc_name`
+text-pack tag in existing public/persistent `Critter.TextArgs`. `MsgStr::NpcName`, its DialogId/TextArgs
+setters and `ClientMain::CritterDescription` resolve that same identity. The leader inherits the normal
+companion model and has only a personal name; `MapText::DrawCritterText` colors his overhead name
+(not speech) green by prototype identity, so all clients see it without exposing owner-only role data.
 See [DenDefense.md](DenDefense.md#supplies-companions-and-ground-loot).
 
 The engine handles individual item instances and never merges stacks. Use `ItemStacks::` for quantity

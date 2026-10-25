@@ -2,6 +2,7 @@
 // Строит TextPackKey и @text-теги (диалоги, локализованные имена прото критеров/предметов/локаций,
 //  параметры, карма/репутация) и хранит именованные константы строк интерфейса, боя, инвентаря, PipBoy.
 // Общий модуль (SERVER/CLIENT/MAPPER); блоки #if CLIENT дают обёртки над Game.GetText/IsTextPresent.
+// Имена спутников Сьерры берутся из сохранённого merc_name в TextArgs, без роли или звания.
 namespace MsgStr
 {
 
@@ -1185,6 +1186,7 @@ int InternalCrtypeTextId(int num)
 void InitNpcNames()
 {
     Game.AddPropertySetter(CritterProperty::DialogId, CritterSetDialogId);
+    Game.AddPropertySetter(CritterProperty::TextArgs, CritterSetTextArgs);
 }
 
 // Сценарий меняет диалог уже видимого Смитти: имя обновляем и без повторного входа на карту.
@@ -1192,13 +1194,28 @@ void InitNpcNames()
 void CritterSetDialogId(Critter cr, hstring& dialogId)
 {
     if (!cr.ControlledByPlayer) {
-        string name = NpcName(dialogId, cr.ProtoId);
+        string name = NpcName(dialogId, cr.ProtoId, cr.TextArgs);
         cr.SetName(cr.TextArgs != "" ? Game.FormatTags(name, cr.TextArgs) : name);
     }
 }
 
-string NpcName(hstring dlg, hstring pid)
+// Аргументы могут прийти уже после появления NPC: обновляем имя без повторного входа на карту.
+[[PropertySetter]]
+void CritterSetTextArgs(Critter cr, string& textArgs)
 {
+    if (!cr.ControlledByPlayer) {
+        string name = NpcName(cr.DialogId, cr.ProtoId, textArgs);
+        cr.SetName(textArgs != "" ? Game.FormatTags(name, textArgs) : name);
+    }
+}
+
+string NpcName(hstring dlg, hstring pid, string textArgs = "")
+{
+    // У старых спутников без аргумента остаётся прежнее имя из диалога/прототипа.
+    if ((pid == "DenDefenseCompanion".hstr() || pid == "DenDefenseLeader".hstr()) && textArgs != "") {
+        return Game.FormatTags("@arg merc_name@", textArgs);
+    }
+
     // Имена из {Name} хранятся под парой ключей диалога, а не под суммой хэшей.
     TextPackKey dialogName = TextPackKey(TextPackName::Dialogs, dlg, "Name");
     if (dlg != EMPTY_HSTRING && Game.IsTextPresent(dialogName)) {

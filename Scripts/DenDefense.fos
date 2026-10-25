@@ -3,6 +3,7 @@
 // CLIENT: затемнение отдыха и блокировка действий при провале без ролика и скрытия тела.
 // Состояние хранится в свойствах Game/Critter/Map; загрузка сама по себе не начинает попытку.
 // Самолечением нанятых спутников управляет Merc; контроллер лечит стимпаками только Смитти.
+// Случайное имя спутника выбирается при создании и хранится локализуемым тегом в TextArgs.
 // Связи: PlayerRegistration, Main, Merc, DenCleanup, DenWander, NpcPlanes; диалоги den_defense_*.
 namespace DenDefense
 {
@@ -401,6 +402,7 @@ void CreateCompanion(Critter primary, Map map, int index)
                                         {CritterProperty::DialogId, leader ? "den_defense_leader".hstr() : "den_defense_companion".hstr()},
                                         {CritterProperty::DenDefenseGeneration, Game.DenDefenseGeneration},
                                         {CritterProperty::DenDefenseRole, ROLE_COMPANION},
+                                        {CritterProperty::TextArgs, TextFormatting::TextArg("merc_name", "@text Text Merc Name" + Game.Random(1, 29) + "@")},
                                         {CritterProperty::ReplicationTime, -1},
                                         // Итоговые ОЖ 103/91: ещё +50% к прежним 69/61, с округлением вниз.
                                         {CritterProperty::MaxLifeBase, index % 2 == 0 ? 70 : 58}};
