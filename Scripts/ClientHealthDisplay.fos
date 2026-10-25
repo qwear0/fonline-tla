@@ -1,0 +1,90 @@
+// ClientHealthDisplay — переключаемый показ ОЖ игроков и нанятых мерков над именем.
+// SERVER: публикует признак мерка и точный MaxLife, включая непубличные эффекты препаратов.
+// CLIENT: хранит выключенный по умолчанию режим в свойстве Game; MapText рисует подписи.
+// F10 и проверка фокуса принадлежат InputHandler; состояние не сохраняется между запусками.
+namespace ClientHealthDisplay
+{
+
+///@ Property Game Client bool HealthDisplayEnabled Mutable
+///@ Property Critter Common bool HealthDisplayMerc Mutable PublicSync
+///@ Property Critter Common int32 HealthDisplayMaxHp Mutable PublicSync
+
+#if SERVER
+
+[[ModuleInit]]
+void Init()
+{
+    Game.OnCritterInit.Subscribe(OnCritterInit);
+    Game.AddPropertySetter(CritterProperty::MercMasterId, OnMercChanged);
+    Game.AddPropertySetter(CritterProperty::MaxLifeBase, OnMaxHpChanged);
+    Game.AddPropertySetter(CritterProperty::StrengthBase, OnMaxHpChanged);
+    Game.AddPropertySetter(CritterProperty::EnduranceBase, OnMaxHpChanged);
+    Game.AddPropertySetter(CritterProperty::DrugEffects, OnMaxHpChanged);
+}
+
+[[Event]]
+void OnCritterInit(Critter cr, bool)
+{
+    RefreshMerc(cr);
+    RefreshMaxHp(cr);
+}
+
+// Без параметра нового значения PropertySetter вызывается после записи свойства.
+[[PropertySetter]]
+void OnMercChanged(Critter cr)
+{
+    RefreshMerc(cr);
+}
+
+[[PropertySetter]]
+void OnMaxHpChanged(Critter cr)
+{
+    RefreshMaxHp(cr);
+}
+
+void RefreshMerc(Critter cr)
+{
+    // MercMasterId доступен только серверу; прототип, команда и роль не заменяют факт найма.
+    cr.HealthDisplayMerc = Merc::IsMerc(cr);
+}
+
+void RefreshMaxHp(Critter cr)
+{
+    // Клиентский MaxLife чужого криттера неполон: DrugEffects имеет только OwnerSync.
+    cr.HealthDisplayMaxHp = cr.MaxLife;
+}
+
+#endif
+
+#if CLIENT
+
+void Toggle()
+{
+    bool enabled = !IsEnabled();
+    Game.HealthDisplayEnabled = enabled;
+    if (CurrentLanguage == "russ") {
+        Messaging::Info(enabled ? "Показ ОЖ: включён." : "Показ ОЖ: выключен.");
+    }
+    else {
+        Messaging::Info(enabled ? "HP display: on." : "HP display: off.");
+    }
+}
+
+bool IsEnabled()
+{
+    return Game.HealthDisplayEnabled;
+}
+
+bool ShouldShow(Critter cr)
+{
+    return IsEnabled() && (cr.ControlledByPlayer || cr.HealthDisplayMerc) && !cr.IsDead() && cr.HealthDisplayMaxHp > 0;
+}
+
+string GetText(Critter cr)
+{
+    return (CurrentLanguage == "russ" ? "ОЖ: " : "HP: ") + cr.CurrentHp + "/" + cr.HealthDisplayMaxHp;
+}
+
+#endif
+
+}

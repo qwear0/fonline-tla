@@ -1,7 +1,8 @@
 // MapText — текст на карте: реплики над головами криттеров и всплывающий/статичный текст в гексах.
 // SERVER: рассылает текст клиентам, которые видят криттера или гекс, через ReceiveMapText.
 // CLIENT: хранит активные подписи, анимирует их (всплытие, прозрачность) и отрисовывает в интерфейсе.
-//  Показ имён НПЦ берёт из InputHandler (F11); имена игроков и реплики не скрывает.
+// Показ имён НПЦ берёт из InputHandler (F11); ClientHealthDisplay добавляет ОЖ игроков и мерков независимо от F11.
+// Глобальный MapTexts хранит очередь временных подписей карты между кадрами; очищается при смене карты.
 // Имя главного спутника Сьерры рисует зелёным; цвет реплик и остальных имён не меняет.
 // COMMON: набор перегрузок AddText/AddFlyingText даёт единый вызов для серверной и клиентской сторон.
 namespace MapText
@@ -258,43 +259,61 @@ void DrawCritterText(Critter cr)
 {
     ipos headBox;
 
-    if (!cr.GetTextPos(headBox)) {
+    if (cr.HideSprite || !cr.GetTextPos(headBox)) {
+        return;
+    }
+
+    int crAlpha = cr.GetAlpha();
+    if (crAlpha == 0) {
         return;
     }
 
     bool drawSpeech = Game.FrameTime < cr.TextOnHeadEndTime;
-    if (!drawSpeech && !cr.ControlledByPlayer && !InputHandler::IsNpcNamesShown()) {
+    bool drawHealth = ClientHealthDisplay::ShouldShow(cr);
+    if (!drawSpeech && !drawHealth && !cr.ControlledByPlayer && !InputHandler::IsNpcNamesShown()) {
         return;
     }
 
-    string text = drawSpeech ? cr.TextOnHead : (cr.IsOffline() ? cr.Name + Settings.Gui.PlayerOffAppendix : cr.Name);
-
-    FontType textFont = FontType::Default;
-    int textFlags = int(FontFlag::CenterX) | int(FontFlag::AlignBottom) | int(FontFlag::Bordered);
-    isize textBox;
-    int textLines = 0;
-    Game.GetTextInfo(text, isize(200, 500), TextFormat(textFont, FontFlag(textFlags), 0), textBox, textLines);
-
     ucolor textColor = Color::Text;
+    textColor.alpha = crAlpha;
 
-    if (!drawSpeech) {
-        textColor = cr.ControlledByPlayer ? Color::PlayerName : Color::CritterName;
-
-        if (cr.ControlledByPlayer) {
-            int highlight = cr.PlayerKarma / 10;
-            textColor = ucolor(Color::PlayerName.red + highlight, Color::PlayerName.green + highlight, Color::PlayerName.blue + highlight);
-        }
-        else if (cr.ProtoId == "DenDefenseLeader".hstr()) {
-            textColor = Color::Green;
-        }
+    // Реплика остаётся на прежнем месте; имя и ОЖ располагаются выше её измеренного блока.
+    if (drawSpeech) {
+        isize speechBox = DrawCritterLabel(cr.TextOnHead, headBox, textColor);
+        headBox.y -= speechBox.height + 2;
     }
 
-    int crAlpha = cr.GetAlpha();
-    ucolor spriteColor = Color::Neutral;
-    textColor.alpha = crAlpha;
-    spriteColor.alpha = crAlpha;
+    if (!drawSpeech || drawHealth) {
+        string name = cr.IsOffline() ? cr.Name + Settings.Gui.PlayerOffAppendix : cr.Name;
+        ucolor nameColor = GetCritterNameColor(cr);
+        nameColor.alpha = crAlpha;
+        isize nameBox = DrawCritterLabel(name, headBox, nameColor);
+        headBox.y -= nameBox.height + 2;
+    }
 
-    Game.DrawText(text, headBox - ipos(textBox.width / 2, textBox.height), textBox, textColor, TextFormat(FontType(int(textFont)), FontFlag(textFlags), 0));
+    if (drawHealth) {
+        DrawCritterLabel(ClientHealthDisplay::GetText(cr), headBox, textColor);
+    }
+}
+
+ucolor GetCritterNameColor(Critter cr)
+{
+    if (cr.ControlledByPlayer) {
+        int highlight = cr.PlayerKarma / 10;
+        return ucolor(Color::PlayerName.red + highlight, Color::PlayerName.green + highlight, Color::PlayerName.blue + highlight);
+    }
+
+    return cr.ProtoId == "DenDefenseLeader".hstr() ? Color::Green : Color::CritterName;
+}
+
+isize DrawCritterLabel(string text, ipos bottom, ucolor color)
+{
+    TextFormat format = TextFormat(FontType::Default, FontFlag(int(FontFlag::CenterX) | int(FontFlag::AlignBottom) | int(FontFlag::Bordered)), 0);
+    isize textBox;
+    int textLines = 0;
+    Game.GetTextInfo(text, isize(200, 500), format, textBox, textLines);
+    Game.DrawText(text, bottom - ipos(textBox.width / 2, textBox.height), textBox, color, format);
+    return textBox;
 }
 
 void DrawMapTexts()
