@@ -83,6 +83,7 @@ See [Animation.md](Animation.md) for the native baked root-motion flow, distinct
 | `ClientItems` | S/C | Inventory/container presentation and synchronization |
 | `Item` / `ItemMovement` | S | Doors, holodisks, deferred destruction and move rules |
 | `ItemStacks` | S/C | Game-owned `Count`/`Stackable`: add, count, destroy, split and move units; client count/copy helpers |
+| `EnergyBarier` | S | Location-wide force-field networks, blockers/triggers and terminals; `BarierInit` -> `InitBariers` constructs two non-null blocker paths (both empty for short fields), then `CBarier` |
 | `MoveCursor` / `GuiScreensExt` / `DropMenuHandler` | C | Move hex, cursor cycling and held-click action menu |
 | `Gui/*.fogui` | C | Authored screens and embedded callbacks, including `Gui/Game.fogui` input |
 | `Core/Gui` and companion Core GUI modules | C | Game-owned retained GUI infrastructure |
