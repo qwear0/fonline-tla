@@ -67,11 +67,19 @@ This policy supersedes upstream testing recommendations in imported documentatio
 
 - Store all backups only in `/data/!backups/<project>/`.
 - Store task artifacts worth retaining (plans, reports, investigation results, and verification evidence) in the repository's Git-ignored `tmp/` directory.
-- Store temporary task artifacts, disposable files, short-lived backups only in `/tmp/<project>/`.
+- Store disposable task files in `/tmp/<project>/`; even short-lived backups belong only in `/data/!backups/<project>/`.
+
+## Mandatory task closeout
+
+- **Before every final response or handoff, perform the [task-closeout checklist](Docs/Build.md#mandatory-task-closeout).** This applies to documentation-only work and failed/interrupted verification too; do not wait for a separate cleanup request or disk pressure.
+- Inspect this task's processes/files and the project temporary roots. Stop your disposable diagnostic servers, clients and helpers, confirm exit, then remove their runtime directories, caches and stale PID files. Stopping a process alone is not cleanup. Never stop a deployed service or ongoing build just to clean.
+- Remove finished temporary packages, isolated bakes, compiler outputs and redundant copies. This is standing authorization for exact, proven inactive generated leftovers in `tmp/` and `/tmp/FOSquad/`, including completed earlier tasks whose purpose/completion and lack of consumers are verified. No extra prompt is needed for that bounded cleanup; uncertain ownership or use means preserve and report, not guess.
+- Preserve live packages, character storage, canonical reusable bake/build outputs, required SDK/toolchains, requested downloads and other agents' active work. Retain compact reports/logs, not full output trees as evidence. A retained bulky artifact needs an explicit purpose and cleanup condition.
+- **Include cleanup in the final report:** what was removed and the measured space recovered, or that no disposable artifacts were created; list anything retained or blocked with its reason. A task is not fully closed while disposable resources remain without cleanup or an explicit reported exception.
 
 ## Build And Verify
 
-Before building, verifying, packaging, restarting a server or cleaning build outputs, read [Docs/Build.md](Docs/Build.md) for the minimum adequate workflow and retention policy; use [Docs/ClientUpdates.md](Docs/ClientUpdates.md) for detailed LAN activation and storage safety.
+Before building, verifying, packaging, restarting a server, cleaning outputs or closing any task, read [Docs/Build.md](Docs/Build.md) for the minimum adequate workflow and mandatory closeout/retention policy; use [Docs/ClientUpdates.md](Docs/ClientUpdates.md) for detailed LAN activation and storage safety.
 
 VS Code tasks in `.vscode/tasks.json` provide existing build and inspection commands. Select the smallest adequate checks for the task; the aggregate `Verify :: All` is optional, not a mandatory handoff gate.
 

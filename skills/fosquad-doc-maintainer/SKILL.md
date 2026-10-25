@@ -18,7 +18,7 @@ Make the next maintainer faster at finding the owner, understanding a contract a
 4. Start with `Docs/README.md`; use `Docs/Systems.md` for gameplay and `Docs/FOSquadWorkspace.md` for the engine connection and local commands.
 5. Read [references/repository-map.md](references/repository-map.md) for evidence anchors and boundaries. Read only the relevant feature doc next.
 6. Use [references/maintenance-policy.md](references/maintenance-policy.md) to classify impact, retrieve evidence and keep writing compact.
-7. Before completion, follow [references/audit-checklist.md](references/audit-checklist.md). Use its full-audit route only when a documentation audit is requested.
+7. Before completion, follow [references/audit-checklist.md](references/audit-checklist.md) and the target game's mandatory task-closeout checklist in `AGENTS.md` / `Docs/Build.md`, including for documentation-only tasks. Report cleanup or an explicit retained/blocked exception. Use the full-audit route only when a documentation audit is requested.
 
 ## 2. Retrieve evidence selectively
 
@@ -70,4 +70,5 @@ State:
 - evidence used, including graph limitations when relevant;
 - exact checks actually run, their results and significant gaps;
 - whether this was a bounded update or a full audit, and what remains open;
-- whether local installation was verified and whether commits/publication occurred.
+- whether local installation was verified and whether commits/publication occurred;
+- cleanup performed and measured space recovered, or that no disposable artifacts were created; any retained/blocked temporary resources and their reason/cleanup condition, under the authority and safeguards in `AGENTS.md`.
