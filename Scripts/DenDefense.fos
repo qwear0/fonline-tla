@@ -838,6 +838,8 @@ void StartAfterRest(any value)
     }
     Map? map = Game.GetMap(Game.DenDefenseMapId);
     verify(map != null, "Sierra entrance disappeared after rest");
+    // Пока поколение и история прошлой волны ещё действуют, завершаем перенос тел без двойного счёта.
+    DenCleanup::BeforeWave(map);
     Game.DenDefenseStage = STAGE_FIGHTING;
     BroadcastRest(2);
     Game.DenDefenseWave = Game.DenDefenseWave + 1;
@@ -882,6 +884,8 @@ void ResumeController()
     verify(map != null, "Sierra entrance map is missing at server start");
     // Движок создаёт локации временными; сохраняем базу вместе с её картой и содержимым.
     map.GetLocation().MakePersistent(true);
+    // Сама осада сбрасывается, но уже поднятое Тоддом тело не теряется при рестарте.
+    DenCleanup::DeliverCarried(map);
     map.WarehouseTurretActive = false;
     Critter[] turrets = map.GetCritters(Content::Critter::AutoCannon, CritterFindType::Npc);
     for (int i = 0; i < turrets.length(); i++) {

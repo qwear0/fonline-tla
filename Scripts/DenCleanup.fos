@@ -1,12 +1,17 @@
 // DenCleanup — Тодд у грузовика убирает тела врагов после завершённых волн осады Сьерры.
-// SERVER: настройка мастерской, пауза после волны, подход вплотную, секунда обыска и добыча на земле.
-// Задание и пропущенные недоступные тела хранятся на NPC; изменяемых глобальных таблиц нет.
+// SERVER: подход к телу, перенос к задней части грузовика, секунда разгрузки и уборка перед волной.
+// CLIENT: постоянный локализованный счётчик над грузовиком, независимо от имён и реплик NPC.
+// Счётчик и несомое тело сохраняются на карте; задание на NPC, изменяемых глобальных таблиц нет.
 // Связи: DenDefense (стадии и поколения), MercLoot (резерв тела), NpcPlanes, ItemStacks.
 namespace DenCleanup
 {
 
+///@ Property Map Common int64 DenCleanupCorpseCount Mutable PublicSync Persistent
+
 #if SERVER
 
+///@ Property Map Server bool DenCleanupCarrying Mutable Persistent
+///@ Property Critter Server mpos DenCleanupReturnHex Mutable
 ///@ Property Critter Server ident DenCleanupTargetId Mutable
 ///@ Property Critter Server nanotime DenCleanupReadyAt Mutable
 ///@ Property Critter Server nanotime DenCleanupStartAt Mutable
@@ -67,15 +72,7 @@ void Init(Critter todd, bool firstTime)
 
 void Setup(Map map)
 {
-    Critter? todd = null;
-    Critter[] inhabitants = map.GetCritters(CritterFindType::Npc);
-    for (int i = 0; i < inhabitants.length(); i++) {
-        Critter cr = inhabitants[i];
-        if (cr.DialogId == "den_defense_todd".hstr()) {
-            verify(todd == null, "More than one Todd on Sierra entrance");
-            todd = cr;
-        }
-    }
+    Critter? todd = GetTodd(map);
     // Старые сохранённые карты не получают новых авторских NPC автоматически.
     if (todd == null) {
         dict<CritterProperty, any> props = {{CritterProperty::BagId, int(Bags::Empty)},
@@ -86,29 +83,165 @@ void Setup(Map map)
     }
     verify(todd != null, "Sierra Todd is missing");
     Init(todd, false);
-    ReleaseTarget(todd);
-    mpos home = mpos(50, 56);
-    verify(todd.Hex == home || DenDefense::FindBaseSpawnHex(map, home, 3, home), "Todd truck-side home is blocked");
-    todd.TransferToMap(map, home, HDIR_Random);
-    todd.HomeMapId = map.Id;
-    todd.HomeHex = home;
+    DeliverCarried(map);
+    ResetAtTruck(todd, map);
     MercStorage::Setup(map);
     StoreGroundSupplies(map);
+}
+
+Critter? GetTodd(Map map)
+{
+    Critter? todd = null;
+    Critter[] inhabitants = map.GetCritters(CritterFindType::Npc);
+    for (int i = 0; i < inhabitants.length(); i++) {
+        Critter cr = inhabitants[i];
+        if (cr.DialogId == "den_defense_todd".hstr() && !cr.ControlledByPlayer && cr.MercMasterId == ZERO_IDENT) {
+            verify(todd == null, "More than one Todd on Sierra entrance");
+            todd = cr;
+        }
+    }
+    return todd;
+}
+
+// Исходный гекс — сзади грузовика. Телепорт выбирает равновероятно из всего доступного радиуса.
+bool FindTruckHex(Critter todd, Map map, bool teleport, mpos& hex)
+{
+    const mpos center = mpos(50, 56);
+    const mpos workshop = mpos(37, 60);
+    mpos[] candidates = {};
+    for (int x = int(center.x) - 3; x <= int(center.x) + 3; x++) {
+        for (int y = int(center.y) - 3; y <= int(center.y) + 3; y++) {
+            if (x < 0 || y < 0 || x >= int(map.Size.width) || y >= int(map.Size.height)) {
+                continue;
+            }
+            mpos candidate = mpos(x, y);
+            Critter? occupant = map.GetCritterOnHex(candidate);
+            if (Game.GetDistance(center, candidate) > 3 || (occupant != null && occupant.Id != todd.Id) ||
+                (!map.IsHexMovable(candidate) && todd.Hex != candidate) || map.GetPathLength(candidate, workshop, 1, DenDefense::CanLeaveSpawnHouse) == 0 ||
+                (!teleport && todd.Hex != candidate && map.GetPathLength(todd, candidate, 0, MainPlanes::CanOpenDoor) == 0)) {
+                continue;
+            }
+            if (!teleport && candidate == center) {
+                hex = candidate;
+                return true;
+            }
+            candidates.insertLast(candidate);
+        }
+    }
+    if (candidates.isEmpty()) {
+        return false;
+    }
+    hex = candidates[Game.Random(0, candidates.length() - 1)];
+    return true;
 }
 
 void ReleaseTarget(Critter todd)
 {
     MercLoot::RemoveWalk(todd, "DenCleanup".hstr());
-    if (todd.DenCleanupTargetId != ZERO_IDENT) {
-        todd.StopMoving();
-    }
+    todd.StopMoving();
     todd.DenCleanupTargetId = ZERO_IDENT;
+    todd.DenCleanupTargetUntil = ZERO_NANOTIME;
     todd.DenCleanupReadyAt = ZERO_NANOTIME;
+}
+
+void ResetAtTruck(Critter todd, Map map)
+{
+    mpos hex;
+    verify(FindTruckHex(todd, map, true, hex), "Todd truck-side home is blocked");
+    ReleaseTarget(todd);
+    todd.TransferToMap(map, hex, HDIR_Random, true);
+    verify(todd.MapId == map.Id && todd.Hex == hex, "Unable to reset Todd at truck");
+    todd.HomeMapId = map.Id;
+    todd.HomeHex = mpos(50, 56);
+    todd.DenCleanupSkippedIds = {};
+}
+
+// Несомое тело уже удалено с карты: оно не попадает в повторный обход трупов.
+// Флаг сохраняется отдельно от временного NPC-задания, в том числе при рестарте/сбросе попытки.
+void DeliverCarried(Map map)
+{
+    if (map.DenCleanupCarrying) {
+        map.DenCleanupCorpseCount = map.DenCleanupCorpseCount + 1;
+        map.DenCleanupCarrying = false;
+    }
+}
+
+bool IsCleanupCorpse(Critter corpse, Map map)
+{
+    return corpse.MapId == map.Id && !corpse.ControlledByPlayer && corpse.MercMasterId == ZERO_IDENT && MercLoot::IsWaveCorpse(corpse) &&
+           Game.DenDefenseEnemyHistory.exists(corpse.Id);
 }
 
 bool CanClean(Critter todd, Critter corpse, Map map)
 {
-    return corpse.MapId == map.Id && MercLoot::IsWaveCorpse(corpse) && !MercLoot::IsReserved(todd, map, corpse.Id);
+    return IsCleanupCorpse(corpse, map) && !MercLoot::IsReserved(todd, map, corpse.Id);
+}
+
+void RemoveCorpse(Critter corpse)
+{
+    verify(DenDefense::SpillLoot(corpse), "Unable to spill Den corpse inventory", corpse);
+    Game.DestroyCritter(corpse);
+}
+
+// Только подтверждённый запуск следующей волны, не запрос отдыха и не новая попытка.
+// Убираем также недоступные/зарезервированные тела, но не игроков, спутников и чужих NPC.
+void BeforeWave(Map map)
+{
+    verify(map.Id == Game.DenDefenseMapId, "Wrong Sierra cleanup map");
+    Critter? todd = GetTodd(map);
+    verify(todd != null, "Sierra Todd is missing before wave");
+    ResetAtTruck(todd, map);
+    DeliverCarried(map);
+    Critter[] collectors = map.GetCritters(CritterFindType::NonDeadNpc);
+    Critter[] corpses = map.GetCritters(CritterFindType::DeadNpc);
+    for (int i = 0; i < corpses.length(); i++) {
+        Critter corpse = corpses[i];
+        if (!IsCleanupCorpse(corpse, map)) {
+            continue;
+        }
+        for (int j = 0; j < collectors.length(); j++) {
+            Critter collector = collectors[j];
+            if (collector.MercLootActive && collector.MercLootCorpse && collector.MercLootTargetId == corpse.Id) {
+                MercLoot::ReleaseTarget(collector);
+            }
+        }
+        RemoveCorpse(corpse);
+        // Фиксируем каждый успешно удалённый труп сразу: повтор не пересчитает уже удалённые.
+        map.DenCleanupCorpseCount = map.DenCleanupCorpseCount + 1;
+    }
+}
+
+void ReturnToTruck(Critter todd, Map map)
+{
+    mpos hex = todd.DenCleanupReturnHex;
+    Critter? occupant = map.GetCritterOnHex(hex);
+    if (todd.DenCleanupTargetUntil == ZERO_NANOTIME || Game.FrameTime >= todd.DenCleanupTargetUntil || (occupant != null && occupant.Id != todd.Id)) {
+        ReleaseTarget(todd);
+        if (!FindTruckHex(todd, map, false, hex)) {
+            return; // Несомое тело не теряется; ждём, пока освободится подход к грузовику.
+        }
+        todd.DenCleanupReturnHex = hex;
+        todd.DenCleanupTargetUntil = Game.FrameTime + Time::Seconds(30);
+    }
+    if (todd.Hex != hex) {
+        todd.DenCleanupReadyAt = ZERO_NANOTIME;
+        if (NpcPlanes::GetPlanes(todd, "DenCleanup".hstr()) == null) {
+            NpcPlanes::AddWalkPlane(todd, NpcPlanes::AI_PLANE_PICK_PRIORITY, "DenCleanup".hstr(), 0, hex, Game.GetDirection(todd.Hex, hex), false, 0);
+        }
+        return;
+    }
+    MercLoot::RemoveWalk(todd, "DenCleanup".hstr());
+    todd.StopMoving();
+    if (todd.DenCleanupReadyAt == ZERO_NANOTIME) {
+        // У nmlosr нет кадров PickUp/Use: не скрываем NPC отсутствующей анимацией.
+        todd.SetDir(Game.GetDirection(todd.Hex, mpos(51, 51)));
+        todd.DenCleanupReadyAt = Game.FrameTime + Time::Seconds(1);
+        return;
+    }
+    if (Game.FrameTime >= todd.DenCleanupReadyAt) {
+        DeliverCarried(map);
+        ReleaseTarget(todd);
+    }
 }
 
 bool SelectTarget(Critter todd, Map map)
@@ -165,6 +298,10 @@ void Idle(Critter todd)
     if (CritterState::IsBusy(todd) || Dialogs::IsTalking(todd)) {
         return;
     }
+    if (map.DenCleanupCarrying) {
+        ReturnToTruck(todd, map);
+        return;
+    }
     if (todd.DenCleanupTargetId == ZERO_IDENT && !SelectTarget(todd, map)) {
         return;
     }
@@ -188,23 +325,45 @@ void Idle(Critter todd)
         }
         return;
     }
-    if (todd.DenCleanupReadyAt == ZERO_NANOTIME) {
-        MercLoot::RemoveWalk(todd, "DenCleanup".hstr());
-        todd.StopMoving();
-        todd.SetDir(Game.GetDirection(todd.Hex, corpse.Hex));
-        // У nmlosr нет кадров PickUp/Use: остаёмся лицом к телу, не скрывая NPC отсутствующей анимацией.
-        todd.DenCleanupReadyAt = Game.FrameTime + Time::Seconds(1);
-        if (Game.Random(1, 100) <= 33) {
-            // DialogBaker сохраняет авторский ключ буквально, без прежнего числового смещения.
-            Messaging::Say(todd, TextPackKey(TextPackName::Dialogs, todd.DialogId, "" + Game.Random(100, 109)));
-        }
+    MercLoot::RemoveWalk(todd, "DenCleanup".hstr());
+    todd.StopMoving();
+    todd.SetDir(Game.GetDirection(todd.Hex, corpse.Hex));
+    RemoveCorpse(corpse);
+    map.DenCleanupCarrying = true;
+    ReleaseTarget(todd);
+    if (Game.Random(1, 100) <= 33) {
+        // DialogBaker сохраняет авторский ключ буквально, без прежнего числового смещения.
+        Messaging::Say(todd, TextPackKey(TextPackName::Dialogs, todd.DialogId, "" + Game.Random(100, 109)));
+    }
+    ReturnToTruck(todd, map);
+}
+
+#endif
+
+#if CLIENT
+
+[[ModuleInit]]
+void InitClient()
+{
+    Game.OnPreRenderIface.Subscribe(DrawTruckCounter);
+}
+
+[[Event]]
+void DrawTruckCounter()
+{
+    if (!HasCurMap || CurMap.ProtoId != Content::Map::sad_enter) {
         return;
     }
-    if (Game.FrameTime >= todd.DenCleanupReadyAt) {
-        verify(DenDefense::SpillLoot(corpse), "Unable to spill Den corpse inventory", corpse);
-        Game.DestroyCritter(corpse);
-        ReleaseTarget(todd);
-    }
+    const mpos truck = mpos(51, 51);
+    ipos pos = CurMap.GetHexScreenPos(truck);
+    isize content = CurMap.GetHexContentSize(truck);
+    string text = Game.FormatTags(Game.GetText(TextPackKey(TextPackName::Text, "DenCleanup", "TruckCorpses")),
+                                  TextFormatting::TextArg("count", "" + CurMap.DenCleanupCorpseCount));
+    Game.DrawText(text,
+                  pos + ipos(-200, -content.height),
+                  isize(400, 0),
+                  Color::White,
+                  TextFormat(FontType::Default, FontFlag(int(FontFlag::CenterX) | int(FontFlag::AlignBottom) | int(FontFlag::Bordered)), 0));
 }
 
 #endif

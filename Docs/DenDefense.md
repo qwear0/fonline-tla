@@ -305,25 +305,41 @@ for storage and restart instructions. Other profiles remain Memory unless overri
 
 ## Todd and post-wave cleanup
 
-Owner: `Scripts/DenCleanup.fos`; authored inputs: `Maps/sad_enter.fomap`,
-`Items/DenDefenseSupplies.foitem`, `Dialogs/den_defense_todd.fodlg`.
+Owner: `Scripts/DenCleanup.fos` (server cleanup and client truck label); authored inputs:
+`Maps/sad_enter.fomap`, `Items/DenDefenseSupplies.foitem`, `Dialogs/den_defense_todd.fodlg`
+and `Texts/Text.{russ,engl}.fotxt`.
 
-- Todd is authored beside the truck at `50:56`. Attempt setup reuses him (or creates him on older
-  saved Sierra maps), cancels the old cleanup task and restores his truck-side home without duplication.
+- Todd is authored at `50:56`, behind the truck (`51:51`). Attempt setup reuses him (or creates him
+  on older saved Sierra maps) and cancels his old walk without duplicating the NPC. Setup and each
+  confirmed wave start uniformly choose an available hex within **hex distance 3 of the original
+  `50:56`**, with a route to the workshop, and teleport him there with a random direction. This is
+  not a drifting radius around his last position; occupied hexes never displace other critters.
 - Once a wave is fully spawned and its registered enemies are all dead, Todd waits a uniformly
-  selected **7–15 real seconds** before selecting a reachable current-generation wave corpse.
-  He walks with ordinary door-aware NPC plans to the normal corpse-looting distance (one hex plus
-  both multihex radii) and faces it. His `nmlosr` model has no pickup/use frames, so the one-second
-  cleanup pause keeps his standing sprite instead of starting an unavailable animation.
-  After one real second at that distance, the body disappears. Players, companions and ordinary
-  inhabitants are never cleanup targets. MercLoot reservations are respected at selection and removal.
-- Each cleanup action has a **33%** chance of one uniformly selected bark from the ten requested lines
+  selected **7–15 real seconds** before selecting a reachable corpse. The safe meaning of “all
+  corpses” is **registered, lootable wave enemies of the current generation on this siege map**.
+  Players, hired mercenaries, companions, unrelated inhabitants, other generations/maps and no-loot
+  bodies are excluded. Ordinary collection respects `MercLoot` reservations both at selection and
+  immediately before removal.
+- Todd walks with ordinary door-aware NPC plans to corpse-looting distance (one hex plus both
+  multihex radii), faces the body and removes it immediately. He then walks back behind the truck,
+  preferably to `50:56`, otherwise to a reachable available hex within three hexes. At the exact
+  unloading hex he faces the truck and waits **one real second**, credits one body to the truck,
+  then may select the next corpse. His `nmlosr` model has no pickup/use frames, so the pause retains
+  his standing sprite. A blocked return is retried without losing the carried body; it never
+  teleports during ordinary collection.
+- Removing a body has a **33%** chance of one uniformly selected bark from the ten requested lines
   (`100..109`, Russian and English). These use literal `Dialogs/den_defense_todd/100..109` keys,
-  matching DialogBaker, without the obsolete numeric offset. A 250 ms idle timer handles the initial
-  delay and one-second deadline; busy/dialog time can delay completion. Unreachable bodies are ignored;
-  a stalled selected target is skipped after 30 seconds for that wave.
-  Rest, a new active wave, failure or Todd's death cancels his task;
-  a subsequent completed wave makes remaining reachable bodies eligible again.
+  matching DialogBaker, without the obsolete numeric offset. A 250 ms idle timer handles real-time
+  deadlines; busy/dialog time can delay completion. Unreachable bodies are ignored during ordinary
+  collection; a stalled selected corpse is skipped after 30 seconds for that wave. Rest, failure or
+  Todd's death cancels his transient walk but retains a pending carried body.
+- `DenDefense::StartAfterRest` calls `DenCleanup::BeforeWave` only after defender/Smitty validation,
+  before advancing the wave or spawning its first enemy. All remaining eligible bodies, including
+  unreachable or reserved ones, are removed and counted individually. Only `MercLoot` targets for
+  those bodies are released; collectors, their inventories and other jobs/items are not deleted.
+  A previously carried body is credited once via its separate pending flag, not counted again in
+  the map corpse scan. Repeated calls cannot recount already removed bodies or a cleared pending
+  flag. A canceled rest does not run this cleanup.
 - Remaining ordinary corpse items are spilled intact onto the corpse's hex before body deletion,
   through `DenDefense.SpillLoot` and `ItemStacks`; failed moves assert instead of deleting unclaimed
   loot. Todd does not move these items into Smitty's crate. The crate at `35:60` still holds workshop
@@ -334,8 +350,22 @@ Owner: `Scripts/DenCleanup.fos`; authored inputs: `Maps/sad_enter.fomap`,
   displayed snapshot and Take All, including legacy numeric-`0` supplies; no save wipe or item migration
   is needed. The crate inherits the wooden-crate presentation with an enlarged capacity; old saves
   without it create exactly one crate on demand.
-- Server-only transient `DenCleanup*` critter properties hold target/start/deadline/generation/skips;
-  no public property, RemoteCall or removal/rename migration is introduced.
+- `Map.DenCleanupCorpseCount` is **Common, PublicSync, Persistent int64**. The CLIENT branch draws
+  `DenCleanup/TruckCorpses` above the truck on every interface frame: **“В грузовике X трупов”** /
+  **“Bodies in the truck: X”**, including zero. It is independent of NPC names, speech expiry and
+  `MapText`; map entry/reconnect and count changes use ordinary property synchronization.
+  `Map.DenCleanupCarrying` is server-only Persistent and denotes exactly one already removed body
+  awaiting unloading. `DeliverCarried` clears it when credited, including on attempt setup and
+  server-start reset; the cumulative count itself is never reset by a new wave or generation.
+  A saved pending delivery is finalized at restart because the siege itself intentionally resets.
+  Existing saves without these properties start at zero; previously deleted bodies are not reconstructed.
+- Persistence requires the same saved Sierra map in a **persistent storage provider**, such as the
+  LAN profile's SQLite, with its storage retained across graceful server restarts. **Memory cannot
+  preserve either the count or pending delivery across process restart**, even with `Persistent`
+  metadata; selecting Memory is not a durable mode. No config/provider switch is made here.
+  Transient `DenCleanup*` critter properties hold the walk/return hex, start/deadlines, generation
+  and skips. This is an additive property contract, with no removal/rename migration or RemoteCall.
+  Rebake and deploy matching client/server Scripts, Metadata and both localized Texts together.
 
 ## Global rest and time domains
 

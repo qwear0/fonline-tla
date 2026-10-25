@@ -1375,6 +1375,8 @@ P.S. Чузенов просьба не беспокоить.}
 {MercLoot}{Overweight3}{What do we need all this junk for?}
 {MercLoot}{Overweight4}{Fetch this, carry that... I am tired of it.}
 
+{DenCleanup}{TruckCorpses}{Bodies in the truck: @arg count@}
+
 {DenWander}{Arrival1}{Something's wrong with this chair... And these walls... Listen, who the hell are you?}
 {DenWander}{Arrival2}{Wait a minute... I thought I turned left... Or right?.. What is this dump?}
 {DenWander}{Arrival3}{Oops... Looks like I got the wrong door... Or building... Or town...}
