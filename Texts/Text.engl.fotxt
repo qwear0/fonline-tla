@@ -1315,6 +1315,16 @@ P.S. Чузенов просьба не беспокоить.}
 {70061}{}{Вы съели столько пончиков, что почуствовали себя немного сильнее. Переносимый вес увеличен на +1 фунт.}
 
 # Mercenary refusal when the loot is too heavy
+{Merc}{FirstAid1}{Fuck!.. I'll still kill every last one of you!}
+{Merc}{FirstAid2}{See you in hell, but first I'll chew on another stimpack!}
+{Merc}{FirstAid3}{I'll dig this lead out and put it right in your skull!}
+{Merc}{FirstAid4}{Not yet, you bastards! I'm still breathing!}
+{Merc}{FirstAid5}{Blood everywhere... No matter, I'll patch myself up and be back!}
+{Merc}{FirstAid6}{A hole in my chest? Not the first time!}
+{Merc}{FirstAid7}{I'll live! You, on the other hand — not likely!}
+{Merc}{FirstAid8}{Damn it! That was an expensive jacket...}
+{Merc}{FirstAid9}{A little Jet, a few bandages — and I'm back in business!}
+
 {MercLoot}{Overweight1}{Ugh, I cannot carry that much.}
 {MercLoot}{Overweight2}{All right, this is too much.}
 {MercLoot}{Overweight3}{What do we need all this junk for?}

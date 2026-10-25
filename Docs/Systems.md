@@ -97,6 +97,9 @@ authoritative slot moves; the engine must apply slots before raising that event.
 `OnItemInvIn` / `OnItemInvOut`, after the engine adds or removes the owned instance.
 `ClientMain::CritterAction` plays the chosen's drop animation from the server action:
 `ChosenActions` sends the drop request without predicting that animation locally.
+`ChosenTabs::DrawChosenTabs` shows red Doctor/First Aid tabs while the chosen's owner-synced
+`TimeoutSkDoctor` / `TimeoutSkFirstAid` is active, using the same sprite/color as the injury tab and
+existing localized skill names. The tabs disappear when their synchronized-time cooldown expires.
 
 Merc following keeps one `MercFollow` walk plan, not a queue of historical player positions.
 Ordinary mercs target the master's latest hex with `MercMasterDist` as the stop radius. Den companions
@@ -104,7 +107,9 @@ use `MercFormation` to reserve distinct reachable positions: weighted 1–5-hex 
 1–3-hex moving rings, preferring pairwise separation within the same bounds. They walk to the exact
 reserved hex. Unchanged active walk routes are not restarted every AI tick; attack plans retain priority.
 `MercLoot` temporarily replaces following with reserved-target collection walks; completion or explicit
-follow/wait releases the job. See [DenDefense.md](DenDefense.md#supplies-companions-and-ground-loot).
+follow/wait releases the job. `Merc::TrySelfFirstAid` uses the ordinary skill/AP path below 50% HP,
+with the standard First Aid cooldown and a localized healing line; it runs before loot/follow work.
+See [DenDefense.md](DenDefense.md#supplies-companions-and-ground-loot).
 
 The engine handles individual item instances and never merges stacks. Use `ItemStacks::` for quantity
 operations rather than raw engine add/move/destroy/clone calls. `Gui/Cursor.fogui` refreshes weapon

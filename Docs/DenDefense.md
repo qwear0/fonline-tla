@@ -180,6 +180,12 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   the battle timeout defer either order to the end of combat, leaving normal AI weapon selection intact.
   The existing second-based equipment timer reapplies the choice after combat; the command also
   attempts an immediate update. Old entities without the new property default to holstering.
+- Hired NPC mercenaries (including the leader) try **First Aid on themselves below 50% HP** from
+  `Merc::MercIdleImpl`, before loot/follow processing. They must be alive, on a local map, free to act
+  under siege rules, not busy, off `TimeoutSkFirstAid`, and have the ordinary skill-use AP available.
+  `CritterActions::UseSkill` runs the normal healing path; a successful heal sets the same
+  `GameTime::FirstAidTimeout` used by players and emits one random localized line from
+  `Texts/Text.{russ,engl}.fotxt` (`Merc/FirstAid1..9`). No drugs are required or consumed.
 - Every companion also offers a one-shot **collect loot** order through `DenDefense::CollectLoot`.
   [`MercLoot.fos`](../Scripts/MercLoot.fos) owns target selection, reservations and collection.
   The ordinary dialog orders only that NPC; the leader starts himself immediately and the other

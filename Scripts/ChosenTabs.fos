@@ -86,6 +86,14 @@ void DrawChosenTabs()
         DrawTab(Game.GetText(TextPackKey(TextPackName::Game, "" + (MsgStr::StrInjuredTitle))), Color::DRed);
     }
 
+    if (Time::IsTimeoutActive(chosen.TimeoutSkDoctor)) {
+        DrawTab(MsgStr::GetParamNameText(CritterProperty::SkillDoctor), Color::DRed);
+    }
+
+    if (Time::IsTimeoutActive(chosen.TimeoutSkFirstAid)) {
+        DrawTab(MsgStr::GetParamNameText(CritterProperty::SkillFirstAid), Color::DRed);
+    }
+
     if (chosen.IsAddicted) {
         DrawTab(Game.GetText(TextPackKey(TextPackName::Game, "" + (MsgStr::StrAddictedTitle))), Color::DRed);
     }

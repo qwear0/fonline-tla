@@ -9,6 +9,7 @@
 // Главный мерк (NpcRole = ROLE_LEADER) передаёт диалоговые настройки всем меркам хозяина.
 // FavoriteItem вызывает поддержание выбранной готовности оружия вне боя.
 // MercLoot временно ведёт перемещение по разовому приказу собрать добычу.
+// При ОЖ ниже половины мерк применяет «Санитара» к себе с обычными затратами AP и кулдауном.
 // Связи: NpcPlanes (боевые/ходовые планы), GlobalmapGroupExtended (группы на
 // глобале), Entrance/Teams/CritterState/PlayerRegistration, Tla (общие enum'ы).
 namespace Merc
@@ -61,7 +62,7 @@ mdir GetDir(Critter cr0, Critter cr1)
 }
 
 // Отладочный лог мерков. Сейчас отключён (пустая реализация); строка ниже —
-// breadcrumb на исходный макрос для быстрого включения логирования при отладке.
+// Ориентир на исходный макрос для быстрого включения логирования при отладке.
 // #define DebugLog#(s) (Game.Log(s))
 void DebugLog(string s)
 {
@@ -248,6 +249,27 @@ void MercSmthDead(Critter merc, Critter fromCr, Critter killer)
     MercSmthDeadImpl(merc, fromCr, killer);
 }
 
+// Самолечение не обходит занятость, AP и ограничения осады. Реплика звучит только после лечения.
+bool TrySelfFirstAid(Critter merc)
+{
+    if (merc.ControlledByPlayer || !merc.IsAlive() || merc.MapId == ZERO_IDENT || int64(merc.CurrentHp) * 2 >= merc.MaxLife ||
+        Time::IsTimeoutActive(merc.TimeoutSkFirstAid) || CritterState::IsBusy(merc) || !DenDefense::CanAct(merc) ||
+        merc.CurrentAp / Tla::AP_DIVIDER < Settings.Movement.RtApCostUseSkill) {
+        return false;
+    }
+
+    int previousHp = merc.CurrentHp;
+    CritterActions::UseSkill(merc, CritterProperty::SkillFirstAid, merc.Id, ZERO_IDENT, EMPTY_HSTRING, 0, 0);
+    if (merc.CurrentHp <= previousHp) {
+        return false;
+    }
+
+    // Общий обработчик навыка назначает кулдаун только игрокам; мерку ставим тот же таймаут здесь.
+    merc.TimeoutSkFirstAid = GameTime::FirstAidTimeout(merc);
+    Messaging::Say(merc, TextPackKey(TextPackName::Text, "Merc", "FirstAid" + Game.Random(1, 9)));
+    return true;
+}
+
 void MercIdleImpl(Critter merc)
 {
     ident masterId = merc.MercMasterId;
@@ -278,6 +300,10 @@ void MercIdleImpl(Critter merc)
     if (master.IsDead()) {
         MercSmthDeadImpl(merc, master, null);
         return; // погиб хозяин
+    }
+
+    if (TrySelfFirstAid(merc)) {
+        return;
     }
 
     if (merc.MercWaitForMaster || merc.MercLootActive) {
