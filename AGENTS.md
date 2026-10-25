@@ -56,7 +56,7 @@ Adding or removing a native extension file requires updating the relevant `AddEn
 
 - GitHub Actions are disabled for this workspace; do not rely on CI workflows. Workflow definitions are archived under `.github/disabled-workflows/`, not executed by GitHub. Remote repository settings are not changed until the source changes are published.
 - Do not write, extend, or modify automated tests or test infrastructure unless explicitly requested by the user. This includes temporary test scripts and tests delegated to other agents. Do not routinely ask for exceptions.
-- Do not run end-to-end (E2E) tests or create/start a server for testing unless explicitly requested by the user.
+- Do not run end-to-end (E2E) tests or test against any server (newly created/started or already running) unless explicitly requested by the user.
 - Verify changed behavior using the least costly adequate means already available: existing checks, type checks, or direct use of the application's CLI, API, or UI. Do not recreate a test suite under the label of diagnostics or smoke checks, or build new verification infrastructure.
 - Judge observed behavior against the user's requirements, not merely successful execution or the implementation's own success messages. Report what was actually checked, the result, and any significant verification gaps.
 - The absence of new tests is not a defect and must not trigger review requests for test coverage.
