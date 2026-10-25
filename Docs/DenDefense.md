@@ -186,6 +186,14 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   `CritterActions::UseSkill` runs the normal healing path; a successful heal sets the same
   `GameTime::FirstAidTimeout` used by players and emits one random localized line from
   `Texts/Text.{russ,engl}.fotxt` (`Merc/FirstAid1..9`). No drugs are required or consumed.
+- If First Aid cannot run and HP is still **strictly below 50%**, `Merc::TrySelfStimpak` tries one
+  owned ordinary stimpak, or a super stimpak only when no ordinary one is present. It runs after First
+  Aid and before loot/follow work, both in and out of combat, with the same alive/local-map, siege and
+  busy restrictions and the ordinary item-use AP cost. `CritterActions::UseItemOn` -> `Main.CritterUseItem`
+  -> `Drugs.UseDrug` consumes one unit through `ItemStacks` and schedules the existing drug effect
+  (including super-stimpak aftereffects). It neither creates items nor changes the First Aid cooldown.
+  The siege controller no longer separately spends companions' stimpaks; `PatternCommon` and
+  `FighterPattern` also leave hired NPC self-healing to `Merc`. Smitty retains his existing healing path.
 - Injured hired NPC mercenaries first try **Doctor on themselves outside combat** through
   `Merc::TrySelfDoctor`, before First Aid, loot or following. An active battle timeout or attack plan
   blocks Doctor; the ordinary alive/local-map, siege, busy, AP and `TimeoutSkDoctor` checks also apply.

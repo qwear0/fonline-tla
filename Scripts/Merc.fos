@@ -10,6 +10,7 @@
 // FavoriteItem вызывает поддержание выбранной готовности оружия вне боя.
 // MercLoot временно ведёт перемещение по разовому приказу собрать добычу.
 // При ОЖ ниже половины мерк применяет «Санитара» к себе с обычными затратами AP и кулдауном.
+// Если «Санитар» недоступен, расходует свой обычный стимпак, а при его отсутствии — суперстимпак.
 // Вне боя при травмах сначала пробует «Доктора» с обычным шансом лечения и кулдауном попытки.
 // Связи: NpcPlanes (боевые/ходовые планы), GlobalmapGroupExtended (группы на
 // глобале), Entrance/Teams/CritterState/PlayerRegistration, Tla (общие enum'ы).
@@ -271,6 +272,29 @@ bool TrySelfFirstAid(Critter merc)
     return true;
 }
 
+// Запасной вариант после недоступного «Санитара»: только свои стимпаки и обычная стоимость предметного действия.
+bool TrySelfStimpak(Critter merc)
+{
+    if (merc.ControlledByPlayer || !merc.IsAlive() || merc.MapId == ZERO_IDENT || int64(merc.CurrentHp) * 2 >= merc.MaxLife ||
+        CritterState::IsBusy(merc) || !DenDefense::CanAct(merc) ||
+        merc.CurrentAp / Tla::AP_DIVIDER < Settings.Movement.RtApCostUseItem) {
+        return false;
+    }
+
+    Item? stimpak = merc.GetItem(Content::Item::stimpak);
+    if (stimpak == null) {
+        stimpak = merc.GetItem(Content::Item::super_stimpak);
+    }
+    if (stimpak == null) {
+        return false;
+    }
+
+    // Обычный путь запускает эффект препарата и расходует одну единицу через ItemStacks.
+    // Прибавка ОЖ приходит из тайм-евента препарата, поэтому не проверяем её сразу после вызова.
+    CritterActions::UseItemOn(merc, stimpak.Id, merc.Id, ZERO_IDENT, EMPTY_HSTRING, 0, 0, 0);
+    return true;
+}
+
 // Травмы лечим только вне боя. Неудачная попытка тоже расходует AP и запускает кулдаун.
 bool TrySelfDoctor(Critter merc)
 {
@@ -327,7 +351,7 @@ void MercIdleImpl(Critter merc)
         return; // погиб хозяин
     }
 
-    if (TrySelfDoctor(merc) || TrySelfFirstAid(merc)) {
+    if (TrySelfDoctor(merc) || TrySelfFirstAid(merc) || TrySelfStimpak(merc)) {
         return;
     }
 

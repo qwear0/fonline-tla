@@ -1,6 +1,7 @@
 // FighterPattern — настраиваемый боевой AI команд NPC на карте (SERVER).
 // Класс FighterPattern задаёт дистанцию атаки, радиус подмоги, пороги тревоги, само-хил и форс брони.
 // Опирается на NpcPlanes, EnemyStack, SendMessage, Drugs, AnimHelpers.
+// Нанятым меркам не создаёт и не расходует стимпаки: их самолечением управляет Merc.
 namespace FighterPattern
 {
 
@@ -331,7 +332,7 @@ void CritterMessage(Critter cr, Critter fromCr, int message, any value)
 // Попытка полечиться: при нехватке стимпаков с шансом догенерирует их (по запасу CanGenStim), затем применяет.
 bool TryHeal(Critter cr)
 {
-    if (!cr.IsAlive()) {
+    if (!cr.IsAlive() || Merc::IsMerc(cr)) {
         return false;
     }
 

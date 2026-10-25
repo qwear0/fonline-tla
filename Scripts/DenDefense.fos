@@ -2,6 +2,7 @@
 // SERVER: подтверждённый вход, поколения попыток, участники, спутники, отдых, волны и вещи.
 // CLIENT: затемнение отдыха и блокировка действий при провале без ролика и скрытия тела.
 // Состояние хранится в свойствах Game/Critter/Map; загрузка сама по себе не начинает попытку.
+// Самолечением нанятых спутников управляет Merc; контроллер лечит стимпаками только Смитти.
 // Связи: PlayerRegistration, Main, Merc, DenCleanup, DenWander, NpcPlanes; диалоги den_defense_*.
 namespace DenDefense
 {
@@ -912,12 +913,6 @@ void Controller(Map map, any value)
     if (smitty.IsAlive()) {
         helpers.TryUseStim(smitty);
         ChooseTarget(smitty);
-    }
-    for (int i = 0; i < Game.DenDefenseCompanionIds.length(); i++) {
-        Critter? companion = Game.GetCritter(Game.DenDefenseCompanionIds[i]);
-        if (companion != null && companion.IsAlive()) {
-            helpers.TryUseStim(companion);
-        }
     }
     if (Game.DenDefenseStage != STAGE_FIGHTING) {
         return;

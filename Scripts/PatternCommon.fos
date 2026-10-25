@@ -2,6 +2,7 @@
 // CommonPattern задаёт базовую реакцию: фильтр сообщений от союзников по дистанции (MsgReact), лечение стимпаком при HP < 50% (TryUseStim),
 // авто-атака замеченного игрока (ShowCritter/AttackPlayer) и обработка урона/смерти (порча оружия, урезание патронов у трупа).
 // Наследники переопределяют поведение и подписки в SetEvents; GetLimits/GetFirstMinIndex/GetRandomMaxIndex — утилиты выбора по массиву весов.
+// Нанятые мерки лечатся через Merc: общий шаблон не тратит их стимпаки в обход «Санитара».
 namespace PatternCommon
 {
 
@@ -50,7 +51,7 @@ class CommonPattern
     // Если здоровья меньше 50% и в инвентаре есть стимпаки
     void TryUseStim(Critter cr)
     {
-        if (!cr.IsAlive()) {
+        if (!cr.IsAlive() || Merc::IsMerc(cr)) {
             return;
         }
 
