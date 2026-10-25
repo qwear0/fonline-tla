@@ -1,5 +1,5 @@
 // NpcPlanes — серверная система AI-планов NPC: приоритетная очередь поведенческих задач (misc/attack/walk/pick; патруль и курьер — в разработке).
-// Периодический тайм-эвент OnCritterIdle вызывает ProcessAi: берёт текущий план, двигает NPC по путям с трассировкой, атакует/подбирает предметы/выполняет скрипт и переключает планы по приоритету.
+// Тайм-эвент OnCritterIdle сначала проверяет боевое самолечение Merc до занятости, затем вызывает ProcessAi: движение, атаки, подбор, скрипты и смена планов.
 // Планы хранятся в AllNpcPlanes в памяти сервера; порождает события OnNpcPlaneBegin/End/Run. Опирается на EnemyStack, CritterState, Messaging, Dialogs, LineTracer. Только сторона SERVER.
 // AllNpcPlanes и счётчик id глобальны: очередь должна быть общей для вложенных событий всех NPC.
 namespace NpcPlanes
@@ -91,7 +91,7 @@ void OnCritterInit(Critter cr, bool firstTime)
 [[TimeEvent]]
 void OnCritterIdle(Critter npc)
 {
-    if (npc.ControlledByPlayer || !DenDefense::CanAct(npc) || CritterState::IsBusy(npc)) {
+    if (npc.ControlledByPlayer || !DenDefense::CanAct(npc) || Merc::TryCombatSelfHeal(npc) || CritterState::IsBusy(npc)) {
         return;
     }
 

@@ -112,10 +112,16 @@ with the standard First Aid cooldown and a localized healing line; it runs befor
 `Merc::TrySelfDoctor` takes priority for injuries outside combat (no battle timeout or attack plan),
 using ordinary skill rolls/AP and the standard Doctor cooldown after every attempt, with a localized
 spoken line or emote. Doctor's cooldown does not block subsequent First Aid.
-If First Aid cannot run below 50% HP, `Merc::TrySelfStimpak` uses an owned ordinary stimpak (otherwise
-super stimpak) through the normal item-use/AP/drug path, in or out of combat. `DenDefense` no longer
-spends companions' stimpaks separately; `PatternCommon` and `FighterPattern` skip hired NPC healing
-so these paths cannot bypass the skill-first priority or create extra stimpaks for mercs.
+In combat only (battle timeout or current attack plan), if First Aid is unavailable below 50% HP,
+`Merc::TrySelfStimpak` uses an owned ordinary stimpak (otherwise super stimpak) through the normal
+item-use/AP/drug path. `Merc::TryCombatSelfHeal` gates `NpcPlanes::OnCritterIdle` before busy/plan
+processing and also runs from `MercIdleImpl`: it stops movement and holds the existing plan/target
+while waiting for the selected heal's AP. First Aid has priority whenever off cooldown and within
+maximum AP; low current AP does not switch it to a stimpak. Unreachable AP costs are not waited for.
+No AI attack, reload, weapon change or plan movement runs until
+healing is performed or neither option remains available. Outside combat, only skill healing runs.
+`DenDefense` no longer spends companions' stimpaks separately; `PatternCommon` and `FighterPattern`
+skip hired NPC healing so these paths cannot bypass priority or create extra stimpaks for mercs.
 See [DenDefense.md](DenDefense.md#supplies-companions-and-ground-loot).
 
 The engine handles individual item instances and never merges stacks. Use `ItemStacks::` for quantity

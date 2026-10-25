@@ -10,7 +10,8 @@
 // FavoriteItem вызывает поддержание выбранной готовности оружия вне боя.
 // MercLoot временно ведёт перемещение по разовому приказу собрать добычу.
 // При ОЖ ниже половины мерк применяет «Санитара» к себе с обычными затратами AP и кулдауном.
-// Если «Санитар» недоступен, расходует свой обычный стимпак, а при его отсутствии — суперстимпак.
+// Только в бою, если «Санитар» недоступен, расходует свой обычный стимпак, а при его отсутствии — суперстимпак.
+// Боевое самолечение останавливает движение и планы до накопления ОД; цель и очередь планов сохраняются.
 // Вне боя при травмах сначала пробует «Доктора» с обычным шансом лечения и кулдауном попытки.
 // Связи: NpcPlanes (боевые/ходовые планы), GlobalmapGroupExtended (группы на
 // глобале), Entrance/Teams/CritterState/PlayerRegistration, Tla (общие enum'ы).
@@ -272,19 +273,27 @@ bool TrySelfFirstAid(Critter merc)
     return true;
 }
 
-// Запасной вариант после недоступного «Санитара»: только свои стимпаки и обычная стоимость предметного действия.
+bool IsInCombat(Critter merc)
+{
+    return Time::IsTimeoutActive(merc.TimeoutBattle) || NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK);
+}
+
+Item? GetSelfStimpak(Critter merc)
+{
+    Item? stimpak = merc.GetItem(Content::Item::stimpak);
+    return stimpak != null ? stimpak : merc.GetItem(Content::Item::super_stimpak);
+}
+
+// Запасной вариант в бою после недоступного «Санитара»: только свои стимпаки и обычная стоимость действия.
 bool TrySelfStimpak(Critter merc)
 {
     if (merc.ControlledByPlayer || !merc.IsAlive() || merc.MapId == ZERO_IDENT || int64(merc.CurrentHp) * 2 >= merc.MaxLife ||
-        CritterState::IsBusy(merc) || !DenDefense::CanAct(merc) ||
+        !IsInCombat(merc) || CritterState::IsBusy(merc) || !DenDefense::CanAct(merc) ||
         merc.CurrentAp / Tla::AP_DIVIDER < Settings.Movement.RtApCostUseItem) {
         return false;
     }
 
-    Item? stimpak = merc.GetItem(Content::Item::stimpak);
-    if (stimpak == null) {
-        stimpak = merc.GetItem(Content::Item::super_stimpak);
-    }
+    Item? stimpak = GetSelfStimpak(merc);
     if (stimpak == null) {
         return false;
     }
@@ -295,12 +304,55 @@ bool TrySelfStimpak(Critter merc)
     return true;
 }
 
+// true означает: лечение выполнено либо занятость/накопление ОД ещё удерживают боевой приоритет.
+// Вызывается до AI-планов и из idle мерка, поэтому ожидание не зависит от порядка тайм-эвентов.
+bool TryCombatSelfHeal(Critter merc)
+{
+    if (!IsMerc(merc) || merc.ControlledByPlayer || !merc.IsAlive() || merc.MapId == ZERO_IDENT || !DenDefense::CanAct(merc) ||
+        int64(merc.CurrentHp) * 2 >= merc.MaxLife || !IsInCombat(merc)) {
+        return false;
+    }
+
+    bool useFirstAid = !Time::IsTimeoutActive(merc.TimeoutSkFirstAid) && Settings.Movement.RtApCostUseSkill <= merc.ActionPoints;
+    int ap = useFirstAid ? Settings.Movement.RtApCostUseSkill : Settings.Movement.RtApCostUseItem;
+    // Не ждём заведомо недостижимого запаса ОД или предмета, которого нет.
+    if (ap > merc.ActionPoints || (!useFirstAid && GetSelfStimpak(merc) == null)) {
+        return false;
+    }
+
+    // Не удаляем боевую цель или вложенный план: после лечения ИИ продолжит ту же задачу.
+    NpcPlanes::NpcPlane? plane = NpcPlanes::GetCurPlane(merc);
+    if (plane != null && plane.IsMove) {
+        plane.IsMove = false;
+        NpcPlanes::SavePlan(merc, plane);
+    }
+    if (merc.GetMovingState() == MovingState::InProgress) {
+        merc.StopMoving();
+    }
+    if (CritterState::IsBusy(merc)) {
+        return true;
+    }
+
+    if (merc.CurrentAp / Tla::AP_DIVIDER < ap) {
+        // При нехватке ОД общий путь только ставит ожидание, не списывая их и не запуская кулдаун.
+        CritterActions::ProcessAp(merc, ap);
+        return true;
+    }
+
+    if (useFirstAid) {
+        TrySelfFirstAid(merc);
+    }
+    else {
+        TrySelfStimpak(merc);
+    }
+    return true;
+}
+
 // Травмы лечим только вне боя. Неудачная попытка тоже расходует AP и запускает кулдаун.
 bool TrySelfDoctor(Critter merc)
 {
     if (merc.ControlledByPlayer || !merc.IsAlive() || merc.MapId == ZERO_IDENT || !Tla::IsCritterInjured(merc) ||
-        Time::IsTimeoutActive(merc.TimeoutBattle) || NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK) ||
-        Time::IsTimeoutActive(merc.TimeoutSkDoctor) || CritterState::IsBusy(merc) || !DenDefense::CanAct(merc) ||
+        IsInCombat(merc) || Time::IsTimeoutActive(merc.TimeoutSkDoctor) || CritterState::IsBusy(merc) || !DenDefense::CanAct(merc) ||
         merc.CurrentAp / Tla::AP_DIVIDER < Settings.Movement.RtApCostUseSkill) {
         return false;
     }
@@ -351,7 +403,7 @@ void MercIdleImpl(Critter merc)
         return; // погиб хозяин
     }
 
-    if (TrySelfDoctor(merc) || TrySelfFirstAid(merc) || TrySelfStimpak(merc)) {
+    if (TryCombatSelfHeal(merc) || TrySelfDoctor(merc) || TrySelfFirstAid(merc)) {
         return;
     }
 

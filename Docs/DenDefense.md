@@ -186,14 +186,24 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   `CritterActions::UseSkill` runs the normal healing path; a successful heal sets the same
   `GameTime::FirstAidTimeout` used by players and emits one random localized line from
   `Texts/Text.{russ,engl}.fotxt` (`Merc/FirstAid1..9`). No drugs are required or consumed.
-- If First Aid cannot run and HP is still **strictly below 50%**, `Merc::TrySelfStimpak` tries one
-  owned ordinary stimpak, or a super stimpak only when no ordinary one is present. It runs after First
-  Aid and before loot/follow work, both in and out of combat, with the same alive/local-map, siege and
-  busy restrictions and the ordinary item-use AP cost. `CritterActions::UseItemOn` -> `Main.CritterUseItem`
-  -> `Drugs.UseDrug` consumes one unit through `ItemStacks` and schedules the existing drug effect
+- **In combat only**, if First Aid is unavailable and HP is still **strictly below 50%**,
+  `Merc::TrySelfStimpak` tries one owned ordinary stimpak, or a super stimpak only when no ordinary
+  one is present. Combat means an active battle timeout or current attack plan. Outside combat,
+  companions never spend stimpaks automatically. The same alive/local-map, siege and busy restrictions
+  and ordinary item-use AP cost apply. `CritterActions::UseItemOn` -> `Main.CritterUseItem` ->
+  `Drugs.UseDrug` consumes one unit through `ItemStacks` and schedules the existing drug effect
   (including super-stimpak aftereffects). It neither creates items nor changes the First Aid cooldown.
   The siege controller no longer separately spends companions' stimpaks; `PatternCommon` and
   `FighterPattern` also leave hired NPC self-healing to `Merc`. Smitty retains his existing healing path.
+- **Combat healing takes priority over AI actions** through `Merc::TryCombatSelfHeal`, called by
+  `NpcPlanes::OnCritterIdle` before its busy check/plan processing and by `Merc::MercIdleImpl`.
+  Below 50% HP it selects First Aid whenever off cooldown and within the maximum AP budget,
+  otherwise an available stimpak. An action costing more than maximum AP is not waited for. The merc
+  stops movement, preserves the current plan/target, and waits for ordinary action completion and
+  enough AP through `CritterActions::ProcessAp`; it does not attack, reload, change weapons or walk
+  while healing is pending. Low AP never substitutes a stimpak for ready First Aid. Waiting consumes
+  no item/AP and starts no skill cooldown; the selected action executes only after AP is available.
+  If neither healing option is available, AI continues instead of waiting for a skill cooldown.
 - Injured hired NPC mercenaries first try **Doctor on themselves outside combat** through
   `Merc::TrySelfDoctor`, before First Aid, loot or following. An active battle timeout or attack plan
   blocks Doctor; the ordinary alive/local-map, siege, busy, AP and `TimeoutSkDoctor` checks also apply.
