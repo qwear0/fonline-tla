@@ -14,8 +14,14 @@ namespace GroundPickup
 // Двери, машины и контейнеры штатный PickItem использует, а не поднимает: G их не открывает.
 bool IsPickableItem(Item item, ident mapId)
 {
-    return !item.IsDestroyed && item.Ownership == ItemOwnership::MapHex && item.MapId == mapId && item.IsCanPickUp && !item.Hidden && !item.IsGag &&
-           !item.IsScenery && !item.IsWall && item.Count > 0 && item.Type != ItemType::Container && item.Type != ItemType::Door && item.Type != ItemType::Car;
+#if SERVER
+    // Hidden доступен только серверу; клиент получает уже отфильтрованные видимые предметы.
+    if (item.Hidden) {
+        return false;
+    }
+#endif
+    return !item.IsDestroyed && item.Ownership == ItemOwnership::MapHex && item.MapId == mapId && item.IsCanPickUp && !item.IsGag && !item.IsScenery &&
+           !item.IsWall && item.Count > 0 && item.Type != ItemType::Container && item.Type != ItemType::Door && item.Type != ItemType::Car;
 }
 
 #endif

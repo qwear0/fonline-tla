@@ -35,8 +35,9 @@ Review the constants when updating the Engine; individual map constraints remain
 
 ## Persistence contract
 
-- `ClientZoom.Level` is a script-declared client float setting in the cached `LocalSettings.focfg`.
-  Normal Engine startup applies that config before script initialization.
+- `ClientZoom.Level` is a script-declared client float setting with an explicit **1.0** default
+  in `TLA.fomain`; cached `LocalSettings.focfg` overrides it. Normal Engine startup applies that
+  local config before script initialization. The authored default is also required by metadata baking.
 - `Game.ClientZoomLevel`, `ClientZoomSavedLevel` and `ClientZoomSaveAt` are client-only mutable
   properties. They retain the preference and debounce state across map destruction, without
   mutable namespace globals, network synchronization or server-save migration.

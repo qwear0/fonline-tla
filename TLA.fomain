@@ -112,6 +112,8 @@ ClientNetwork.DebugNet = False
 # Открытая половина ключа защищённого канала разработки; PublicGame закрепляет свой ключ
 ClientNetwork.ChannelServerKeys = 5784cdfe23c0fd1a96eee84b0eb6062d947b74d2e08cb6dd7669786f42a1ba30
 
+ClientZoom.Level = 1.0
+
 Combat.CombatMessagesType = 0
 Combat.DeadHitPoints = -20
 Combat.DamageHitDelay = 500

@@ -15,7 +15,9 @@
    followed by one ordinary pickup attempt per snapshot item.
 
 An eligible item is a known visible client map item with `MapHex` ownership on the current
-map, a positive count and `IsCanPickUp`, without `Hidden`, `IsGag`, `IsScenery` or `IsWall`.
+map, a positive count and `IsCanPickUp`, without `IsGag`, `IsScenery` or `IsWall`.
+`Hidden` is server-only: the client enumerates its replicated visible items, and the server
+explicitly rejects hidden items again before exact-ID pickup.
 Doors, containers and cars are excluded: ordinary `PickItem` interacts with them instead of
 picking them up. G does not open nearby containers or loot corpses.
 
