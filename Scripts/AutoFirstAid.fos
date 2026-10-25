@@ -1,0 +1,103 @@
+// AutoFirstAid — автоматический санитар на себя при ОЖ строго ниже половины максимума. CLIENT.
+// Входы: ALT+Shift+F1 через InputHandler, приоритетный Process из ChosenActions, индикатор ChosenTabs.
+// Самолечение идёт только через SelfCare и штатную серверную проверку навыка, ОД, занятости и кулдауна.
+// Изменяемое состояние клиентской сессии хранится в свойствах Game; новых глобальных переменных нет.
+namespace AutoFirstAid
+{
+
+///@ Property Game Client bool AutoFirstAidEnabled Mutable
+///@ Property Game Client ident AutoFirstAidChosenId Mutable
+///@ Property Game Client ident AutoFirstAidMapId Mutable
+///@ Property Game Client nanotime AutoFirstAidNextAttempt Mutable
+
+#if CLIENT
+
+[[ModuleInit]]
+void InitAutoFirstAid()
+{
+    Game.OnMapUnload.Subscribe(Clear);
+    Game.OnMapLoaded.Subscribe(Clear);
+    Game.OnDisconnected.Subscribe(Clear);
+    Game.OnLoop.Subscribe(ObserveSession);
+}
+
+void Toggle()
+{
+    if (Game.AutoFirstAidEnabled) {
+        Reset();
+        return;
+    }
+    if (!HasChosen || !HasCurMap || !Chosen.IsAlive()) {
+        return;
+    }
+    Game.AutoFirstAidChosenId = Chosen.Id;
+    Game.AutoFirstAidMapId = CurMap.Id;
+    Game.AutoFirstAidNextAttempt = ZERO_NANOTIME;
+    Game.AutoFirstAidEnabled = true;
+}
+
+bool IsEnabled()
+{
+    return Game.AutoFirstAidEnabled && IsSameSession();
+}
+
+// Кулдаун, недостижимая стоимость и закрытый игровой экран не задерживают обычный бой.
+// CanUse допускает ожидание текущих ОД/занятости: их проверит штатный исполнитель очереди.
+bool ShouldPrioritize()
+{
+    if (!IsEnabled() || Game.FrameTime < Game.AutoFirstAidNextAttempt || SelfCare::IsPending()) {
+        return false;
+    }
+    Critter chosen = Chosen;
+    return chosen.MaxLife > 0 && int64(chosen.CurrentHp) * 2 < int64(chosen.MaxLife) && SelfCare::CanUse(CritterProperty::SkillFirstAid);
+}
+
+// Вызывается до обычной очереди и до ожидания движения, а не отдельным покадровым исполнителем навыка.
+void Process()
+{
+    if (!Game.AutoFirstAidEnabled) {
+        return;
+    }
+    if (!IsSameSession()) {
+        Reset();
+        return;
+    }
+    if (!ShouldPrioritize()) {
+        return;
+    }
+    // Даже отклонённая постановка не повторяется каждый кадр; pending/RPC защищает сам SelfCare.
+    Game.AutoFirstAidNextAttempt = Game.FrameTime + Time::Milliseconds(500);
+    SelfCare::Request(CritterProperty::SkillFirstAid, true);
+}
+
+[[Event]]
+void ObserveSession()
+{
+    if (Game.AutoFirstAidEnabled && !IsSameSession()) {
+        Reset();
+    }
+}
+
+[[Event]]
+void Clear()
+{
+    Reset();
+}
+
+bool IsSameSession()
+{
+    return HasChosen && HasCurMap && Chosen.IsAlive() && Chosen.Id == Game.AutoFirstAidChosenId && CurMap.Id == Game.AutoFirstAidMapId;
+}
+
+void Reset()
+{
+    // Уже поставленный/отправленный штатный навык не отзываем и серверную анимацию не прерываем.
+    Game.AutoFirstAidEnabled = false;
+    Game.AutoFirstAidChosenId = ZERO_IDENT;
+    Game.AutoFirstAidMapId = ZERO_IDENT;
+    Game.AutoFirstAidNextAttempt = ZERO_NANOTIME;
+}
+
+#endif
+
+}

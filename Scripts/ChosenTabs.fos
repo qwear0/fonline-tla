@@ -1,6 +1,6 @@
 // ChosenTabs — индикаторы состояний Chosen в игровом HUD.
 // Обязанности: загрузка спрайта вкладки, отрисовка набора статус-вкладок при активном игровом экране, флаг левелапа. CLIENT.
-// Связи: Sprite, Gui, Game.DrawText, MsgStr, Color, DenAutoAttack.
+// Связи: Sprite, Gui, Game.DrawText, MsgStr, Color, DenAutoAttack, AutoFirstAid.
 // Глобальное состояние клиентского HUD: загруженный спрайт, раскладка вкладок и уведомление о повышении уровня.
 namespace ChosenTabs
 {
@@ -60,6 +60,10 @@ void DrawChosenTabs()
 
     if (chosen.InSneakMode) {
         DrawTab(Game.GetText(TextPackKey(TextPackName::Game, "" + (MsgStr::StrHidemodeTitle))), Color::DGreen);
+    }
+
+    if (AutoFirstAid::IsEnabled()) {
+        DrawTab(Game.GetText(TextPackKey(TextPackName::Game, "" + (MsgStr::StrAutoFirstAidTitle))), Color::DGreen);
     }
 
     if (DenAutoAttack::IsAutomaticAttackEnabled()) {

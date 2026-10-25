@@ -134,7 +134,7 @@ bool CanRepeatAttack()
         return false;
     }
     Critter chosen = Chosen;
-    if (chosen.IsMoving() || !ChosenActions::IsFree(chosen)) {
+    if (chosen.IsMoving() || !ChosenActions::IsFree(chosen) || AutoFirstAid::ShouldPrioritize() || SelfCare::IsPending()) {
         return false;
     }
     AbstractItem weapon = CritterItem::GetActive(chosen);
@@ -212,7 +212,8 @@ void StopAutomaticAttack()
 void Request(bool automatic = false)
 {
     CancelRequest();
-    if (!HasChosen || !HasCurMap || !Chosen.IsAlive() || Game.DenDefenseClientFrozen || Game.DenDefenseClientResting) {
+    if (!HasChosen || !HasCurMap || !Chosen.IsAlive() || Game.DenDefenseClientFrozen || Game.DenDefenseClientResting || AutoFirstAid::ShouldPrioritize() ||
+        SelfCare::IsPending()) {
         return;
     }
     Critter chosen = Chosen;
@@ -239,6 +240,10 @@ void DenAutoAttackTarget(uint requestId, ident targetId)
     bool automatic = PendingAutomaticAttack;
     any[] request = PendingAutoAttack.clone();
     CancelRequest();
+    // Даже ответ на разовый Ctrl+A не должен стереть самолечение, поставленное после отправки запроса.
+    if (AutoFirstAid::ShouldPrioritize() || SelfCare::IsPending()) {
+        return;
+    }
     if (automatic && (!AutomaticAttackEnabled || !CanRepeatAttack())) {
         return;
     }

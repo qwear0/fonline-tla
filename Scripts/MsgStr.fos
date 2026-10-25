@@ -463,6 +463,7 @@ const int STR_YOU_TURN_TITLE = 449;
 const int STR_TURN_BASED_TITLE = 450;
 const int StrNamedTimeoutTitle = 451;
 const int StrAutoAttackTitle = 452;
+const int StrAutoFirstAidTitle = 453;
 
 // Бартер
 const int STR_BARTER_GOOD_OFFER = 480;
