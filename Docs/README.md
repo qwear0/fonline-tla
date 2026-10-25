@@ -26,6 +26,11 @@ After an Engine update, rebuild and rebake matching client/server outputs before
 | [FOSquadWorkspace.md](FOSquadWorkspace.md) | Two-repository setup, engine baseline versus local state, build commands and bounded historical evidence. |
 | [Build.md](Build.md) | Native compilation and resource baking, minimal verification, LAN updates, mandatory task closeout and safe output retention/cleanup. |
 | [ClientUpdates.md](ClientUpdates.md) | Built-in Windows resource/DLL updates over LAN, matching client/server packaging, persistent LAN storage and safe activation. |
+| [ClientControls.md](ClientControls.md) | Client convenience controls: saved zoom, F10 player/merc HP, Alt+F1/F2 self-care, automatic First Aid and G ground pickup; queue/server boundaries. |
+| [ClientZoom.md](ClientZoom.md) | Local zoom persistence through `ClientZoom` and merged `UserOptions` saves. |
+| [ClientHealthDisplay.md](ClientHealthDisplay.md) | Session-only F10 HP display for players and hired mercs; server-published presentation data. |
+| [AutoFirstAid.md](AutoFirstAid.md) | Alt+Shift+F1 automatic First Aid below 50% HP, healing priority, AP/cooldowns and lifecycle. |
+| [GroundPickup.md](GroundPickup.md) | G selects a ground-item snapshot at the current or nearest reachable hex within five hexes; exact queued pickup. |
 | [Systems.md](Systems.md) | Durable gameplay ownership, sides, entrypoints and authored-content boundaries. Read before opening a `.fos`. |
 | [ScriptStyle.md](ScriptStyle.md) | How a `.fos` module is written: header block, comments, naming, structure. |
 | [Animation.md](Animation.md) | Baked root-motion import, sprite loading and native 2D walk-cycle alignment. |

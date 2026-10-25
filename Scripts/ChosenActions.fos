@@ -2,12 +2,13 @@
 // CLIENT: копит и прогоняет очередь действий (перемещение, атака, использование предметов и навыков, подбор, диалог, контейнеры), регенерирует ОД и шлёт серверу RemoteCall.
 // SERVER: реализует эти RemoteCall и Lock*-хелперы, управляя busy/free-состоянием критера; опирается на коды действий из Tla, а также на боевую, диалоговую и предметную логику.
 // Ctrl+A запрашивает одну цель только из врагов обороны Дэна; ближний бой подходит к позиции с чистой линией атаки.
+// SelfCare ставит обычный навык на себя; приоритетное лечение сохраняет хвост ручной очереди.
 // Глобальное состояние необходимо клиентской сессии: очередь действий и последняя команда движения.
 
 namespace ChosenActions
 {
 
-///@ RemoteCall Server PickItem(mpos hex, hstring pid)
+///@ RemoteCall Server PickItem(mpos hex, hstring pid, ident itemId)
 ///@ RemoteCall Server PickCritter(ident crId)
 ///@ RemoteCall Server MoveInvItem(ident itemId, CritterItemSlot slot)
 ///@ RemoteCall Server DropInvItem(ident itemId, int32 count)
@@ -45,6 +46,7 @@ int GetChosenActions(any[] & actions)
 
 void SetChosenActions(any[] actions)
 {
+    GroundPickup::CancelRequest();
     DenAutoAttack::CancelRequest();
     ChosenActions.resize(0);
     verify(actions.length() % 7 == 0, "Assertion failed");
@@ -60,6 +62,7 @@ void SetAction(any[] action, bool append, bool toBeginning)
     DenAutoAttack::CancelRequest();
 
     if (!append) {
+        GroundPickup::CancelRequest();
         ChosenActions.resize(0);
     }
 
@@ -75,6 +78,83 @@ void SetAction(any[] action, bool append, bool toBeginning)
     }
 }
 
+// Вызывается из SelfCare::Request после CanUse; приоритет поднимает лечение вместо копии и сохраняет ручной хвост.
+bool QueueSelfCare(CritterProperty skill, bool priority)
+{
+    verify(ChosenActions.length() % 7 == 0, "Нарушен формат очереди действий");
+    for (int i = int(ChosenActions.length()) - 7; i >= 0; i -= 7) {
+        if (int(ChosenActions[i]) != Tla::ChosenUseSklOnCritter || int(ChosenActions[i + 1]) != int(skill)) {
+            continue;
+        }
+        ident targetId = ChosenActions[i + 2];
+        if (targetId != ZERO_IDENT && targetId != Chosen.Id) {
+            continue;
+        }
+        if (!priority) {
+            return true;
+        }
+        ChosenActions.removeRange(i, 7);
+    }
+    SetAction({Tla::ChosenUseSklOnCritter, int(skill), Chosen.Id, CurMap.Id, 0, 0, 1}, priority, priority);
+    // Иначе покадровый обработчик ждёт конца движения перед любым применением навыка.
+    // При приоритете исходное действие движения остаётся в очереди и продолжится после лечения.
+    Chosen.StopMove();
+    return true;
+}
+
+// Снимок подбора уже создан GroundPickup: здесь не вызываем отмену, присущую ручной замене очереди.
+bool QueueGroundPickup(mpos hex, ident[] itemIds)
+{
+    if (!HasChosen || !HasCurMap || !Chosen.IsAlive() || Game.DenDefenseClientFrozen || Game.DenDefenseClientResting ||
+        !GroundPickup::IsQueuedDestinationValid(hex)) {
+        return false;
+    }
+    any[] actions = {};
+    if (Chosen.Hex != hex) {
+        actions = {Tla::ChosenMove, hex.x, hex.y, 0, 0, 0, 2};
+    }
+    int pickCount = 0;
+    ident[] queuedIds = {};
+    for (int i = 0; i < itemIds.length(); i++) {
+        ident itemId = itemIds[i];
+        if (queuedIds.exists(itemId) || !GroundPickup::IsQueuedItemValid(itemId, hex)) {
+            continue;
+        }
+        Item? item = Game.GetItem(itemId);
+        if (item == null) {
+            continue;
+        }
+        any[] action = {Tla::ChosenPickItem, item.ProtoId, hex.x, hex.y, itemId, 1, 0};
+        for (int j = 0; j < action.length(); j++) {
+            actions.insertLast(action[j]);
+        }
+        queuedIds.insertLast(itemId);
+        pickCount++;
+    }
+    if (pickCount == 0) {
+        return false;
+    }
+    DenAutoAttack::CancelRequest();
+    ChosenActions = actions;
+    Chosen.StopMove();
+    return true;
+}
+
+// Непроходимый/устаревший снимок не удаляет посторонние действия, сохранённые приоритетным лечением.
+void CancelGroundPickupActions()
+{
+    if (HasChosen && ChosenActions.length() >= 7 && int(ChosenActions[0]) == Tla::ChosenMove && int(ChosenActions[6]) == 2) {
+        Chosen.StopMove();
+    }
+    for (int i = int(ChosenActions.length()) - 7; i >= 0; i -= 7) {
+        if ((int(ChosenActions[i]) == Tla::ChosenMove && int(ChosenActions[i + 6]) == 2) ||
+            (int(ChosenActions[i]) == Tla::ChosenPickItem && int(ChosenActions[i + 5]) == 1)) {
+            ChosenActions.removeRange(i, 7);
+        }
+    }
+    GroundPickup::CancelRequest();
+}
+
 [[Event]]
 void ChosenProcess()
 {
@@ -82,6 +162,8 @@ void ChosenProcess()
         return;
     }
 
+    // Автосанитар может поставить лечение перед движением/боем, не прерывая серверное действие.
+    AutoFirstAid::Process();
     Critter chosen = Chosen;
 
     // Проверяем автоматический подход до ожидания движения: смерть цели не должна вести к её трупу.
@@ -103,11 +185,6 @@ void ChosenProcess()
 
         // Режим скрытности
         chosen.SetAlpha(chosen.InSneakMode ? 130 : 255);
-
-        // Границы стрельбы: SetShootBorders удалён при обновлении движка.
-        // bool shootBorders = Gui::Cursor == CursorType::UseWeapon;
-        // int attackDist = Parameters::GetActiveItemAttackDistance(chosen);
-        // CurMap.SetShootBorders(shootBorders, attackDist);
 
         if (chosen.IsMoving()) {
             // Даём действию перемещения из очереди перенацелить текущий ход (например, при новом клике по карте);
@@ -152,6 +229,12 @@ void ChosenProcess()
         chosen.CurrentAp = chosen.ActionPoints * Tla::AP_DIVIDER;
     }
 
+    // Повторная оценка видит только что накопленные ОД; до регенерации блокировать очередь нельзя.
+    AutoFirstAid::Process();
+    if (AutoFirstAid::ShouldPrioritize() && !SelfCare::IsPending()) {
+        return;
+    }
+
     if (ChosenActions.length() == 0) {
         return;
     }
@@ -177,8 +260,13 @@ void ChosenProcess()
         mpos hex;
         bool isRun = (ChosenActions[3] != 0);
         int cut = ChosenActions[4];
+        bool groundPickupMove = actionType == Tla::ChosenMove && int(ChosenActions[6]) == 2;
 
         if (!HasCurMap) {
+            if (groundPickupMove) {
+                CancelGroundPickupActions();
+                return;
+            }
             break;
         }
 
@@ -217,14 +305,26 @@ void ChosenProcess()
             hex = mpos(ChosenActions[1], ChosenActions[2]);
         }
 
+        if (groundPickupMove && !GroundPickup::IsQueuedDestinationValid(hex)) {
+            CancelGroundPickupActions();
+            return;
+        }
+
         // Уже на месте
         if (Game.GetDistance(chosen.Hex, hex) <= cut) {
+            if (groundPickupMove) {
+                chosen.StopMove();
+            }
             break;
         }
 
         // Не может двигаться
         if (chosen.IsNoMove) {
             Messaging::Info(TextPackKey(TextPackName::Game, "" + (MsgStr::StrCritterCantMove)));
+            if (groundPickupMove) {
+                CancelGroundPickupActions();
+                return;
+            }
             if (actionType == Tla::ChosenDenAutoMove) {
                 ChosenActions.clear();
             }
@@ -248,7 +348,12 @@ void ChosenProcess()
         }
 
         // Поиск пути
-        auto path = actionType == Tla::ChosenDenAutoMove ? CurMap.GetPath(chosen, hex, 0) : CurMap.GetPath(chosen.Hex, hex, cut);
+        auto path = (actionType == Tla::ChosenDenAutoMove || groundPickupMove) ? CurMap.GetPath(chosen, hex, 0) : CurMap.GetPath(chosen.Hex, hex, cut);
+        // Для G не увеличиваем cut: снимок относится к точному гексу, а не к любому соседнему.
+        if (path.isEmpty() && groundPickupMove) {
+            CancelGroundPickupActions();
+            return;
+        }
         if (path.isEmpty() && actionType == Tla::ChosenDenAutoMove) {
             chosen.StopMove();
             ChosenActions.clear();
@@ -273,8 +378,6 @@ void ChosenProcess()
                 LastIssuedMoveHex = hex;
                 LastIssuedMoveSpeed = speed;
             }
-
-            // chosen.ApRegenerationTick = 0;
         }
 
         if (chosen.IsMoving()) {
@@ -342,7 +445,6 @@ void ChosenProcess()
         int rate = ChosenActions[5];
         int param = ChosenActions[6];
         int use = (rate & 0xF);
-        int aim = (rate >> 4);
 
         // Поиск предмета
         AbstractItem? item = (itemId != ZERO_IDENT ? cast<AbstractItem?>(chosen.GetItem(itemId)) : CritterItem::GetSlotItemProto(chosen));
@@ -414,8 +516,6 @@ void ChosenProcess()
         }
         // Проверка оружия
         if (isAttack) {
-            // ChosenActions::SetChosenActions({Tla::ChosenUseItem, useItem.Id, 0, TARGET_CRITTER, cr.Id, isAttack ? mode : USE_USE, 0});
-
             if (!HasCurMap) {
                 break;
             }
@@ -519,14 +619,6 @@ void ChosenProcess()
                     verify(targetSelfItem != null, "Reload action requires ammo item");
                     targetId = targetSelfItem.Id;
                 }
-
-                /*if( item.Weapon_Caliber )
-                   {
-                    targetSelfItem = chosen->GetAmmoAvialble( item );
-                    if( !targetSelfItem )
-                        break;
-                    targetId = targetSelfItem->GetId();
-                   }*/
             }
             else // Зарядка
             {
@@ -583,11 +675,6 @@ void ChosenProcess()
             // Определение цели
             int dist = Game.GetDistance(chosen.Hex, mpos(hx, hy));
             bool needMove = dist > maxDist;
-            // if( isAttack )
-            //    needMove = !CurMap->TraceBullet( chosen.HexX, chosen.HexY, hx, hy, maxDist, 0.0f, targetCr, false, nullptr, 0, nullptr, nullptr, nullptr, true
-            //    );
-            // else
-            //    needMove = !CheckDist( chosen.HexX, chosen.HexY, hx, hy, maxDist );
             // TODO: мигрировать трассировку r17.
             if (autoAttack && !DenAutoAttack::IsAutoAttackPosition(CurMap, chosen.Hex, mpos(hx, hy), maxDist)) {
                 if (!WeaponHelpers::IsWeaponHthAttack(item, use) || targetCr == null) {
@@ -695,11 +782,6 @@ void ChosenProcess()
             }
         }
 
-        /*if( isAttack && !aim && Keyb::ShiftDwn )               // Продолжить бой после атаки
-           {
-           SetAction( curAction, false, false );
-           return;
-           }*/
     } break;
     case Tla::ChosenMoveItem: {
         ident itemId = ChosenActions[1];
@@ -736,9 +818,7 @@ void ChosenProcess()
                 // Добавляем действия
                 if ((Game.OnCritterCheckMoveItem.Fire(chosen, itemSwap, CritterItemSlot::Inventory) == EventResult::ContinueChain) &&
                     (Game.OnCritterCheckMoveItem.Fire(chosen, item, toSlot) == EventResult::ContinueChain)) {
-                    ChosenActions.reverse();
-                    ChosenActions.resize(ChosenActions.length() - 7);
-                    ChosenActions.reverse();
+                    ChosenActions.removeRange(0, 7);
 
                     SetAction({Tla::ChosenMoveItem, itemId, itemCount, toSlot, 0, 1, 0}, false, true);
                     SetAction({Tla::ChosenMoveItem, itemSwap.Id, itemSwap.Count, CritterItemSlot::Inventory, 0, 1, 0}, false, true);
@@ -773,10 +853,6 @@ void ChosenProcess()
                 return;
             }
         }
-        // Game.CustomCall( "MoveItem " + apCost + " " + itemCount + " " + itemId + " " + ( itemSwap != null ? itemSwap.Id : 0 ) + " " + toSlot );
-
-        //Game.CustomCall("MoveItem " + itemCount + " " + itemId + " " + (itemSwap != null ? itemSwap.Id : ZERO_IDENT) + " " +
-        //               (toSlot == CritterItemSlot::Outside ? "-1" : "" + toSlot));
         chosen.CurrentAp -= apCost * Tla::AP_DIVIDER;
 
         if (toSlot != CritterItemSlot::Outside) {
@@ -950,7 +1026,6 @@ void ChosenProcess()
                 return;
             }
         }
-        // Game.CustomCall( "UseCritterSkill " + CritterProperty::UseSneak + " " + apCost + " " + chosen.Id );
     } break;
     case Tla::ChosenUseSklOnItem: {
         CritterProperty skill = CritterProperty(int(ChosenActions[1]));
@@ -1024,9 +1099,19 @@ void ChosenProcess()
     case Tla::ChosenUseSklOnCritter: {
         CritterProperty skill = CritterProperty(int(ChosenActions[1]));
         ident crId = ChosenActions[2];
+        // Отложенное самолечение не становится лечением прежнего персонажа после смены выбора/карты.
+        if (int(ChosenActions[6]) == 1 && (crId != chosen.Id || ident(ChosenActions[3]) != chosen.MapId)) {
+            break;
+        }
 
         Critter? cr = (crId != ZERO_IDENT ? Game.GetCritter(crId) : chosen);
         if (cr == null) {
+            break;
+        }
+
+        bool selfCare = cr.Id == chosen.Id && (skill == CritterProperty::SkillFirstAid || skill == CritterProperty::SkillDoctor);
+        // Очередь могла ждать: повторяем проверку до предсказания ОД, анимации и отправки RPC.
+        if (selfCare && !SelfCare::CanUse(skill)) {
             break;
         }
 
@@ -1068,6 +1153,9 @@ void ChosenProcess()
 
         chosen.CurrentAp = chosen.CurrentAp - apCost * Tla::AP_DIVIDER;
 
+        if (selfCare) {
+            SelfCare::MarkSent(skill);
+        }
         (Game.OnCritterActionEx.Fire(true, chosen, CritterAction::UseSkill, 0, null) == EventResult::ContinueChain);
         CurPlayer.ServerCall.UseSkill(skill, cr.Id, ZERO_IDENT, EMPTY_HSTRING, ZERO_MPOS);
     } break;
@@ -1096,13 +1184,6 @@ void ChosenProcess()
             return;
         }
 
-        // if( !CurMap->TraceBullet( chosen.GetHexX(), chosen.HexY, cr.HexX, cr.HexY, talkDistance + chosen.Multihex, 0, cr, false, nullptr, 0, nullptr,
-        // nullptr, nullptr, true ) )
-        // {
-        //    AddMess( FOMB_GAME, CurLang.Msg[ TextPackName::Game ].GetStr( MsgStr::StrFindpathAimblock ) );
-        //    break;
-        // }
-
         // Разворот к цели
         mdir dir = Game.GetDirection(chosen.Hex, cr.Hex);
         if (Game.GetDistance(chosen.Hex, cr.Hex) >= 1 && chosen.Dir != dir) {
@@ -1116,9 +1197,20 @@ void ChosenProcess()
         int hx = ChosenActions[2];
         int hy = ChosenActions[3];
         ident itemId = ChosenActions[4];
+        bool groundPickup = int(ChosenActions[5]) == 1;
 
         if (!HasCurMap) {
             break;
+        }
+        if (groundPickup) {
+            // Не подменяем исчезнувший/перенесённый предмет другим экземпляром с тем же pid.
+            if (!GroundPickup::IsQueuedItemValid(itemId, mpos(hx, hy))) {
+                break;
+            }
+            if (chosen.Hex != mpos(hx, hy)) {
+                CancelGroundPickupActions();
+                return;
+            }
         }
 
         int dist = Game.GetDistance(chosen.Hex, mpos(hx, hy));
@@ -1154,8 +1246,7 @@ void ChosenProcess()
         }
 
         chosen.CurrentAp = chosen.CurrentAp - apCost * Tla::AP_DIVIDER;
-        // Game.CustomCall( "PickItem " + apCost + " " + pid + " " + hx + " " + hy );
-        CurPlayer.ServerCall.PickItem(mpos(hx, hy), pid);
+        CurPlayer.ServerCall.PickItem(mpos(hx, hy), pid, groundPickup ? itemId : ZERO_IDENT);
 
         if (itemId != ZERO_IDENT) {
             Item? item = Game.GetItem(itemId);
@@ -1214,16 +1305,24 @@ void ChosenProcess()
             chosen.ChangeDir(dir);
         }
 
-        //Game.CustomCall("PickCritter " + apCost + " " + crId + " " + isLoot);
-
         CurPlayer.ServerCall.PickCritter(crId);
     } break;
     }
 
     if (ChosenActions.length() > 0) {
-        ChosenActions.reverse();
-        ChosenActions.resize(ChosenActions.length() - 7);
-        ChosenActions.reverse();
+        ChosenActions.removeRange(0, 7);
+    }
+    if (actionType == Tla::ChosenPickItem && int(curAction[5]) == 1) {
+        bool batchPending = false;
+        for (int i = 0; i + 6 < ChosenActions.length(); i += 7) {
+            if (int(ChosenActions[i]) == Tla::ChosenPickItem && int(ChosenActions[i + 5]) == 1) {
+                batchPending = true;
+                break;
+            }
+        }
+        if (!batchPending) {
+            GroundPickup::CancelRequest();
+        }
     }
 }
 
@@ -1261,23 +1360,6 @@ bool UseSkillOnScenerySuccess(CritterProperty skill, Critter chosen, hstring sce
     return true;
 }
 
-/*
-   void UseSneak( Critter client, bool enable )
-   {
-    if( cr.InSneakMode == enable )
-        return;
-
-    if( !cr.IsAlive() )
-        throw( "Client is not alive", client );
-    if( enable && Time::IsTimeoutActive( cr.TimeoutSneak ) )
-        throw( "Sneak timeout", client );
-
-    if( enable )
-        cr.TimeoutSneak = SneakTimeout( client );
-    cr.InSneakMode = !cr.InSneakMode;
-    CritterState::Wait(cr,  Settings.Movement.Breaktime );
-   }*/
-
 bool IsBusy(Critter cr)
 {
     return Game.FrameTime < cr.WaitEndTick;
@@ -1309,14 +1391,14 @@ void PickCritter(Player player, ident crId)
 }
 
 [[ServerRemoteCall]]
-void PickItem(Player player, mpos hex, hstring pid)
+void PickItem(Player player, mpos hex, hstring pid, ident itemId)
 {
     Critter? cr = player.GetControlledCritter();
     if (cr == null) {
         return;
     }
 
-    CritterActions::PickItem(cr, hex, pid);
+    CritterActions::PickItem(cr, hex, pid, itemId);
 }
 
 [[ServerRemoteCall]]

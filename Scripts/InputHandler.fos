@@ -3,7 +3,8 @@
 //  является ли клавиша игровой горячей клавишей.
 // Обязанности: открытие/закрытие экранов интерфейса (Character/Inventory/PipBoy и т.д.),
 //  переключение настроек отображения и громкости, выбор курсора навыков/оружия, прокрутка карты
-//  удержанием стрелок и зум. Опирается на Gui::, Settings, GameTime::, ChosenActions::,
+//  удержанием стрелок и зум; игровой dispatch самолечения, автосанитара, показа ОЖ и подбора.
+//  Опирается на Gui::, Settings, GameTime::, ChosenActions::,
 //  GuiScreensExt:: и другие модули клиента.
 // Глобальное состояние — то, что переключают клавиши во время игры (настройки движка неизменяемы):
 //  две половины ручной прокрутки карты (от курсора у края экрана и от стрелок; движок хранит в карте только
@@ -146,6 +147,14 @@ bool HandleHotkeys(KeyCode key)
         }
     }
 
+    // Новые игровые команды не работают сквозь консоль, текстовый ввод и модальные окна.
+    if (!inputFocused && !Gui::IsModalScreenActive()) {
+        Gui::Screen? screen = Gui::GetActiveScreen();
+        if (screen != null && screen.Num == GuiScreen::Game && DispatchGameHotkey(key)) {
+            return true;
+        }
+    }
+
     if (key == KeyCode::A && Input::IsCtrlDown() && !Input::IsAltDown() && !inputFocused) {
         Gui::Screen? screen = Gui::GetActiveScreen();
         if (screen != null && screen.Num == GuiScreen::Game) {
@@ -197,8 +206,6 @@ bool HandleHotkeys(KeyCode key)
             break;
 
         case KeyCode::F9:
-            break;
-        case KeyCode::F10:
             break;
 
         // Показ имён НПЦ над головами
@@ -319,10 +326,6 @@ bool HandleHotkeys(KeyCode key)
                         isHotkey = false;
                     }
                 } break;
-
-                case KeyCode::G:
-                    // (CustomCall удалён) Game.CustomCall("TryPickItemOnGround");
-                    break;
 
                 case KeyCode::T:
                     Settings.GlobalMap.ShowGroups = !Settings.GlobalMap.ShowGroups;
@@ -457,6 +460,43 @@ bool HandleHotkeys(KeyCode key)
     }
 
     return isHotkey;
+}
+
+// Единое место разбора новых игровых хоткеев; фокус проверяется до вызова.
+bool DispatchGameHotkey(KeyCode key)
+{
+    bool alt = Input::IsAltDown();
+    bool ctrl = Input::IsCtrlDown();
+    bool shift = Input::IsShiftDown();
+    if (ctrl) {
+        return false;
+    }
+    if (alt) {
+        if (key == KeyCode::F1) {
+            if (shift) {
+                AutoFirstAid::Toggle();
+            }
+            else {
+                SelfCare::Request(CritterProperty::SkillFirstAid);
+            }
+            return true;
+        }
+        if (!shift && key == KeyCode::F2) {
+            SelfCare::Request(CritterProperty::SkillDoctor);
+            return true;
+        }
+    }
+    else if (!shift) {
+        if (key == KeyCode::F10) {
+            ClientHealthDisplay::Toggle();
+            return true;
+        }
+        if (key == KeyCode::G) {
+            GroundPickup::Request();
+            return true;
+        }
+    }
+    return false;
 }
 
 // Обработка удерживаемых клавиш: прокрутка карты стрелками и зум по Z работают только

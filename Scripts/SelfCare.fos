@@ -1,0 +1,107 @@
+// SelfCare — клиентский запрос «Санитара» и «Доктора» на себя через штатную очередь ChosenActions.
+// CLIENT: CanUse проверяет пригодность постановки в очередь; Request ставит навык, приоритет сохраняет ручные команды.
+// Серверные AP, состояние сценария, результат навыка и кулдаун остаются в CritterActions/Main.
+// Изменяемых глобальных переменных нет: краткое ожидание ответа хранится в клиентских свойствах самого криттера.
+namespace SelfCare
+{
+
+#if CLIENT
+
+///@ Property Critter Client nanotime SelfCareFirstAidPendingUntil Mutable
+///@ Property Critter Client nanotime SelfCareDoctorPendingUntil Mutable
+
+[[ModuleInit]]
+void InitSelfCare()
+{
+    Game.OnMapLoaded.Subscribe(ClearPending);
+    Game.OnDisconnected.Subscribe(ClearPending);
+}
+
+// Это предварительная проверка клиента, а не разрешение изменить здоровье без сервера.
+bool CanUse(CritterProperty skill)
+{
+    if (skill != CritterProperty::SkillFirstAid && skill != CritterProperty::SkillDoctor) {
+        return false;
+    }
+    if (!HasChosen || !HasCurMap || Game.DenDefenseClientFrozen || Game.DenDefenseClientResting || Gui::IsConsoleActive() || Gui::IsModalScreenActive()) {
+        return false;
+    }
+    Gui::Screen? screen = Gui::GetActiveScreen();
+    if (screen == null || screen.Num != GuiScreen::Game) {
+        return false;
+    }
+    Gui::Object[] focusedObjects = Gui::GetFocusedObjects();
+    for (int i = 0; i < focusedObjects.length(); i++) {
+        if (cast<Gui::TextInput?>(focusedObjects[i]) != null) {
+            return false;
+        }
+    }
+    Critter chosen = Chosen;
+    // Текущие ОД и занятость ждёт обычный ChosenProcess; здесь отсекаем только недостижимую стоимость.
+    int apCost = Settings.Movement.RtApCostUseSkill;
+    if (!chosen.IsAlive() || chosen.MapId != CurMap.Id || chosen.ActionPoints < apCost) {
+        return false;
+    }
+    if (skill == CritterProperty::SkillFirstAid) {
+        return chosen.CurrentHp < chosen.MaxLife && !Time::IsTimeoutActive(chosen.TimeoutSkFirstAid) && Game.FrameTime >= chosen.SelfCareFirstAidPendingUntil;
+    }
+    return Tla::IsCritterInjured(chosen) && !Time::IsTimeoutActive(chosen.TimeoutSkDoctor) && Game.FrameTime >= chosen.SelfCareDoctorPendingUntil;
+}
+
+bool Request(CritterProperty skill, bool priority = false)
+{
+    if (!CanUse(skill)) {
+        return false;
+    }
+    return ChosenActions::QueueSelfCare(skill, priority);
+}
+
+// Единственный признак ожидающего самолечения для приоритета автосанитара/автоатаки.
+bool IsPending()
+{
+    if (!HasChosen) {
+        return false;
+    }
+    Critter chosen = Chosen;
+    if (Game.FrameTime < chosen.SelfCareFirstAidPendingUntil || Game.FrameTime < chosen.SelfCareDoctorPendingUntil) {
+        return true;
+    }
+    any[] actions = {};
+    ChosenActions::GetChosenActions(actions);
+    for (int i = 0; i + 6 < actions.length(); i += 7) {
+        if (int(actions[i]) != Tla::ChosenUseSklOnCritter) {
+            continue;
+        }
+        int skill = actions[i + 1];
+        ident targetId = actions[i + 2];
+        if ((skill == int(CritterProperty::SkillFirstAid) || skill == int(CritterProperty::SkillDoctor)) && (targetId == ZERO_IDENT || targetId == chosen.Id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Между отправкой RPC и репликацией кулдауна не отправляем навык каждый кадр.
+// При серверном отказе без нового кулдауна короткое ожидание само заканчивается.
+void MarkSent(CritterProperty skill)
+{
+    if (skill == CritterProperty::SkillFirstAid) {
+        Chosen.SelfCareFirstAidPendingUntil = Game.FrameTime + Time::Seconds(2);
+    }
+    else if (skill == CritterProperty::SkillDoctor) {
+        Chosen.SelfCareDoctorPendingUntil = Game.FrameTime + Time::Seconds(2);
+    }
+}
+
+[[Event]]
+void ClearPending()
+{
+    if (HasChosen) {
+        Chosen.SelfCareFirstAidPendingUntil = ZERO_NANOTIME;
+        Chosen.SelfCareDoctorPendingUntil = ZERO_NANOTIME;
+    }
+}
+
+#endif
+
+}

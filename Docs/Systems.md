@@ -24,7 +24,7 @@ read [FOSquadWorkspace.md](FOSquadWorkspace.md).
 
 ## Trace one player action
 
-1. `ClientMain` / `Gui/Game.fogui` route input to `ChosenActions`.
+1. `InputHandler` / `ClientMain` / `Gui/Game.fogui` route input to feature modules and `ChosenActions`.
 2. Client `ChosenActions` queues intent and sends the appropriate remote call.
 3. Server `ChosenActions` validates the request and delegates execution to `CritterActions`.
 4. `CritterActions` spends AP and performs pickup, item use, skills, reload or attack.
@@ -59,12 +59,13 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | `CritterState` | S | Alive, knockout and dead transitions |
 | `NpcPlanes` / `MainPlanes` / `Pattern*` | S | NPC plan processing, weapon selection and behavior patterns; `MainPlanes` reuses a usable cached weapon but retries failed searches against current inventory/ammo/state on the next selection |
 | `Animation` | C/M | `InitAnimation` subscribes to critter animation events; Fallout/tactics selection; sounds only on C |
-| `ChosenActions` | S/C | Client action queue and server request handlers; reused for the one-shot autoattack approach/attack |
+| `ChosenActions` | S/C | Client action queue and server request handlers; reused for autoattack, priority-preserving self-care and exact-item ground-pickup batches |
+| `SelfCare` / `AutoFirstAid` | C | Alt+F1 First Aid / Alt+F2 Doctor on self; Alt+Shift+F1 toggles automatic First Aid below 50% HP; normal queued skills/AP/cooldowns, healing before automatic attacks; [ClientControls.md](ClientControls.md), [AutoFirstAid.md](AutoFirstAid.md) |
 | `DenAutoAttack` / `InputHandler` / `ChosenTabs` | S/C | Ctrl+A selects usable Den enemies with positive HP first, then distance; Ctrl+Shift+A repeats when AP allows, with a HUD status tab; melee-only approach, no aiming; [DenDefense.md](DenDefense.md#player-autoattack) |
 | `PlayerRegistration` | S/C | Login and registration; confirmed returned Player commits Sierra siege entry |
 | `MercProgression` | S/C | Owner-only NPC Character/SPECIAL sheet, manual skills/perks; dialog `Show`, snapshot and server spending; [DenDefense.md](DenDefense.md) |
 | `DenDefense` | S/C | Main Sierra entrance start/re-entry, generation/primary, companions, rest/randomized waves, loot and failure; restart resets siege, not saved characters; `OnSuccessfulLogin`, `ResumeController`, `SpawnTick`; [DenDefense.md](DenDefense.md) |
-| `DenCleanup` | S | Authored Todd by Sierra's truck at `50:56`; 7–15 s post-wave delay, corpse walk/one-second removal, leftover loot onto the ground, workshop supplies into Smitty's crate; `Init`, `Setup`, `Idle`; [DenDefense.md](DenDefense.md#todd-and-post-wave-cleanup) |
+| `DenCleanup` | S/C | Authored Todd by Sierra's truck at `50:56`; post-wave corpse collection, return-to-truck unloading, leftover loot/workshop supplies and persistent processed-corpse counter with client presentation; `Init`, `Setup`, `Idle`; [DenDefense.md](DenDefense.md#todd-and-post-wave-cleanup) |
 | `DenWander` | S | 30% of wave-1 enemies first walk to a reachable yard hex, retaliate only against their own attackers, say an arrival line and resume normal attacks; `TryStart`, `Process`, `OnAttacked`, `WalkEnd`; [DenDefense.md](DenDefense.md#combat-and-completion) |
 | `Merc` / `MercFormation` / `MercLoot` / `MercStorage` / `FavoriteItem` / `CritterAnims` | S / shared helpers | Companion ownership, leader-to-squad dialog behavior propagation (`SetBehaviorParameter`, `ROLE_LEADER`), distinct reserved Den follow positions, transient loot collection and categorized workshop-unloading jobs (`StoreLoot`, personal reserves, immediate-engagement pause), four usable workshop containers, persistent weapon readiness maintained outside combat, and weapon-animation admission; narrow Den exceptions, normal recruitment/animation policy otherwise |
 | `Replication` | S | Ordinary death/respawn/permanent-death flow; Den participants use their scenario's base resurrection instead |
@@ -81,6 +82,7 @@ See [Animation.md](Animation.md) for the native baked root-motion flow, distinct
 | `Barter` | S | Authoritative NPC barter; free two-way item transfer with the primary's Den companions |
 | `FixBoy` | S/C | Crafting UI and validated crafting; recipes in `Resources/ServerData/CraftRecipes.json` |
 | `ClientItems` | S/C | Inventory/container presentation and synchronization |
+| `GroundPickup` | C | Plain G snapshots all eligible items at the current hex, otherwise the nearest reachable hex within five; `Request` -> `ChosenActions::QueueGroundPickup`, exact approach and per-ID revalidation; [GroundPickup.md](GroundPickup.md) |
 | `Item` / `ItemMovement` | S | Doors, holodisks, deferred destruction and move rules |
 | `ItemStacks` | S/C | Game-owned `Count`/`Stackable`: add, count, destroy, split and move units; client count/copy helpers |
 | `EnergyBarier` | S | Location-wide force-field networks, blockers/triggers and terminals; `BarierInit` -> `InitBariers` constructs two non-null blocker paths (both empty for short fields), then `CBarier` |
@@ -145,11 +147,19 @@ interactions remain available. Generated callbacks are not authored owners.
 | `Sounds` | shared helpers, C playback | Map legacy/case-insensitive sound names and series to exact baked paths; call `Sounds::Play` |
 | `DayColor` | shared helpers, C/M updates | Evaluate authored day curves and push `Map.SetDayColors` each frame |
 | `MapTime` / `GameTime` | shared helpers, S clock setter | One scaled TLA calendar, future dates and forward-only shared dawn advance; frame callbacks retain their real delays |
-| `UserOptions` | C | Persist player choices as qualified `Group.Name` local settings |
+| `UserOptions` / `ClientZoom` | C | Persist qualified `Group.Name` local settings without dropping unrelated options; keep zoom across maps/restarts through `ClientZoom.Level`; [ClientZoom.md](ClientZoom.md) |
+| `ClientHealthDisplay` | S/C | Plain F10 toggles player/merc HP overhead (initially off, session-only); server publishes merc classification/maximum HP, client renders it; [ClientHealthDisplay.md](ClientHealthDisplay.md) |
 | `InputHandler` / `MapText` | C | F11 toggles overhead NPC names, initially shown; the choice lasts until client restart. Player names and speech remain visible. F11 no longer toggles fullscreen. |
 | `AiControl` | S/C | Client observation/control and explicitly gated server QA commands; [AiControl.md](AiControl.md) |
 | `MapperMain` | M | Editor tabs/tools and mapper lifecycle |
 | `Migration` | S metadata | Current property remove/rename `///@ MigrationRule` declarations |
+
+[ClientControls.md](ClientControls.md) summarizes the convenience hotkeys and their shared focus gate:
+active Game screen, no console/text focus/modal screen. `SelfCare::CanUse` checks queue eligibility,
+not currently accumulated AP/busy; `Request(skill, true)` preserves waiting manual commands and
+`IsPending()` covers queued/in-flight treatment. Server `CritterActions` and `Main` retain skill
+execution and cooldown authority. `ChosenProcess` gives `AutoFirstAid::Process` the first opportunity
+to enqueue healing before movement and after AP regeneration; `DenAutoAttack` respects that priority.
 
 `Items/Custom/base_tile.foitem` owns the shared Fallout tile offset `-24 26` for floors
 and roofs; roof height remains `Geometry.MapRoofElevation` in `TLA.fomain`. Do not shift
