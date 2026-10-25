@@ -1,0 +1,115 @@
+// ClientZoom — сохранение выбранного масштаба локальной карты между картами и запусками клиента.
+// CLIENT: читает цель Map.SpritesZoomTarget после штатной обработки Z+колеса (и сброса средней кнопкой),
+// восстанавливает её через Map.ChangeZoom; не перехватывает ввод и не меняет экраны интерфейса.
+// Необходимое состояние сессии хранится в клиентских свойствах Game: выбранный и сохранённый масштаб,
+// срок отложенной записи. Оно переживает выгрузку карты, но не синхронизируется с сервером.
+// Автоматическое ограничение масштаба границами карты не должно заменять выбор игрока в конфиге.
+namespace ClientZoom
+{
+
+///@ Setting Client float32 ClientZoom.Level
+///@ Property Game Client float32 ClientZoomLevel Mutable
+///@ Property Game Client float32 ClientZoomSavedLevel Mutable
+///@ Property Game Client nanotime ClientZoomSaveAt Mutable
+
+#if CLIENT
+
+// Поддерживаемые пределы движка: GameSettings::MIN_ZOOM / MAX_ZOOM в Common/Common.h.
+// Старые View.SpritesZoomMin/Max — игровые настройки; текущий движок их не использует.
+const float MinZoom = 0.05f;
+const float MaxZoom = 20.0f;
+const float DefaultZoom = 1.0f;
+
+[[ModuleInit]]
+void InitClientZoom()
+{
+    Game.ClientZoomLevel = ClampZoom(Settings.ClientZoom.Level);
+    MarkSaved();
+    Game.OnMapLoad.Subscribe(OnMapLoad);
+    // Input передаёт ввод активному экрану с обычным приоритетом; здесь цель уже изменена экраном Game.
+    Game.OnMouseDown.Subscribe(OnMouseDown, EventPriority::Lowest);
+    Game.OnLoop.Subscribe(OnLoop);
+    Game.OnMapUnload.Subscribe(OnFlush);
+    Game.OnFinish.Subscribe(OnFlush);
+}
+
+float GetLevel()
+{
+    return Game.ClientZoomLevel;
+}
+
+// Отмечает успешную запись окна опций или автосохранения; при старте принимает загруженное значение за исходное.
+void MarkSaved()
+{
+    Game.ClientZoomSavedLevel = Game.ClientZoomLevel;
+    Game.ClientZoomSaveAt = ZERO_NANOTIME;
+}
+
+[[Event]]
+void OnMapLoad()
+{
+    if (HasCurMap && Settings.View.MapZoomEnabled) {
+        CurMap.ChangeZoom(Game.ClientZoomLevel);
+    }
+}
+
+[[Event]]
+void OnMouseDown(MouseButton button)
+{
+    if (!HasCurMap || !Settings.View.MapZoomEnabled || !Settings.View.MapZoomInProgress || Gui::IsConsoleActive()) {
+        return;
+    }
+    if (button != MouseButton::WheelUp && button != MouseButton::WheelDown && button != MouseButton::Middle) {
+        return;
+    }
+    Gui::Screen? screen = Gui::GetActiveScreen();
+    if (screen == null || screen.Num != GuiScreen::Game) {
+        return;
+    }
+
+    float level = ClampZoom(CurMap.SpritesZoomTarget);
+    if (level != Game.ClientZoomLevel) {
+        Game.ClientZoomLevel = level;
+        Game.ClientZoomSaveAt = Game.FrameTime + Time::Seconds(1);
+    }
+}
+
+[[Event]]
+void OnLoop()
+{
+    if (Game.ClientZoomSaveAt != ZERO_NANOTIME && Game.FrameTime >= Game.ClientZoomSaveAt) {
+        Flush();
+    }
+}
+
+[[Event]]
+void OnFlush()
+{
+    Flush();
+}
+
+// Не снимаем заново текущий масштаб: интерполяция и минимальный масштаб маленькой карты не являются выбором игрока.
+void Flush()
+{
+    if (Game.ClientZoomLevel != Game.ClientZoomSavedLevel) {
+        // Автосохранение меняет только масштаб, а не неподтверждённый выбор в открытом окне опций.
+        UserOptions::SaveValues({{"ClientZoom.Level", "" + Game.ClientZoomLevel}});
+        MarkSaved();
+    }
+    else {
+        Game.ClientZoomSaveAt = ZERO_NANOTIME;
+    }
+}
+
+float ClampZoom(float level)
+{
+    // Ноль при отсутствии настройки, отрицательное значение и NaN означают масштаб по умолчанию.
+    if (!(level > 0.0f)) {
+        return DefaultZoom;
+    }
+    return Math::ClampF(level, MinZoom, MaxZoom);
+}
+
+#endif
+
+}

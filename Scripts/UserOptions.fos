@@ -2,7 +2,8 @@
 // Настройки движка во время игры неизменяемы: что меняется на лету (язык, разрешение, полноэкранный режим, поверх
 // окон, громкость), применяет и хранит свой владелец в движке, и сохраняется его текущее значение. Прокси движку
 // применить нечем до переподключения, поэтому выбор хранится здесь и действует со следующего запуска.
-// Сохраняется конфиг с ключами вида Группа.Имя — движок применяет только такие.
+// Сохраняется конфиг с ключами вида Группа.Имя — движок применяет только такие. SaveValues обновляет только
+// переданные ключи, сохраняя остальные записи; ClientZoom использует его без снимка открытого окна опций.
 // CLIENT. Глобальное состояние: выбранные параметры прокси; при старте клиента они равны настройкам.
 namespace UserOptions
 {
@@ -86,13 +87,65 @@ void Save()
                                     {"Audio.MusicVolume", "" + Game.GetMusicVolume()},
                                     {"Audio.SoundVolume", "" + Game.GetSoundVolume()},
                                     {"Movement.AlwaysRun", "" + Settings.Movement.AlwaysRun},
-                                    //{ "DefaultCombatMode", "" + Settings.DefaultCombatMode },
                                     {"ClientNetwork.ProxyType", "" + ProxyType},
                                     {"ClientNetwork.ProxyHost", ProxyHost},
                                     {"ClientNetwork.ProxyPort", "" + ProxyPort},
                                     {"ClientNetwork.ProxyUser", ProxyUser},
-                                    {"ClientNetwork.ProxyPass", ProxyPass}};
-    Game.SetUserConfig(options);
+                                    {"ClientNetwork.ProxyPass", ProxyPass},
+                                    {"ClientZoom.Level", "" + ClientZoom::GetLevel()}};
+    SaveValues(options);
+    ClientZoom::MarkSaved();
+}
+
+// SetUserConfig заменяет конфиг целиком. Обновляем только переданные корневые ключи в том же cache entry,
+// сохраняя неизвестные настройки, комментарии и секции. Повторные записи и += заменяем одной записью.
+void SaveValues(dict<string, string> options)
+{
+    if (options.isEmpty()) {
+        return;
+    }
+    string updates;
+    for (int i = 0; i < options.length(); i++) {
+        updates += options.getKey(i) + " = " + options.getValue(i) + "\n";
+    }
+
+    string original = Game.GetCacheText("LocalSettings.focfg");
+    string[] lines = original.split("\n");
+    // Новые значения идут до исходного текста: даже незавершённое продолжение в конце файла их не поглотит.
+    string result = updates;
+    string rawEntry;
+    string entry;
+    bool inSection = false;
+    for (int i = 0; i < lines.length(); i++) {
+        rawEntry += lines[i] + (i < lines.length() - 1 ? "\n" : "");
+        string line = lines[i].trim();
+        bool continued = line.endsWith(" \\") || line.endsWith("\t\\");
+        entry += continued ? line.substr(0, line.length() - 1).trim() + " " : line;
+        if (continued) {
+            continue;
+        }
+
+        int sectionEnd = entry.find("]");
+        if (!inSection && entry.startsWith("[") && sectionEnd > 1 && !entry.substr(1, sectionEnd - 1).trim().isEmpty()) {
+            inSection = true;
+        }
+
+        int separator = entry.find("=");
+        string key = separator > 0 ? entry.substr(0, separator).trim() : "";
+        if (separator > 0 && entry.substr(separator - 1, 1) == "+") {
+            key = key.substr(0, key.length() - 1).trim();
+        }
+        if (inSection || !options.exists(key)) {
+            result += rawEntry;
+        }
+        rawEntry = "";
+        entry = "";
+    }
+    // Незавершённое продолжение не является настройкой движка, но исходный текст не теряем.
+    result += rawEntry;
+    if (result != original) {
+        Game.SetCacheText("LocalSettings.focfg", result);
+    }
 }
 
 #endif
