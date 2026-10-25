@@ -1,0 +1,189 @@
+// GroundPickup — одноразовый подбор по G с одного гекса через штатную очередь ChosenActions.
+// CLIENT: выбирает свой либо ближайший достижимый гекс в радиусе пяти; снимок целей хранит в свойствах Game.
+// SERVER + CLIENT: общий фильтр предметов; AP, проверки переноса и ItemStacks остаются в обычном PickItem.
+namespace GroundPickup
+{
+
+///@ Property Game Client ident GroundPickupChosenId Mutable
+///@ Property Game Client ident GroundPickupMapId Mutable
+///@ Property Game Client mpos GroundPickupHex Mutable
+///@ Property Game Client ident[] GroundPickupItemIds Mutable
+
+#if SERVER || CLIENT
+
+// Двери, машины и контейнеры штатный PickItem использует, а не поднимает: G их не открывает.
+bool IsPickableItem(Item item, ident mapId)
+{
+    return !item.IsDestroyed && item.Ownership == ItemOwnership::MapHex && item.MapId == mapId && item.IsCanPickUp && !item.Hidden && !item.IsGag &&
+           !item.IsScenery && !item.IsWall && item.Count > 0 && item.Type != ItemType::Container && item.Type != ItemType::Door && item.Type != ItemType::Car;
+}
+
+#endif
+
+#if CLIENT
+
+const int SearchRadius = 5;
+
+[[ModuleInit]]
+void Init()
+{
+    Game.OnMapLoaded.Subscribe(ClearRequest);
+    Game.OnDisconnected.Subscribe(ClearRequest);
+}
+
+[[Event]]
+void ClearRequest()
+{
+    CancelRequest();
+}
+
+void CancelRequest()
+{
+    Game.GroundPickupChosenId = ZERO_IDENT;
+    Game.GroundPickupMapId = ZERO_IDENT;
+    Game.GroundPickupHex = ZERO_MPOS;
+    Game.GroundPickupItemIds = {};
+}
+
+// Проверяем конечную позицию отдельно: GetPath для соседнего гекса возвращает шаг даже при блокере.
+// Для multihex проверяем всю занимаемую область; собственный криттер не считается препятствием.
+bool CanStandOnHex(Map map, Critter chosen, mpos hex)
+{
+    int radius = chosen.Multihex;
+    for (int x = int(hex.x) - radius; x <= int(hex.x) + radius; x++) {
+        for (int y = int(hex.y) - radius; y <= int(hex.y) + radius; y++) {
+            if (x < 0 || y < 0 || x >= int(map.Size.width) || y >= int(map.Size.height)) {
+                return false;
+            }
+            mpos occupiedHex = mpos(x, y);
+            if (Game.GetDistance(hex, occupiedHex) > radius) {
+                continue;
+            }
+            if (!map.IsHexMovable(occupiedHex)) {
+                return false;
+            }
+            Critter? occupant = map.GetCritterOnHex(occupiedHex, CritterFindType::NonDead);
+            if (occupant != null && occupant.Id != chosen.Id) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool CanReachHex(Map map, Critter chosen, mpos hex)
+{
+    if (chosen.Hex == hex) {
+        return true;
+    }
+    if (chosen.IsNoMove || !CanStandOnHex(map, chosen, hex)) {
+        return false;
+    }
+    auto path = map.GetPath(chosen, hex, 0);
+    if (path.isEmpty()) {
+        return false;
+    }
+    // Не принимаем частичный путь: подбор должен начаться именно после прихода на выбранный гекс.
+    mpos endpoint = chosen.Hex;
+    for (int i = 0; i < path.length(); i++) {
+        map.MoveHexByDir(endpoint, path[i], 1);
+    }
+    return endpoint == hex;
+}
+
+ident[] GetPickableItems(Map map, mpos hex)
+{
+    ident[] result = {};
+    // API возвращает только известные клиенту предметы гекса в текущей области видимости.
+    Item[] items = map.GetItemsOnHex(hex);
+    for (int i = 0; i < items.length(); i++) {
+        if (items[i].Hex == hex && IsPickableItem(items[i], map.Id)) {
+            result.insertLast(items[i].Id);
+        }
+    }
+    return result;
+}
+
+bool IsRequestContextValid(mpos hex)
+{
+    return HasChosen && HasCurMap && Chosen.IsAlive() && !Game.DenDefenseClientFrozen && !Game.DenDefenseClientResting &&
+           Game.GroundPickupChosenId == Chosen.Id && Game.GroundPickupMapId == CurMap.Id && Game.GroundPickupHex == hex;
+}
+
+bool IsQueuedItemValid(ident itemId, mpos hex)
+{
+    if (!IsRequestContextValid(hex) || Game.GroundPickupItemIds.find(itemId) < 0) {
+        return false;
+    }
+    // Перечитываем именно видимый снимок гекса, а не любой сохранённый клиентский handle.
+    ident[] visibleIds = GetPickableItems(CurMap, hex);
+    return visibleIds.find(itemId) >= 0;
+}
+
+bool IsQueuedDestinationValid(mpos hex)
+{
+    if (!IsRequestContextValid(hex)) {
+        return false;
+    }
+    ident[] visibleIds = GetPickableItems(CurMap, hex);
+    ident[] snapshot = Game.GroundPickupItemIds;
+    bool hasTarget = false;
+    for (int i = 0; i < snapshot.length(); i++) {
+        if (visibleIds.find(snapshot[i]) >= 0) {
+            hasTarget = true;
+            break;
+        }
+    }
+    return hasTarget && CanReachHex(CurMap, Chosen, hex);
+}
+
+// Ближайший — по геометрическому расстоянию Game.GetDistance, но только среди достижимых гексов.
+// При равенстве расстояний порядок стабилен: сначала меньший x, затем y. Новых целей после снимка нет.
+void Request()
+{
+    if (!HasChosen || !HasCurMap || !Chosen.IsAlive() || Game.DenDefenseClientFrozen || Game.DenDefenseClientResting) {
+        return;
+    }
+    CancelRequest();
+    Critter chosen = Chosen;
+    Map map = CurMap;
+    mpos origin = chosen.Hex;
+    mpos target = origin;
+    ident[] itemIds = GetPickableItems(map, origin);
+    if (itemIds.isEmpty()) {
+        int bestDistance = SearchRadius + 1;
+        for (int x = int(origin.x) - SearchRadius; x <= int(origin.x) + SearchRadius; x++) {
+            for (int y = int(origin.y) - SearchRadius; y <= int(origin.y) + SearchRadius; y++) {
+                if (x < 0 || y < 0 || x >= int(map.Size.width) || y >= int(map.Size.height)) {
+                    continue;
+                }
+                mpos hex = mpos(x, y);
+                int distance = Game.GetDistance(origin, hex);
+                if (distance == 0 || distance > SearchRadius || distance >= bestDistance) {
+                    continue;
+                }
+                ident[] candidates = GetPickableItems(map, hex);
+                if (candidates.isEmpty() || !CanReachHex(map, chosen, hex)) {
+                    continue;
+                }
+                bestDistance = distance;
+                target = hex;
+                itemIds = candidates;
+            }
+        }
+    }
+    if (itemIds.isEmpty()) {
+        return;
+    }
+    Game.GroundPickupChosenId = chosen.Id;
+    Game.GroundPickupMapId = map.Id;
+    Game.GroundPickupHex = target;
+    Game.GroundPickupItemIds = itemIds;
+    if (!ChosenActions::QueueGroundPickup(target, itemIds)) {
+        CancelRequest();
+    }
+}
+
+#endif
+
+}

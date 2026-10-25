@@ -134,7 +134,8 @@ void PickCritter(Critter cr, Critter pickCr)
 
 // Подбор предмета с гекса. Различает обычный предмет на земле, сценерий и стену:
 // для предмета/сценерия поднимает событие навыка подбора, для стены — сообщение «нечем взять».
-void PickItem(Critter cr, mpos hex, hstring pid)
+// Ненулевой itemId выбирает только точный подбираемый экземпляр из снимка G, без подмены цели.
+void PickItem(Critter cr, mpos hex, hstring pid, ident itemId = ZERO_IDENT)
 {
     // Списываем AP
     if (!ProcessAp(cr, Settings.Movement.RtApCostPickItem)) {
@@ -163,11 +164,34 @@ void PickItem(Critter cr, mpos hex, hstring pid)
     }
 
     ProtoItem proto = Game.GetProtoItem(pid);
+    if (itemId != ZERO_IDENT && (proto.IsScenery || proto.IsWall)) {
+        return;
+    }
 
     if (!proto.IsScenery && !proto.IsWall) {
-        Item? item = map.GetItemOnHex(hex, pid);
+        Item? item;
+        if (itemId != ZERO_IDENT) {
+            item = map.GetItem(itemId);
+            if (item == null || item.Hex != hex || item.ProtoId != pid || !GroundPickup::IsPickableItem(item, map.Id) || !cr.IsSee(item)) {
+                return;
+            }
+        }
+        else {
+            // Старый lookup передавал в движок picker=nullptr: скрытый предмет того же pid
+            // мог затенить видимый или попасть в обработчик без проверки видимости.
+            Item[] candidates = map.GetItemsOnHex(hex);
+            for (int i = 0; i < candidates.length(); i++) {
+                Item candidate = candidates[i];
+                if (candidate.Ownership == ItemOwnership::MapHex && candidate.MapId == map.Id && candidate.Hex == hex && candidate.ProtoId == pid &&
+                    !candidate.Hidden && cr.IsSee(candidate)) {
+                    item = candidate;
+                    break;
+                }
+            }
+        }
+        // Устаревший снимок — обычный отказ, а не поиск другого экземпляра или исключение.
         if (item == null) {
-            throw("Item not found", cr, hex.x, hex.y, pid);
+            return;
         }
 
         cr.Action(CritterAction::PickItem, 0, item);
