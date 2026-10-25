@@ -250,7 +250,11 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   wait for claimed targets to be released rather than racing for the same loot. Thirty seconds without
   a successful transfer releases/skips a stalled target for that order. Real NPC walk plans handle
   routes/doors; adjacent pickups spend ordinary AP and use normal item-movement checks/events.
-  Combat pauses collection and releases its claim. Follow/wait cancels collection; death, rest/failure,
+  Collection ignores the general battle timeout and uses the same `MercStorage::IsEngaged` check as
+  unloading: a valid outgoing/incoming NPC attack plan or the two-second guard after an actual attack
+  involving this merc pauses collection and releases its claim. Attack events immediately stop the loot
+  walk and release the target; combat plans and the collection order survive, so an unengaged merc can
+  resume collecting during an ongoing wave. Follow/wait cancels collection; death, rest/failure,
   map departure, master departure or dismissal also release it. Completion resumes the previous
   follow/wait behavior. These jobs/reservations do not survive server restart; no new RemoteCall or
   serialized-property removal/rename migration is needed. Client gameplay acceptance remains manual.

@@ -1,7 +1,7 @@
 // MercLoot — разовый сбор добычи наёмниками в обороне Дэна.
 // SERVER: выбор достижимой цели в радиусе приказа, резерв трупа/предмета, подход и перенос.
 // Состояние задания хранится на криттере; общих изменяемых таблиц резервирования нет.
-// Связи: Merc (хозяин и idle), DenDefense (волны и право приказа), NpcPlanes, ItemMovement.
+// Связи: Merc (хозяин и idle), DenDefense (волны и право приказа), MercStorage (личная угроза), NpcPlanes, ItemMovement.
 namespace MercLoot
 {
 
@@ -232,7 +232,8 @@ bool Process(Critter merc)
         Cancel(merc);
         return false;
     }
-    if (Time::IsTimeoutActive(merc.TimeoutBattle) || NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK)) {
+    // Общий боевой таймер не мешает сбору, если сам мерк сейчас ни с кем не дерётся.
+    if (MercStorage::IsEngaged(merc, map)) {
         ReleaseTarget(merc);
         return true;
     }
