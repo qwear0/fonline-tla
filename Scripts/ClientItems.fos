@@ -65,7 +65,17 @@ uint PendingContainerSession = 0;
 void InitClientItems()
 {
     Game.OnReceiveItems.Subscribe(OnReceiveItems);
+    Game.OnItemInvIn.Subscribe(OnChosenInventoryChanged);
+    Game.OnItemInvOut.Subscribe(OnChosenInventoryChanged);
     Game.OnCritterAction.Subscribe(OnCritterAction);
+}
+
+// События приходят после изменения инвентаря движком. Обновляем и список, и слоты экипировки:
+// при выбросе предмета отдельного снимка коллекции или действия MoveItem не будет.
+[[Event]]
+void OnChosenInventoryChanged(Item item)
+{
+    RefreshItemViews();
 }
 
 // Слоты меняются отдельным сетевым сообщением, а не новым снимком коллекции.

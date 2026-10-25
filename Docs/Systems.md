@@ -93,6 +93,10 @@ See [Animation.md](Animation.md) for the native baked root-motion flow, distinct
 `Gui/Game.fogui` redraws the main-hand plate from `OnDraw`, including empty-hand attacks,
 AP cost and aiming. `ClientItems::OnCritterAction` refreshes cached inventory cells after
 authoritative slot moves; the engine must apply slots before raising that event.
+`ClientItems::OnChosenInventoryChanged` refreshes inventory and equipment views on
+`OnItemInvIn` / `OnItemInvOut`, after the engine adds or removes the owned instance.
+`ClientMain::CritterAction` plays the chosen's drop animation from the server action:
+`ChosenActions` sends the drop request without predicting that animation locally.
 
 Merc following keeps one `MercFollow` walk plan, not a queue of historical player positions.
 Ordinary mercs target the master's latest hex with `MercMasterDist` as the stop radius. Den companions
