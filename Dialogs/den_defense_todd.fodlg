@@ -1,5 +1,5 @@
 [Comment]
-Todd, the authored drunkard outside Smitty's fence. Cleanup barks have a 33% chance per corpse.
+Todd, the cleaner beside the truck at Sierra's entrance. Cleanup barks have a 33% chance per corpse.
 
 [Dialog]
 Speech 1
@@ -12,7 +12,7 @@ Speech 1
 {100}{}{Тяжёлый, сука... Опять нажрался брамина перед смертью...}
 {101}{}{За ноги... и в канаву. Ничего сложного, браток...}
 {102}{}{Кровь на ботинках... Опять стирать... хотя похрен...}
-{103}{}{Меньше народа в Дене — больше воздуха... и Винта...}
+{103}{}{Меньше народа на Сьерре — больше воздуха... и Винта...}
 {104}{}{Раньше ты был крутым... А теперь ты просто работа на полчаса...}
 {105}{}{Фрэнки сказал всё прибрать... Фрэнки не любит, когда пахнет... не Винтом...}
 {106}{}{Голова гудит... Зачем вы вообще сюда лезете умирать?!}
@@ -27,7 +27,7 @@ Speech 1
 {100}{}{Heavy bastard... Stuffed yourself with brahmin before dying again...}
 {101}{}{Grab the legs... into the ditch. Nothing to it, pal...}
 {102}{}{Blood on my boots... Gotta wash them again... ah, fuck it...}
-{103}{}{Fewer people in the Den means more air... and more Jet...}
+{103}{}{Fewer people at Sierra means more air... and more Jet...}
 {104}{}{Used to be a tough guy... Now you're just half an hour's work...}
 {105}{}{Frankie said to clean it all up... Frankie doesn't like smells... unless it's Jet...}
 {106}{}{My head's pounding... Why the hell do you all come here to die?!}

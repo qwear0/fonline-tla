@@ -8,13 +8,39 @@ ScrollAxialArea = -110 40 139 137
 Size = 146 144
 WorkHex = 39 58
 
+[$Name/Item]
+$Id = 1000
+$Proto = DenDefenseSupplies
+Hex = 35 60
+
+[$Name/Critter]
+$Id = 1001
+$Proto = HomesteaderMale
+BagId = 1
+DialogId = den_defense_smitty
+Dir = 270
+Hex = 37 60
+ReplicationTime = -1
+TeamId = 4
+
+[$Name/Critter]
+$Id = 1002
+$Proto = Loser
+AiId = 14
+DialogId = den_defense_todd
+Dir = 210
+Hex = 50 56
+InitScript = DenCleanup::Init
+ReplicationTime = -1
+TeamId = 4
+
 [$Name/Critter]
 $Id = 4294966904
 $Proto = AutoCannon
 DialogId = mob_floor_turret
 Dir = 150
 Hex = 75 33
-InitScript = WarehouseTurret::TurretInit
+InitScript = DenDefense::DisableTurret
 NpcRole = 1
 TeamId = 33
 
@@ -31,7 +57,7 @@ $Proto = AutoCannon
 DialogId = mob_floor_turret
 Dir = 150
 Hex = 85 33
-InitScript = WarehouseTurret::TurretInit
+InitScript = DenDefense::DisableTurret
 NpcRole = 1
 TeamId = 33
 
@@ -48,7 +74,7 @@ $Proto = AutoCannon
 DialogId = mob_floor_turret
 Dir = 150
 Hex = 42 41
-InitScript = WarehouseTurret::TurretInit
+InitScript = DenDefense::DisableTurret
 NpcRole = 1
 TeamId = 33
 
@@ -65,7 +91,7 @@ $Proto = AutoCannon
 DialogId = mob_floor_turret
 Dir = 150
 Hex = 72 63
-InitScript = WarehouseTurret::TurretInit
+InitScript = DenDefense::DisableTurret
 NpcRole = 1
 TeamId = 33
 
@@ -82,7 +108,7 @@ $Proto = AutoCannon
 DialogId = mob_floor_turret
 Dir = 150
 Hex = 54 83
-InitScript = WarehouseTurret::TurretInit
+InitScript = DenDefense::DisableTurret
 NpcRole = 1
 TeamId = 33
 
@@ -99,7 +125,7 @@ $Proto = AutoCannon
 DialogId = mob_floor_turret
 Dir = 150
 Hex = 94 83
-InitScript = WarehouseTurret::TurretInit
+InitScript = DenDefense::DisableTurret
 NpcRole = 1
 TeamId = 33
 
@@ -116,7 +142,7 @@ $Proto = AutoCannon
 DialogId = mob_floor_turret
 Dir = 150
 Hex = 122 83
-InitScript = WarehouseTurret::TurretInit
+InitScript = DenDefense::DisableTurret
 NpcRole = 1
 TeamId = 33
 

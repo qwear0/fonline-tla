@@ -11,7 +11,7 @@ TLA enables `FO_DATA_SOURCE_DAT`, `FO_DATA_SOURCE_ZIP`, `FO_IMAGE_FRM`, `FO_IMAG
 `FO_AUDIO_ACM` in `CMakeLists.txt` for its authored Fallout archives, images and sounds. PNG, TGA and FOFRM
 importers are built in. `Server.DbStorage = Memory` remains the base setting and needs no optional
 provider. The game enables `FO_DATABASE_SQLITE`; the `LAN` profile uses it to persist characters in
-`TLA-Storage/LAN/`, outside its package (see [ClientUpdates.md](ClientUpdates.md)). Den siege progress
+`TLA-Storage/LAN/`, outside its package (see [ClientUpdates.md](ClientUpdates.md)). Sierra siege progress
 resets at server start without deleting those characters. To select another persistent provider,
 enable its positive `FO_DATABASE_JSON` or `FO_DATABASE_MONGO` CMake option and reconfigure.
 Engine `2026.1.26-dev` requires new empty storage for JSON and SQLite; it does not convert their old formats.
@@ -29,7 +29,7 @@ After an Engine update, rebuild and rebake matching client/server outputs before
 | [Systems.md](Systems.md) | Durable gameplay ownership, sides, entrypoints and authored-content boundaries. Read before opening a `.fos`. |
 | [ScriptStyle.md](ScriptStyle.md) | How a `.fos` module is written: header block, comments, naming, structure. |
 | [Animation.md](Animation.md) | Baked root-motion import, sprite loading and native 2D walk-cycle alignment. |
-| [DenDefense.md](DenDefense.md) | Shared Den introduction: confirmed-login ownership, companions, randomized waves, global rest, supplies, Todd's cleanup and failure. |
+| [DenDefense.md](DenDefense.md) | Main Sierra siege: shared start/re-entry, confirmed-login ownership, companions, randomized waves, global rest, supplies, Todd's cleanup and failure. |
 | [AiControl.md](AiControl.md) | AI control bridge/MCP adapter, normal actions versus privileged QA, existing live-client diagnostics. |
 | [../Nullability.md](../Nullability.md) | Script `T?`, native `ptr<T>`/`nptr<T>`, generated GUI ownership and existing checks. |
 

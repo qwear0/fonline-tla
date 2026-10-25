@@ -90,6 +90,7 @@ EventResult GenerateWorld()
 
     Location::CreateLocation(Content::Location::replication_1, ipos(383, 230), null);
     Location::CreateLocation(Content::Location::den, ipos(475, 275), null);
+    Location::CreateLocation(Content::Location::sierra_army_depot, ipos(914, 814), null);
     Location::CreateLocation(Content::Location::klamath, ipos(375, 125), null); /*||
          Location::CreateLocation( Content::Location::den, 475, 275, null ) == null 
         ||     ||

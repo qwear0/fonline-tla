@@ -14,15 +14,15 @@ namespace DenWander
 
 bool IsYardHex(mpos hex)
 {
-    // Открытая площадка за дверью 303:147, до ограды двора; мастерская не входит.
-    return hex.x >= 299 && hex.x <= 318 && hex.y >= 148 && hex.y <= 158;
+    // Открытая площадка у грузовика перед мастерской Сьерры; дом не входит.
+    return hex.x >= 49 && hex.x <= 61 && hex.y >= 56 && hex.y <= 72;
 }
 
 bool PickGoal(Critter npc, Map map)
 {
     mpos[] candidates = {};
-    for (int x = 299; x <= 318; x++) {
-        for (int y = 148; y <= 158; y++) {
+    for (int x = 49; x <= 61; x++) {
+        for (int y = 56; y <= 72; y++) {
             mpos hex = mpos(x, y);
             if (map.IsHexesMovable(hex, npc.Multihex) && map.GetCritterOnHex(hex) == null) {
                 candidates.insertLast(hex);

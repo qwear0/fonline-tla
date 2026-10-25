@@ -12,7 +12,7 @@ See the engine's [runtime/updater contract](../Engine/Docs/en/explanation/runtim
   the base development channel key and SQLite storage. This is not a public-server profile.
   `FO_DATABASE_SQLITE` is enabled by the game build. From the standard packaged server root,
   `Server.DbStorage = DbSQLite ../../TLA-Storage/LAN` stores accounts, characters and world data
-  in `TLA-Storage/LAN/Storage.sqlite`, outside the disposable `TLA-LAN/` package. Den siege progress
+  in `TLA-Storage/LAN/Storage.sqlite`, outside the disposable `TLA-LAN/` package. Sierra siege progress
   resets at every server start; the next confirmed login starts a fresh attempt with the saved character.
   Other profiles retain their base Memory setting unless explicitly overridden.
 - `CMakeLists.txt`, package `LAN`: Windows win64 client and Linux x64 server, including

@@ -91,7 +91,7 @@ cmake --build --preset fosquad-linux --target BakeResources
 
 The base `Server.DbStorage = Memory` remains for local development, not durable online-player progress.
 The packaged `LAN` profile overrides it with SQLite in `TLA-Storage/LAN/`, outside the package; saved
-characters survive restarts while Den siege progress resets. See [ClientUpdates.md](ClientUpdates.md)
+characters survive restarts while Sierra siege progress resets. See [ClientUpdates.md](ClientUpdates.md)
 for activation and storage paths. Public production keys and deployment remain separate work.
 
 ## Verification policy after unit-suite removal

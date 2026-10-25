@@ -1,4 +1,4 @@
-// DenCleanup — Тодд убирает тела врагов после завершённых волн обороны Дэна.
+// DenCleanup — Тодд у грузовика убирает тела врагов после завершённых волн осады Сьерры.
 // SERVER: пауза после волны, подход вплотную, секунда обыска и оставшаяся добыча на земле.
 // Задание и пропущенные недоступные тела хранятся на NPC; изменяемых глобальных таблиц нет.
 // Связи: DenDefense (стадии и поколения), MercLoot (резерв тела), NpcPlanes, ItemStacks.
@@ -17,7 +17,7 @@ namespace DenCleanup
 
 Item GetSupplies(Map map)
 {
-    const mpos hex = mpos(300, 141);
+    const mpos hex = mpos(35, 60);
     Item[] crates = map.GetItemsInRadius(hex, 0, "DenDefenseSupplies".hstr());
     verify(crates.length() <= 1, "More than one Smitty supplies crate");
     // Сохранённая карта могла быть создана до добавления авторского ящика.
@@ -39,7 +39,7 @@ void StoreItems(Item[] items, Map map)
 // Переносим вещи из мастерской и двора, но не декорации, двери и чужие контейнеры.
 void StoreGroundSupplies(Map map)
 {
-    Item[] items = map.GetItemsInRadius(mpos(303, 147), 12);
+    Item[] items = map.GetItemsInRadius(mpos(40, 60), 12);
     Item[] supplies = {};
     for (int i = 0; i < items.length(); i++) {
         Item item = items[i];
@@ -71,14 +71,27 @@ void Setup(Map map)
     Critter[] inhabitants = map.GetCritters(CritterFindType::Npc);
     for (int i = 0; i < inhabitants.length(); i++) {
         Critter cr = inhabitants[i];
-        if (cr.DialogId == "den_defense_todd".hstr() || (cr.DialogId == Content::Dialog::all_alco && cr.Hex == mpos(289, 147))) {
-            verify(todd == null, "More than one Todd on Den map");
+        if (cr.DialogId == "den_defense_todd".hstr()) {
+            verify(todd == null, "More than one Todd on Sierra entrance");
             todd = cr;
         }
     }
-    verify(todd != null, "Authored Den cleaner is missing");
+    // Старые сохранённые карты не получают новых авторских NPC автоматически.
+    if (todd == null) {
+        dict<CritterProperty, any> props = {{CritterProperty::BagId, int(Bags::Empty)},
+                                            {CritterProperty::DialogId, "den_defense_todd".hstr()},
+                                            {CritterProperty::AiId, 14},
+                                            {CritterProperty::TeamId, 4}};
+        todd = map.AddCritter(Content::Critter::Loser, mpos(50, 56), HDIR_Random, props);
+    }
+    verify(todd != null, "Sierra Todd is missing");
     Init(todd, false);
     ReleaseTarget(todd);
+    mpos home = mpos(50, 56);
+    verify(todd.Hex == home || DenDefense::FindBaseSpawnHex(map, home, 3, home), "Todd truck-side home is blocked");
+    todd.TransferToMap(map, home, HDIR_Random);
+    todd.HomeMapId = map.Id;
+    todd.HomeHex = home;
     StoreGroundSupplies(map);
 }
 

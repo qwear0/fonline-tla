@@ -57,7 +57,7 @@ runs, require successful packaging, then stop it gracefully and back up complete
 the previous package. Replace the server root and launch from `TLA-LAN/TLA-Server-LAN-Linux/`, keeping
 `TLA-Storage/LAN/` and never opening it from two servers. Check SQLite restore, updater-pack loading,
 `Start server complete!`, the listening port and zero warnings/errors. Report preparation and downtime
-separately. Den siege resets; saved characters remain. This does not refresh a separate client archive.
+separately. Sierra siege resets; saved characters remain. This does not refresh a separate client archive.
 **Never run `MakePackage-LAN` against a running package: that target deletes `TLA-LAN/`.**
 
 ## Retention and cleanup

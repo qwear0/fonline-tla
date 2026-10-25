@@ -1,5 +1,5 @@
 [Comment]
-Shared Den defense: briefing and supplies, rest to start each wave, final regulator claim.
+Sierra siege: briefing and supplies, rest to start each wave, final regulator claim.
 
 [Dialog]
 Speech 1
@@ -24,7 +24,7 @@ Speech 3
 
 [Text russ]
 {Name}{}{Смитти}
-{Speech 1}{}{Деревню вашего племени уничтожили. Пятеро выживших добрались до Дэна, а за ними могут прийти другие. Я — Смитти. Моя мастерская станет вашей базой. Утром нас атакуют.}
+{Speech 1}{}{Деревню вашего племени уничтожили. Пятеро выживших добрались до базы Сьерра, а за ними могут прийти другие. Я — Смитти. Моя мастерская станет вашей базой. Утром нас атакуют.}
 {Speech 1 Answer 2}{}{Расскажи об обороне и дай припасы.}
 {Speech 1 Answer Exit}{}{Отдохнём до следующего рассвета и встретим следующую волну.}
 {Speech 1 Answer 3}{}{Мы всех остановили?}
@@ -32,14 +32,14 @@ Speech 3
 {Speech 2}{}{Я выдаю каждому участнику лом, кожаную куртку и два стимпака один раз за попытку. Четверо соплеменников уже пришли со своим оружием и пятью стимпаками у каждого — я их не экипирую. Они подчиняются только тому, кто первым привёл их сюда. Прикажи им следовать, ждать, защищать тебя или помогать в атаках. Я прикрываю только мастерскую изнутри. Между волнами можно отдохнуть до 06:00: живые восстановят силы, но погибшие спутники не вернутся и запасы не пополнятся. После отдыха начнётся следующая атака.}
 {Speech 2 Answer 1}{}{Вернёмся к обороне.}
 {Speech 2 Answer Exit}{}{Понятно.}
-{Speech 3}{}{Все три волны уничтожены. Дэн выстоял. Спасибо! Каждому защитнику причитается топливный регулятор.}
+{Speech 3}{}{Все три волны уничтожены. Сьерра выстояла. Спасибо! Каждому защитнику причитается топливный регулятор.}
 {Speech 3 Answer Exit}{}{Заберу свой регулятор.}
 {Speech 3 Answer Exit*}{}{Заберу позже.}
 {1000}{}{Оборона провалена. Выйдите и войдите снова, чтобы начать новую попытку.}
 
 [Text engl]
 {Name}{}{Smitty}
-{Speech 1}{}{Your tribe's village was destroyed. Five survivors reached the Den, and others may follow. I am Smitty. My workshop will be your base. We will be attacked in the morning.}
+{Speech 1}{}{Your tribe's village was destroyed. Five survivors reached Sierra Army Depot, and others may follow. I am Smitty. My workshop will be your base. We will be attacked in the morning.}
 {Speech 1 Answer 2}{}{Explain the defense and give me supplies.}
 {Speech 1 Answer Exit}{}{Let us rest until the next dawn and face the next wave.}
 {Speech 1 Answer 3}{}{Did we stop them all?}
@@ -47,7 +47,7 @@ Speech 3
 {Speech 2}{}{I give each participant a crowbar, a leather jacket and two stimpaks once per attempt. The four tribespeople already have their own weapons and five stimpaks each; I do not equip them. They obey only the survivor who first led them here. Tell them to follow, wait, defend you or assist your attacks. I cover only the workshop interior. You may rest between waves until 06:00: the living recover, but fallen companions stay dead and supplies are not replenished. The next attack begins after resting.}
 {Speech 2 Answer 1}{}{Back to the defense.}
 {Speech 2 Answer Exit}{}{Understood.}
-{Speech 3}{}{All three waves are defeated. The Den held. Thank you! Each defender has earned a fuel regulator.}
+{Speech 3}{}{All three waves are defeated. Sierra held. Thank you! Each defender has earned a fuel regulator.}
 {Speech 3 Answer Exit}{}{I will take my regulator.}
 {Speech 3 Answer Exit*}{}{I will claim it later.}
 {1000}{}{Defense failed. Log out and log in again to begin a new attempt.}

@@ -1,4 +1,4 @@
-// DenDefense — общий старт у Смитти и единственный владелец состояния обороны Дэна.
+// DenDefense — «Осада Сьерры»: общий старт у Смитти и единственный владелец состояния осады.
 // SERVER: подтверждённый вход, поколения попыток, участники, спутники, отдых, волны и вещи.
 // CLIENT: затемнение отдыха и блокировка действий при провале без ролика и скрытия тела.
 // Состояние хранится в свойствах Game/Critter/Map; загрузка сама по себе не начинает попытку.
@@ -69,14 +69,14 @@ void InitDenDefense()
 
 Map? GetBaseMap()
 {
-    return Game.GetMap(Content::Map::den);
+    return Game.GetMap(Content::Map::sad_enter);
 }
 
 // Свободный гекс должен иметь выход к мастерской, а не быть карманом между машинами.
 // Проверяем все кольца от центра: случайная проверка одного гекса связность не гарантирует.
 bool FindBaseSpawnHex(Map map, mpos center, int radius, mpos& hex)
 {
-    const mpos workshop = mpos(303, 144);
+    const mpos workshop = mpos(37, 60);
     for (int ring = 0; ring <= radius; ring++) {
         for (int x = int(center.x) - ring; x <= int(center.x) + ring; x++) {
             for (int y = int(center.y) - ring; y <= int(center.y) + ring; y++) {
@@ -103,7 +103,7 @@ bool PlacePlayer(Critter cr)
         return false;
     }
 
-    mpos hex = mpos(310, 150);
+    mpos hex = mpos(43, 55);
     if (!FindBaseSpawnHex(map, hex, 6, hex)) {
         return false;
     }
@@ -173,7 +173,7 @@ void OnSuccessfulLogin(Player player)
         }
         catch {
             Game.DenDefenseStage = STAGE_FAILED;
-            throw("Unable to initialize confirmed Den defense entry", cr.Id, GetExceptionInfo());
+            throw("Unable to initialize confirmed Sierra siege entry", cr.Id, GetExceptionInfo());
         }
         return;
     }
@@ -191,13 +191,13 @@ void JoinAttempt(Critter cr)
             verify(SpillLoot(cr), "Unable to spill participant inventory", cr);
         }
         // Тело могло быть занято другим живым криттером: оживаем уже на свободном гексе базы.
-        verify(PlacePlayer(cr), "Unable to return dead participant to shared Den", cr);
+        verify(PlacePlayer(cr), "Unable to return dead participant to Sierra", cr);
         CritterState::ToAlive(cr);
         cr.CurrentHp = cr.MaxLife;
         cr.CurrentAp = cr.ActionPoints * Tla::AP_DIVIDER;
     }
     else if (firstEntry || cr.MapId != Game.DenDefenseMapId) {
-        verify(PlacePlayer(cr), "Unable to place Den defense participant", cr);
+        verify(PlacePlayer(cr), "Unable to place Sierra siege participant", cr);
     }
     if (firstEntry) {
         cr.CurrentHp = cr.MaxLife;
@@ -222,7 +222,7 @@ void JoinAttempt(Critter cr)
 void StartAttempt(Critter primary)
 {
     Map? map = GetBaseMap();
-    verify(map != null, "Den base map is missing");
+    verify(map != null, "Sierra entrance map is missing");
 
     // Сначала инвалидируем предыдущих акторов; только затем запускаем вложенные события.
     Game.DenDefenseGeneration = Game.DenDefenseGeneration + 1;
@@ -264,23 +264,35 @@ void StartAttempt(Critter primary)
         }
     }
 
-    // Используем единственного авторского Смитти, не создаём копию торговца.
-    Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
-    if (smitty == null) {
-        Critter[] inhabitants = map.GetCritters(CritterFindType::Npc);
-        for (int i = 0; i < inhabitants.length(); i++) {
-            if (inhabitants[i].DialogId == Content::Dialog::den_smitty) {
-                verify(smitty == null, "More than one Smitty on shared Den map");
-                smitty = inhabitants[i];
-            }
+    // Смитти из старого Дэна остаётся в городе; ищем только обитателей входа Сьерры.
+    Critter? smitty = null;
+    Critter[] inhabitants = map.GetCritters(CritterFindType::Npc);
+    for (int i = 0; i < inhabitants.length(); i++) {
+        Critter cr = inhabitants[i];
+        if (cr.ProtoId == Content::Critter::AutoCannon) {
+            DisableTurret(cr, false);
+        }
+        else if (cr.DialogId == "den_defense_smitty".hstr() || cr.DialogId == Content::Dialog::den_smitty) {
+            verify(smitty == null, "More than one Smitty on Sierra entrance");
+            smitty = cr;
+        }
+        else if (cr.DialogId != "den_defense_todd".hstr()) {
+            DisposeActor(cr, map);
         }
     }
-
-    verify(smitty != null, "Authored Smitty is missing");
+    map.WarehouseTurretActive = false;
+    // Сохранённая карта могла появиться до добавления авторского Смитти.
+    if (smitty == null) {
+        dict<CritterProperty, any> props = {{CritterProperty::BagId, int(Bags::Empty)},
+                                            {CritterProperty::DialogId, "den_defense_smitty".hstr()},
+                                            {CritterProperty::TeamId, 4}};
+        smitty = map.AddCritter(Content::Critter::HomesteaderMale, mpos(37, 60), HDIR_Random, props);
+    }
+    verify(smitty != null, "Sierra Smitty is missing");
     Game.DenDefenseSmittyId = smitty.Id;
     SetupSmitty(smitty, map);
     DenCleanup::Setup(map);
-    Item[] doors = map.GetItemsInRadius(mpos(303, 147), 0, Content::Item::door_2361);
+    Item[] doors = map.GetItemsInRadius(mpos(40, 57), 0, Content::Item::door_2481);
     verify(doors.length() == 1, "Smitty workshop door is missing or ambiguous");
     Lockers::SwitchLocker(doors[0], true);
     JoinAttempt(primary);
@@ -300,7 +312,23 @@ void StartAttempt(Critter primary)
 
     Game.DenDefenseStage = STAGE_WAITING;
     map.StartTimeEvent(Time::Asap(), Time::Seconds(1), Controller, Game.DenDefenseGeneration);
-    Game.Log("Den defense started, generation=" + Game.DenDefenseGeneration + " primary=" + primary.Id);
+    Game.Log("Sierra siege started, generation=" + Game.DenDefenseGeneration + " primary=" + primary.Id);
+}
+
+// Турели остаются декорацией: без штатного сканирования, боевых планов и реакции на урон.
+void DisableTurret(Critter turret, bool firstTime)
+{
+    turret.StopTimeEvent(WarehouseTurret::TurretIdle);
+    turret.OnCritterAppeared.Unsubscribe(WarehouseTurret::TurretShowCritter);
+    turret.OnNpcPlaneBegin.Unsubscribe(WarehouseTurret::TurretBeginPlane);
+    turret.SetupScript(null);
+    turret.BagId = Bags::Empty;
+    turret.StopTimeEvent(NpcBags::OnCritterIdle);
+    turret.IsNoEnemyStack = true;
+    turret.IsInvulnerable = true;
+    turret.ReplicationTime = -1;
+    NpcPlanes::DropPlanes(turret);
+    EnemyStack::ClearEnemyStack(turret);
 }
 
 void SetupSmitty(Critter smitty, Map map)
@@ -346,10 +374,10 @@ void SetupSmitty(Critter smitty, Map map)
 
 void PlaceSmittyAtHome(Critter smitty, Map map)
 {
-    // Внутренняя точка мастерской за дверью 303:147, а не прежняя улица 307:148.
-    mpos hex = mpos(303, 144);
+    // Мастерская справа от грузовика; дверь находится на 40:57.
+    mpos hex = mpos(37, 60);
     if (smitty.Hex != hex && !map.IsHexMovable(hex)) {
-        const mpos[] homes = {mpos(302, 144), mpos(304, 144), mpos(301, 144), mpos(303, 143), mpos(303, 145), mpos(302, 143), mpos(304, 143)};
+        const mpos[] homes = {mpos(36, 60), mpos(38, 60), mpos(37, 59), mpos(38, 59), mpos(36, 61), mpos(37, 61), mpos(38, 61)};
         for (int i = 0; i < homes.length(); i++) {
             if (map.IsHexMovable(homes[i])) {
                 hex = homes[i];
@@ -562,7 +590,7 @@ void DisposeActor(Critter cr, Map base)
     cr.StopMoving();
     NpcPlanes::DropPlanes(cr);
     if (cr.GetMap() == null) {
-        mpos hex = mpos(310, 150);
+        mpos hex = mpos(43, 55);
         verify(Entrance::GetFreeHex(base, 6, hex), "No safe map hex for obsolete actor loot", cr);
         cr.TransferToMap(base, hex, HDIR_Random);
     }
@@ -570,18 +598,10 @@ void DisposeActor(Critter cr, Map base)
     Game.DestroyCritter(cr);
 }
 
-// Авторские внутренние гексы: стены x=298/306, y=139/147 и крыша PLK1000/2000.
-// Дверь 303:147 и прежняя уличная позиция 307:148 намеренно не включены.
+// Внутренность мастерской: стены x=32/48, y=57/69; дверь и улица не входят.
 bool IsWorkshopHex(mpos hex)
 {
-    const mpos[] inside = {mpos(299, 140), mpos(300, 140), mpos(301, 140), mpos(302, 140), mpos(303, 140), mpos(304, 140), mpos(305, 140),
-                           mpos(299, 141), mpos(300, 141), mpos(301, 141), mpos(302, 141), mpos(303, 141), mpos(304, 141), mpos(305, 141),
-                           mpos(299, 142), mpos(300, 142), mpos(301, 142), mpos(302, 142), mpos(303, 142), mpos(304, 142), mpos(305, 142),
-                           mpos(299, 143), mpos(300, 143), mpos(301, 143), mpos(302, 143), mpos(303, 143), mpos(304, 143), mpos(305, 143),
-                           mpos(299, 144), mpos(300, 144), mpos(301, 144), mpos(302, 144), mpos(303, 144), mpos(304, 144), mpos(305, 144),
-                           mpos(299, 145), mpos(300, 145), mpos(301, 145), mpos(302, 145), mpos(303, 145), mpos(304, 145), mpos(305, 145),
-                           mpos(299, 146), mpos(300, 146), mpos(301, 146), mpos(302, 146), mpos(303, 146), mpos(304, 146), mpos(305, 146)};
-    return inside.exists(hex);
+    return hex.x >= 33 && hex.x <= 47 && hex.y >= 58 && hex.y <= 68;
 }
 
 bool IsScenarioCombat(Critter first, Critter second)
@@ -795,7 +815,7 @@ void StartAfterRest(any value)
         return;
     }
     Map? map = Game.GetMap(Game.DenDefenseMapId);
-    verify(map != null, "Shared Den disappeared after rest");
+    verify(map != null, "Sierra entrance disappeared after rest");
     Game.DenDefenseStage = STAGE_FIGHTING;
     BroadcastRest(2);
     Game.DenDefenseWave = Game.DenDefenseWave + 1;
@@ -805,7 +825,7 @@ void StartAfterRest(any value)
     if (Game.DenDefenseWave == 1) {
         Game.DenDefenseSpawnTotal = 0;
         // Сохраняем 50 выходов, но каждый теперь даёт равновероятную группу из 1..3 врагов.
-        // Размер заранее выбранной группы не меняется при повторе из-за занятых домов.
+        // Размер заранее выбранной группы не меняется при повторе из-за занятой зоны выхода.
         for (int i = 0; i < 50; i++) {
             int size = Game.Random(1, 3);
             groups.insertLast(size);
@@ -816,7 +836,7 @@ void StartAfterRest(any value)
     Game.DenDefenseEnemyIds = {};
     map.StopTimeEvent(SpawnTick);
     Game.DenDefenseDawn = ZERO_SYNCTIME;
-    Game.Log("Den defense wave started, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave + " total=" + Game.DenDefenseSpawnTotal);
+    Game.Log("Sierra siege wave started, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave + " total=" + Game.DenDefenseSpawnTotal);
     // Первую группу выпускаем сразу, остальные — по таймеру карты.
     map.StopTimeEvent(Controller);
     map.StartTimeEvent(Time::Seconds(1), Time::Seconds(1), Controller, Game.DenDefenseGeneration);
@@ -827,13 +847,24 @@ void StartAfterRest(any value)
 [[Event]]
 void ResumeController()
 {
-    if (Game.GetLocation(Content::Location::den) == null) {
-        Location::CreateLocation(Content::Location::den, ipos(475, 275), null);
+    // Останавливаем также контроллер прежней базы из сохранения до смены карты.
+    Map? previous = Game.GetMap(Game.DenDefenseMapId);
+    if (previous != null) {
+        previous.StopTimeEvent(Controller);
+        previous.StopTimeEvent(SpawnTick);
+    }
+    if (Game.GetLocation(Content::Location::sierra_army_depot) == null) {
+        Location::CreateLocation(Content::Location::sierra_army_depot, ipos(914, 814), null);
     }
     Map? map = GetBaseMap();
-    verify(map != null, "Shared Den map is missing at server start");
+    verify(map != null, "Sierra entrance map is missing at server start");
     // Движок создаёт локации временными; сохраняем базу вместе с её картой и содержимым.
     map.GetLocation().MakePersistent(true);
+    map.WarehouseTurretActive = false;
+    Critter[] turrets = map.GetCritters(Content::Critter::AutoCannon, CritterFindType::Npc);
+    for (int i = 0; i < turrets.length(); i++) {
+        DisableTurret(turrets[i], false);
+    }
     map.StopTimeEvent(Controller);
     map.StopTimeEvent(SpawnTick);
     Game.StopTimeEvent(CloseRestDialogs);
@@ -855,7 +886,7 @@ void ResumeController()
     map.DenDefenseNextSpawn = ZERO_NANOTIME;
     // Сохраняем поколение и списки актёров: StartAttempt уберёт старый отряд и врагов,
     // а новое поколение отделит прежние отметки участия, выдачи припасов и наград.
-    Game.Log("Den defense reset on server start, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave);
+    Game.Log("Sierra siege reset on server start, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave);
 }
 
 [[TimeEvent]]
@@ -924,41 +955,32 @@ void SpawnTick(Map map, any value)
 void SpawnBatch()
 {
     Map? map = Game.GetMap(Game.DenDefenseMapId);
-    verify(map != null, "Shared Den disappeared during spawn");
-    // Внутренние точки прежних домов, склада под мастерской, дома у бункера и восточного дома.
-    // Занятые гексы, стены и запертые выходы отсекаем до создания NPC.
-    const mpos[] approaches = {mpos(268, 125), mpos(270, 125), mpos(272, 125), mpos(274, 125), mpos(276, 125), mpos(270, 123), mpos(268, 140), mpos(270, 140),
-                               mpos(272, 140), mpos(268, 142), mpos(270, 142), mpos(272, 142), mpos(278, 140), mpos(280, 140), mpos(282, 140), mpos(278, 142),
-                               mpos(280, 142), mpos(282, 142), mpos(316, 188), mpos(320, 188), mpos(324, 190), mpos(328, 194), mpos(318, 198), mpos(324, 202),
-                               mpos(260, 172), mpos(262, 172), mpos(264, 174), mpos(260, 176), mpos(262, 178), mpos(264, 180), mpos(242, 160), mpos(246, 160),
-                               mpos(250, 160), mpos(242, 168), mpos(246, 166), mpos(250, 166)};
+    verify(map != null, "Sierra entrance disappeared during spawn");
+    // Вся авторская зона выхода в мир, включая MultihexMesh, а не точки у её центра.
+    // Вход в подземелье sad_level1 к глобальному выходу не относится.
+    mpos[] approaches = {};
+    StaticItem[] grids = map.GetStaticItems();
+    for (int i = 0; i < grids.length(); i++) {
+        StaticItem grid = grids[i];
+        if (grid.ProtoId == Content::Item::ExitGrid && grid.Grid_ToMap.str.isEmpty()) {
+            approaches.insertLast(grid.Hex);
+            approaches.insertLast(grid.MultihexMesh);
+        }
+    }
+    verify(!approaches.isEmpty(), "Sierra global exit zone is missing");
     verify(Game.DenDefenseWave != 1 || !Game.DenDefenseSpawnGroups.isEmpty(), "Missing Den wave-1 spawn group");
     int batchSize = Game.DenDefenseWave == 1 ? Game.DenDefenseSpawnGroups[0] : (Game.DenDefenseWave == 2 ? 3 : 1);
-    verify(batchSize >= 1 && batchSize <= 3 && Game.DenDefenseSpawnTotal - Game.DenDefenseSpawned >= batchSize && approaches.length() % 6 == 0,
+    verify(batchSize >= 1 && batchSize <= 3 && Game.DenDefenseSpawnTotal - Game.DenDefenseSpawned >= batchSize,
            "Invalid Den spawn batch size");
     Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
     verify(smitty != null, "Smitty disappeared during spawn");
     mpos[] candidates = {};
-    int availableRooms = 0;
-    // Каждые шесть точек — одна комната/дом. Группе заранее нужны свободные выходы:
-    // не выпускаем половину группы и не разбрасываем её по разным зданиям.
-    for (int first = 0; first < approaches.length(); first += 6) {
-        mpos[] room = {};
-        for (int i = first; i < first + 6; i++) {
-            mpos candidate = approaches[i];
-            if (map.IsHexMovable(candidate) && map.GetCritterOnHex(candidate) == null &&
-                map.GetPathLength(candidate, smitty.Hex, 1 + smitty.Multihex, CanLeaveSpawnHouse) > 0) {
-                room.insertLast(candidate);
-            }
-        }
-        if (batchSize == 1) {
-            candidates.insertLast(room);
-        }
-        else if (room.length() >= batchSize) {
-            availableRooms++;
-            if (Game.Random(1, availableRooms) == 1) {
-                candidates = room;
-            }
+    // Всю группу создаём только при достаточном числе свободных достижимых гексов.
+    for (int i = 0; i < approaches.length(); i++) {
+        mpos candidate = approaches[i];
+        if (!candidates.exists(candidate) && map.IsHexMovable(candidate) && map.GetCritterOnHex(candidate) == null &&
+            map.GetPathLength(candidate, smitty.Hex, 1 + smitty.Multihex, CanLeaveSpawnHouse) > 0) {
+            candidates.insertLast(candidate);
         }
     }
     // Первая/третья волны: 3..9 с, вторая: 9..27 с между тройками (среднее 18 с).
@@ -969,7 +991,7 @@ void SpawnBatch()
     if (candidates.length() < batchSize) {
         Game.DenDefenseSpawnRetries = Game.DenDefenseSpawnRetries + 1;
         if (Game.DenDefenseSpawnRetries % 5 == 1) {
-            Game.Log("Den defense spawn houses occupied or unreachable, cursor=" + Game.DenDefenseSpawned + " generation=" + Game.DenDefenseGeneration);
+            Game.Log("Sierra siege exit zone occupied or unreachable, cursor=" + Game.DenDefenseSpawned + " generation=" + Game.DenDefenseGeneration);
         }
         return;
     }

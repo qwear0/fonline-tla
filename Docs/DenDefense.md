@@ -1,20 +1,25 @@
-# Shared Den defense
+# Sierra siege (Осада Сьерры)
 
 ## Scope and entrypoints
 
 Owner: [`Scripts/DenDefense.fos`](../Scripts/DenDefense.fos), server-authoritative scenario with
-client-only rest fades and failure input blocking. It uses the existing shared `den` location/map and its
-original Smitty, not a private base or a replacement city. Ordinary inhabitants and map items are not
-reset. Smitty's workshop door at `303:147` starts open and is reopened for each new attempt;
-loose supplies around the workshop move into his crate, and the original drunkard at `289:147`
-becomes Todd, the post-wave cleaner owned by [`Scripts/DenCleanup.fos`](../Scripts/DenCleanup.fos).
-Smitty's former trader/dialog behavior is intentionally replaced for this scenario.
+client-only rest fades and failure input blocking. The main shared start and re-entry resurrection
+use `sad_enter`, the entrance of `sierra_army_depot`. This replaces Den as the scenario base without
+renaming the existing `DenDefense*` properties, script owners or dialog resource IDs.
+[`Maps/sad_enter.fomap`](../Maps/sad_enter.fomap) authors Smitty at `37:60` inside the workshop
+on the right of the truck (`51:51`), Todd beside the truck at `50:56`, and supplies at `35:60`.
+Initial participant placement searches around `43:55`; companions use the same connected-hex search.
+The workshop door at `40:57` is reopened for each attempt. Its interior is `x=33..47`, `y=58..68`.
+The seven original AutoCannons stay visible but use `DenDefense::DisableTurret`: no scanning timer,
+appearance/attack-plane subscriptions or active plans, no enemy stack, and invulnerable.
+Attempt setup also disables saved turrets and removes other entrance NPCs except Smitty and Todd,
+spilling their belongings first. Map items are not purged. The old Den location is not deleted.
 
 - [`PlayerRegistration.fos`](../Scripts/PlayerRegistration.fos) calls `OnSuccessfulLogin` with the
   **returned** `Player`, after successful registration/existing-account login and outside rollback
   catches. `Main::OnPlayerEnter` can still be rejected and must not claim a run, kit or squad.
-- [`Main.fos`](../Scripts/Main.fos) creates Den in a fresh world and routes initial placement to the
-  base. `DenDefense::ResumeController` can create a missing Den in an existing world; it does not
+- [`Main.fos`](../Scripts/Main.fos) creates Sierra in a fresh world and routes initial placement to the
+  base. `DenDefense::ResumeController` creates a missing Sierra in an existing world; it does not
   regenerate that world or select a new primary on load. Every server start resets the siege
   to wave zero and marks the old attempt Failed, so the first confirmed login starts a new generation.
 - [`den_defense_smitty.fodlg`](../Dialogs/den_defense_smitty.fodlg) owns briefing, supplies, rest and
@@ -65,14 +70,17 @@ reset does not restore items lost on death.
 `Game` properties persist generation, IDs, stage, wave cursor, outstanding/history IDs and rest target/
 phase. Critter markers persist participation and once-per-generation kit/reward claims. Frame-time
 deadlines and client presentation are transient. Controller/rest/death callbacks validate generation.
-On every start, `ResumeController` explicitly makes the Den location persistent, including its map,
+On every start, `ResumeController` explicitly makes the Sierra location persistent, including its maps,
 inhabitants and items: engine-created locations are transient until opted in. Player critters are
 already explicitly persistent in `PlayerRegistration`. Other transient world locations are not opted
 in by this scenario. It then cancels the map controller and all rest callbacks, stops scenario
 actions, clears wave/spawn/rest progress and marks the attempt Failed. It retains generation and actor
 IDs for `StartAttempt` to clean up old companions/enemies on the next confirmed login; that login
 increments the generation, so prior kit/reward claims do not apply to the new attempt. No account,
-player character or ordinary town content is deleted, and the world is not regenerated.
+player character or old Den town content is deleted, and the world is not regenerated.
+A saved Den controller/spawn timer is stopped before switching bases; missing Smitty/Todd are created
+on an already-saved Sierra entrance rather than requiring world regeneration. Old scenario companions
+and wave enemies are cleaned up by ID on the next confirmed login, even if they remain on Den.
 No existing serialized identifier is removed/renamed and no migration rule/engine revision bump is added.
 The `LAN` profile uses persistent SQLite outside the package; see [ClientUpdates.md](ClientUpdates.md)
 for storage and restart instructions. Other profiles remain Memory unless overridden.
@@ -211,7 +219,7 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   remain until a safe mapped spill. Nested containers move intact; quantities use `ItemStacks`.
 - Before deleting obsolete companions/enemies, reset spills their remaining belongings. It never
   purges map items. Smitty's remaining ordinary inventory goes into his crate before re-equipping him.
-  At attempt setup, loose pickable non-container items within 12 hexes of `303:147` also move into
+  At attempt setup, loose pickable non-container items within 12 hexes of `40:60` also move into
   that crate, without copying stacks. Hidden/gag system items are not exposed. Failed moves assert
   before actor deletion.
 - Preserve ground loot, acquired rewards and living player inventories across attempts. There is no
@@ -220,11 +228,11 @@ for storage and restart instructions. Other profiles remain Memory unless overri
 
 ## Todd and post-wave cleanup
 
-Owner: `Scripts/DenCleanup.fos`; authored inputs: `Maps/den.fomap`,
+Owner: `Scripts/DenCleanup.fos`; authored inputs: `Maps/sad_enter.fomap`,
 `Items/DenDefenseSupplies.foitem`, `Dialogs/den_defense_todd.fodlg`.
 
-- The existing drunkard at `289:147`, outside Smitty's fence, is renamed Todd; no duplicate NPC is
-  created. Authored initialization and attempt setup also support an older saved Den map.
+- Todd is authored beside the truck at `50:56`. Attempt setup reuses him (or creates him on older
+  saved Sierra maps), cancels the old cleanup task and restores his truck-side home without duplication.
 - Once a wave is fully spawned and its registered enemies are all dead, Todd waits a uniformly
   selected **7–15 real seconds** before selecting a reachable current-generation wave corpse.
   He walks with ordinary door-aware NPC plans to the normal corpse-looting distance (one hex plus
@@ -241,7 +249,7 @@ Owner: `Scripts/DenCleanup.fos`; authored inputs: `Maps/den.fomap`,
   a subsequent completed wave makes remaining reachable bodies eligible again.
 - Remaining ordinary corpse items are spilled intact onto the corpse's hex before body deletion,
   through `DenDefense.SpillLoot` and `ItemStacks`; failed moves assert instead of deleting unclaimed
-  loot. Todd does not move these items into Smitty's crate. The crate at `300:141` still holds workshop
+  loot. Todd does not move these items into Smitty's crate. The crate at `35:60` still holds workshop
   supplies gathered during setup. It inherits the wooden-crate presentation with an enlarged capacity;
   old saves without it create exactly one crate on demand.
 - Server-only transient `DenCleanup*` critter properties hold target/start/deadline/generation/skips;
@@ -252,7 +260,7 @@ Owner: `Scripts/DenCleanup.fos`; authored inputs: `Maps/den.fomap`,
 A rest request persists its next 10:00 target and phase. If that morning passes during the initial fade
 or a server pause, it is reselected before the first clock advance. The target is then locked before
 calling the setter, so a resumed/partly completed rest cannot advance by an extra day. Every online
-client, even outside Den, receives phase/remaining-time state. A mid-rest entrant joins that same
+client, even outside Sierra, receives phase/remaining-time state. A mid-rest entrant joins that same
 transition; disconnect/failure/reset clears its local blackout. Both fade phases block client intent
 and authoritative server actions; black pixels are not authorization. Rest and failure also stop any
 global-map group containing an action-frozen member, regardless of its leader. `GlobalmapGroup` clears
@@ -302,7 +310,7 @@ not copied to these attackers.
 
 Each newly spawned wave-1 enemy independently has a **30%** chance to take an initial non-aggressive
 walk, owned by [`Scripts/DenWander.fos`](../Scripts/DenWander.fos). It chooses a random free, reachable
-hex on the yard in front of Smitty (`x=299..318`, `y=148..158`, outside the workshop), using the actual
+hex on the yard in front of Smitty (`x=49..61`, `y=56..72`, by the truck outside the workshop), using the actual
 NPC's door-aware path and zero stopping radius. While walking it can retaliate only against actors
 that actually attacked that NPC, including missed attacks; it does not select other defenders or
 Smitty opportunistically. Both plan admission and actual combat/damage pass through the same
@@ -326,16 +334,13 @@ clears the queue. Wave 3 still admits one enemy per batch. Both waves keep the u
 enemies at once**, with its unchanged uniform **9000–27000 real ms** delay between groups (mean
 **18000 ms**). A separate generation-guarded `SpawnTick` map timer schedules once per batch; the
 one-second combat controller does not quantize the interval. Each wave reinstalls the controller
-and replaces its spawn timer. Single-enemy batches uniformly sample all currently free/reachable
-indoor candidates. Multi-enemy batches randomly choose one eligible room/building and distinct
-free/reachable candidates inside it; every position must be available before any group member is
-created, otherwise the whole group waits for the next randomized retry. Counts and equipment still
-advance per enemy, not per batch. No existing property is renamed or removed.
-The explicit indoor sets cover the original three rooms, the warehouse
-below Smitty (`316:188` through `324:202`), the house beside the Brotherhood bunker (`260:172`
-through `264:180`) and the farther eastern house (rooms around `242:160` and `246:166`).
-Every candidate needs a route toward the workshop through openable, unlocked doors. An occupied or
-unreachable room never forces a street spawn or unlocking. If all candidates are blocked, the same
+and replaces its spawn timer. Batches uniformly sample distinct free/reachable hexes across the
+entire authored global ExitGrid, its anchor and `MultihexMesh` (`x=67..95`, `y=129..139`, tapering
+at the south end). The separate grid into `sad_level1` is excluded. Every position must be available
+before any group member is created, otherwise the whole group waits for the next randomized retry.
+Counts and equipment still advance per enemy, not per batch. No existing property is renamed or removed.
+Every candidate needs a route toward the workshop through openable, unlocked doors. Blocked exits
+never force an unrelated spawn or unlocking. If all candidates are blocked, the same
 cursor retries with another randomized delay and logs periodically;
 this is not a kill. Outside the wave-1 initial yard walk, visible reachable participants/companions
 distract attackers; otherwise they walk toward living Smitty.
@@ -346,7 +351,7 @@ plans admit those doors during path search, then interpret the engine's `HexBusy
 an opening subplan before resuming the parent task; they do not force doors open at spawn time.
 Scenario attackers do not flee because of the ordinary minimum-hit-chance heuristic.
 
-Smitty stays inside an explicit workshop hex set (door `303:147` excluded), cannot pursue or be knocked
+Smitty stays inside an explicit workshop hex set (door `40:57` excluded), cannot pursue or be knocked
 outside, and uses a model-compatible 10mm pistol. Admission **and actual attack execution** reject
 outside targets, including a target that leaves after acquisition. `Combat.ApplyDamage` checks
 `DenDefense.CanDamage` for each actual recipient before attack events or damage/status changes, so

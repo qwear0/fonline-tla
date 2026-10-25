@@ -61,10 +61,10 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | `Animation` | C/M | `InitAnimation` subscribes to critter animation events; Fallout/tactics selection; sounds only on C |
 | `ChosenActions` | S/C | Client action queue and server request handlers; reused for the one-shot autoattack approach/attack |
 | `DenAutoAttack` / `InputHandler` / `ChosenTabs` | S/C | Ctrl+A selects usable Den enemies with positive HP first, then distance; Ctrl+Shift+A repeats when AP allows, with a HUD status tab; melee-only approach, no aiming; [DenDefense.md](DenDefense.md#player-autoattack) |
-| `PlayerRegistration` | S/C | Login and registration; confirmed returned Player commits Den defense entry |
+| `PlayerRegistration` | S/C | Login and registration; confirmed returned Player commits Sierra siege entry |
 | `MercProgression` | S/C | Owner-only NPC Character/SPECIAL sheet, manual skills/perks; dialog `Show`, snapshot and server spending; [DenDefense.md](DenDefense.md) |
-| `DenDefense` | S/C | Shared Den generation/primary, companions, rest/randomized waves, loot and failure; restart resets siege, not saved characters; `OnSuccessfulLogin`, `ResumeController`, `SpawnTick`; [DenDefense.md](DenDefense.md) |
-| `DenCleanup` | S | Authored Todd at `289:147`; 7–15 s post-wave delay, corpse walk/one-second removal, leftover loot onto the ground, workshop supplies into Smitty's crate; `Init`, `Setup`, `Idle`; [DenDefense.md](DenDefense.md#todd-and-post-wave-cleanup) |
+| `DenDefense` | S/C | Main Sierra entrance start/re-entry, generation/primary, companions, rest/randomized waves, loot and failure; restart resets siege, not saved characters; `OnSuccessfulLogin`, `ResumeController`, `SpawnTick`; [DenDefense.md](DenDefense.md) |
+| `DenCleanup` | S | Authored Todd by Sierra's truck at `50:56`; 7–15 s post-wave delay, corpse walk/one-second removal, leftover loot onto the ground, workshop supplies into Smitty's crate; `Init`, `Setup`, `Idle`; [DenDefense.md](DenDefense.md#todd-and-post-wave-cleanup) |
 | `DenWander` | S | 30% of wave-1 enemies first walk to a reachable yard hex, retaliate only against their own attackers, say an arrival line and resume normal attacks; `TryStart`, `Process`, `OnAttacked`, `WalkEnd`; [DenDefense.md](DenDefense.md#combat-and-completion) |
 | `Merc` / `MercFormation` / `MercLoot` / `FavoriteItem` / `CritterAnims` | S / shared helpers | Companion ownership, leader-to-squad dialog behavior propagation (`SetBehaviorParameter`, `ROLE_LEADER`), distinct reserved Den follow positions, transient reserved-target Den loot jobs, persistent weapon readiness maintained outside combat, and weapon-animation admission; narrow Den exceptions, normal recruitment/animation policy otherwise |
 | `Replication` | S | Ordinary death/respawn/permanent-death flow; Den participants use their scenario's base resurrection instead |
@@ -150,7 +150,7 @@ baked application when resolution matters. Generated `Scripts/Content.fos` is no
 - Damage/skills/AP: `Parameters`, then `Combat` or `CritterActions`.
 - Player abilities: both sides of `ChosenActions`, then authoritative execution.
 - Place/NPC behavior: the regional module, matching dialogs/protos, then `NpcPlanes`/`Pattern*` as needed.
-- New-character shared start/Den defense: `PlayerRegistration` -> `DenDefense` and `Dialogs/den_defense_*`;
+- New-character shared start/Sierra siege: `PlayerRegistration` -> `DenDefense` and `Dialogs/den_defense_*`;
   see [DenDefense.md](DenDefense.md). Gameplay acceptance and safe runtime replacement remain user-owned.
 - Dialog-callable checks/effects: `Dialog`, then `.fodlg` consumers and localized text.
 - GUI fixes: owning `.fogui` and `GuiScreensExt`; preserve matching generated behavior as described in
