@@ -10,6 +10,11 @@ renaming the existing `DenDefense*` properties, script owners or dialog resource
 on the right of the truck (`51:51`), Todd beside the truck at `50:56`, and supplies at `35:60`.
 Initial participant placement searches around `43:55`; companions use the same connected-hex search.
 The workshop door at `40:57` is reopened for each attempt. Its interior is `x=33..47`, `y=58..68`.
+The tool board and workbench share `33:58`: their draw sublayers are respectively **1** and **2**,
+above same-depth wall segments and with the tabletop in front of the board's lower edge. Both enable
+hover highlighting and remain ordinary usable containers, retaining their authored contents. These
+are Sierra-only map overrides; `DenCleanup::SetupWorkshopContainer` reapplies them to existing saved
+instances at attempt setup, without moving/recreating furniture or removing its blocking footprint.
 The seven original AutoCannons stay visible but use `DenDefense::DisableTurret`: no scanning timer,
 appearance/attack-plane subscriptions or active plans, no enemy stack, and invulnerable.
 Attempt setup also disables saved turrets and removes other entrance NPCs except Smitty and Todd,

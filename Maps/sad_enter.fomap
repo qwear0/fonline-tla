@@ -1512,12 +1512,16 @@ Hex = 111 57
 [$Name/Item]
 $Id = 4294966581
 $Proto = workbench
+DrawOrderSubLayer = 2
 Hex = 33 58
+NoHighlight = False
 
 [$Name/Item]
 $Id = 4294966580
 $Proto = tool_board
+DrawOrderSubLayer = 1
 Hex = 33 58
+NoHighlight = False
 
 [$Name/Item]
 $Id = 4294966578
