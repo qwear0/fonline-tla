@@ -5,6 +5,6 @@ $Parent = container_wood_crate
 Container_Volume = 1000000
 
 $Text russ = "Ящик Смитти"
-$Text russ Desc = "Здесь Смитти хранит припасы, а Тодд складывает вещи убитых налётчиков."
+$Text russ Desc = "Здесь хранятся припасы Смитти и вещи, собранные в мастерской и во дворе. Их можно забрать."
 $Text engl = "Smitty's crate"
-$Text engl Desc = "Smitty keeps supplies here, and Todd stores belongings left by dead attackers."
+$Text engl Desc = "Smitty's supplies and items gathered from the workshop and yard are stored here. You can take them."

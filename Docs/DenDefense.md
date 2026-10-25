@@ -290,8 +290,13 @@ Owner: `Scripts/DenCleanup.fos`; authored inputs: `Maps/sad_enter.fomap`,
 - Remaining ordinary corpse items are spilled intact onto the corpse's hex before body deletion,
   through `DenDefense.SpillLoot` and `ItemStacks`; failed moves assert instead of deleting unclaimed
   loot. Todd does not move these items into Smitty's crate. The crate at `35:60` still holds workshop
-  supplies gathered during setup. It inherits the wooden-crate presentation with an enlarged capacity;
-  old saves without it create exactly one crate on demand.
+  supplies gathered during setup and Smitty's remaining inventory before re-equipping him. Players
+  can take these supplies normally, individually or with Take All (subject to ordinary carry-weight
+  and action checks). Setup uses `Tla::RootContainerStack()` for new placements. An empty stack filter
+  enumerates every section of the container, so individual transfers accept the same sections as the
+  displayed snapshot and Take All, including legacy numeric-`0` supplies; no save wipe or item migration
+  is needed. The crate inherits the wooden-crate presentation with an enlarged capacity; old saves
+  without it create exactly one crate on demand.
 - Server-only transient `DenCleanup*` critter properties hold target/start/deadline/generation/skips;
   no public property, RemoteCall or removal/rename migration is introduced.
 

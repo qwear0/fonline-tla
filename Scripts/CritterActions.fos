@@ -567,8 +567,9 @@ void OperateContainer(Critter cr, bool take, bool all, ident itemId, int itemCou
         if (itemCont != null) {
             if (!all) {
                 Item? item = Game.GetItem(itemId);
-                if (item == null || item.Ownership != ItemOwnership::ItemContainer || item.ContainerId != itemCont.Id || item.ContainerStack != any() ||
-                    itemCount > item.Count) {
+                // Пустой фильтр RootContainerStack показывает все секции, а не только пустую.
+                // Как и «взять всё», одиночный перенос принимает любую секцию этого контейнера.
+                if (item == null || item.Ownership != ItemOwnership::ItemContainer || item.ContainerId != itemCont.Id || itemCount > item.Count) {
                     SendContainerSnapshot(cr, transferType, itemCont, crCont);
                     return;
                 }

@@ -30,7 +30,7 @@ void StoreItems(Item[] items, Map map)
     for (int i = 0; i < items.length(); i++) {
         Item item = items[i];
         if (!item.Hidden && !item.IsGag) {
-            Item? stored = ItemStacks::MoveItem(item, item.Count, crate, 0);
+            Item? stored = ItemStacks::MoveItem(item, item.Count, crate, Tla::RootContainerStack());
             verify(stored != null && stored.Ownership == ItemOwnership::ItemContainer && stored.ContainerId == crate.Id, "Unable to store Den supplies", item);
         }
     }
