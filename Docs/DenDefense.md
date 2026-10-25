@@ -186,6 +186,13 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   `CritterActions::UseSkill` runs the normal healing path; a successful heal sets the same
   `GameTime::FirstAidTimeout` used by players and emits one random localized line from
   `Texts/Text.{russ,engl}.fotxt` (`Merc/FirstAid1..9`). No drugs are required or consumed.
+- Injured hired NPC mercenaries first try **Doctor on themselves outside combat** through
+  `Merc::TrySelfDoctor`, before First Aid, loot or following. An active battle timeout or attack plan
+  blocks Doctor; the ordinary alive/local-map, siege, busy, AP and `TimeoutSkDoctor` checks also apply.
+  `CritterActions::UseSkill` retains the normal per-injury skill rolls. Every attempt, including a failed
+  one, starts `GameTime::DoctorTimeout` and picks one localized `Merc/Doctor1..15` entry from
+  `Texts/Text.{russ,engl}.fotxt`: ten spoken lines and five emotes. First Aid remains independent and
+  can run on a later idle tick while Doctor is cooling down. No new properties or drug requirements.
 - Every companion also offers a one-shot **collect loot** order through `DenDefense::CollectLoot`.
   [`MercLoot.fos`](../Scripts/MercLoot.fos) owns target selection, reservations and collection.
   The ordinary dialog orders only that NPC; the leader starts himself immediately and the other

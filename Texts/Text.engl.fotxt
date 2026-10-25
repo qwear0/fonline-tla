@@ -1324,6 +1324,21 @@ P.S. Чузенов просьба не беспокоить.}
 {Merc}{FirstAid7}{I'll live! You, on the other hand — not likely!}
 {Merc}{FirstAid8}{Damn it! That was an expensive jacket...}
 {Merc}{FirstAid9}{A little Jet, a few bandages — and I'm back in business!}
+{Merc}{Doctor1}{Damn, listen to that crunch… Just don't pass out right now.}
+{Merc}{Doctor2}{Hang in there, pal, hang in there… Bones will knit, but nobody's putting those bastards back together.}
+{Merc}{Doctor3}{They really tied me in knots… All right, let's straighten this out.}
+{Merc}{Doctor4}{Easy now, thick thread, tough hide — it'll heal by tomorrow.}
+{Merc}{Doctor5}{Booze in the wound, the rest down the hatch. A time-tested Wasteland remedy.}
+{Merc}{Doctor6}{Fuck, that burns! Better a few minutes of pain than rotting in a ditch.}
+{Merc}{Doctor7}{Stitching myself up again… Soon there won't be any skin left, just one big scar.}
+{Merc}{Doctor8}{Scars make a man look good… But this one's too fucking deep!}
+{Merc}{Doctor9}{Once I'm patched up, I'll go find the bastard who broke my arm.}
+{Merc}{Doctor10}{Why did I ever get mixed up with those psychos?.. Oh-h, my leg…}
+{Merc}{Doctor11}{Sets a broken arm with a dull crunch}
+{Merc}{Doctor12}{Snorts and curses while digging in a wound with a knife}
+{Merc}{Doctor13}{Stitches a deep cut with coarse thread}
+{Merc}{Doctor14}{Washes a wound with eye-watering moonshine}
+{Merc}{Doctor15}{Applies a crooked splint made from a piece of rebar}
 
 {MercLoot}{Overweight1}{Ugh, I cannot carry that much.}
 {MercLoot}{Overweight2}{All right, this is too much.}

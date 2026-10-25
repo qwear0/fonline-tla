@@ -10,6 +10,7 @@
 // FavoriteItem вызывает поддержание выбранной готовности оружия вне боя.
 // MercLoot временно ведёт перемещение по разовому приказу собрать добычу.
 // При ОЖ ниже половины мерк применяет «Санитара» к себе с обычными затратами AP и кулдауном.
+// Вне боя при травмах сначала пробует «Доктора» с обычным шансом лечения и кулдауном попытки.
 // Связи: NpcPlanes (боевые/ходовые планы), GlobalmapGroupExtended (группы на
 // глобале), Entrance/Teams/CritterState/PlayerRegistration, Tla (общие enum'ы).
 namespace Merc
@@ -270,6 +271,30 @@ bool TrySelfFirstAid(Critter merc)
     return true;
 }
 
+// Травмы лечим только вне боя. Неудачная попытка тоже расходует AP и запускает кулдаун.
+bool TrySelfDoctor(Critter merc)
+{
+    if (merc.ControlledByPlayer || !merc.IsAlive() || merc.MapId == ZERO_IDENT || !Tla::IsCritterInjured(merc) ||
+        Time::IsTimeoutActive(merc.TimeoutBattle) || NpcPlanes::IsCurPlane(merc, NpcPlanes::AI_PLANE_ATTACK) ||
+        Time::IsTimeoutActive(merc.TimeoutSkDoctor) || CritterState::IsBusy(merc) || !DenDefense::CanAct(merc) ||
+        merc.CurrentAp / Tla::AP_DIVIDER < Settings.Movement.RtApCostUseSkill) {
+        return false;
+    }
+
+    CritterActions::UseSkill(merc, CritterProperty::SkillDoctor, merc.Id, ZERO_IDENT, EMPTY_HSTRING, 0, 0);
+    // Общий обработчик назначает кулдаун только игрокам; мерку нужен тот же таймаут после любой попытки.
+    merc.TimeoutSkDoctor = GameTime::DoctorTimeout(merc);
+    int line = Game.Random(1, 15);
+    TextPackKey textKey = TextPackKey(TextPackName::Text, "Merc", "Doctor" + line);
+    if (line <= 10) {
+        Messaging::Say(merc, textKey);
+    }
+    else {
+        Messaging::SayEmote(merc, textKey);
+    }
+    return true;
+}
+
 void MercIdleImpl(Critter merc)
 {
     ident masterId = merc.MercMasterId;
@@ -302,7 +327,7 @@ void MercIdleImpl(Critter merc)
         return; // погиб хозяин
     }
 
-    if (TrySelfFirstAid(merc)) {
+    if (TrySelfDoctor(merc) || TrySelfFirstAid(merc)) {
         return;
     }
 

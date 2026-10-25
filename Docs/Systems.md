@@ -109,6 +109,9 @@ reserved hex. Unchanged active walk routes are not restarted every AI tick; atta
 `MercLoot` temporarily replaces following with reserved-target collection walks; completion or explicit
 follow/wait releases the job. `Merc::TrySelfFirstAid` uses the ordinary skill/AP path below 50% HP,
 with the standard First Aid cooldown and a localized healing line; it runs before loot/follow work.
+`Merc::TrySelfDoctor` takes priority for injuries outside combat (no battle timeout or attack plan),
+using ordinary skill rolls/AP and the standard Doctor cooldown after every attempt, with a localized
+spoken line or emote. Doctor's cooldown does not block subsequent First Aid.
 See [DenDefense.md](DenDefense.md#supplies-companions-and-ground-loot).
 
 The engine handles individual item instances and never merges stacks. Use `ItemStacks::` for quantity
