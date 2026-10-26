@@ -18,7 +18,8 @@ skill rolls, cooldowns or server authority.
 1. `ChosenActions::ChosenProcess` calls `AutoFirstAid::Process()` before processing ordinary actions
    and before waiting for movement to finish. A standalone `OnLoop` subscription would not establish
    this priority: an already queued attack could otherwise run first.
-2. The mode is eligible only for its original living chosen on its original local map.
+2. The mode remains enabled for its original non-dead chosen on its original local map;
+   healing can only be queued while the chosen is alive (not knocked out).
 3. Healing requires `int64(CurrentHp) * 2 < int64(MaxLife)`, with positive `MaxLife`.
    Exactly 50% HP does **not** trigger it; odd maximum HP values are not rounded down.
 4. `SelfCare::CanUse(SkillFirstAid)` must permit queueing: valid game UI/session, no console,
@@ -44,7 +45,9 @@ the same UI/freeze/rest execution guards as manual self-care.
 
 ## Lifetime and contracts
 
-- Death/knockout, a different chosen, map unload/load or disconnection resets the mode.
+- Knockout pauses healing without disabling the mode or hiding its HUD tab. After standing up,
+  healing resumes automatically when the normal HP, AP, busy-state and cooldown checks allow it.
+- Death, a different chosen, map unload/load or disconnection resets the mode.
   Identity checks also apply immediately to HUD visibility and eligibility, before lifecycle polling.
 - Disabling stops future automatic requests. An already queued or sent ordinary self-skill may finish;
   toggling does not cancel a legitimate skill or interrupt its animation.

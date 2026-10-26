@@ -161,7 +161,8 @@ void ProcessAutomaticAttack()
     if (!AutomaticAttackEnabled) {
         return;
     }
-    if (!HasChosen || !HasCurMap || !Chosen.IsAlive() || Chosen.Id != AutomaticAttackChosenId) {
+    // Нокаут не выключает режим: CanRepeatAttack дождётся подъёма, ОД и окончания занятости.
+    if (!HasChosen || !HasCurMap || Chosen.IsDead() || Chosen.Id != AutomaticAttackChosenId) {
         StopAutomaticAttack();
         return;
     }

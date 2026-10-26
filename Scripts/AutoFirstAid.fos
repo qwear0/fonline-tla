@@ -86,7 +86,8 @@ void Clear()
 
 bool IsSameSession()
 {
-    return HasChosen && HasCurMap && Chosen.IsAlive() && Chosen.Id == Game.AutoFirstAidChosenId && CurMap.Id == Game.AutoFirstAidMapId;
+    // Нокаут лишь приостанавливает самолечение через SelfCare::CanUse; режим сбрасываем только при смерти или смене сессии.
+    return HasChosen && HasCurMap && !Chosen.IsDead() && Chosen.Id == Game.AutoFirstAidChosenId && CurMap.Id == Game.AutoFirstAidMapId;
 }
 
 void Reset()

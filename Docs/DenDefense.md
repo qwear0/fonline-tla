@@ -533,9 +533,11 @@ status tab using the same HUD presentation as Sneak. With the Game screen active
 one-shot command once enough current AP is available for the active main-hand weapon/use (including
 empty-hand attacks), calculating the cost without aiming. Every repeat selects a target anew under
 the same Den-only rules. Changing weapon/use affects the next request; the saved aiming mode is untouched.
-The mode waits while moving, busy, performing queued actions, using other screens or the console, or
-while the defense is resting/frozen. It does not reload, attack with empty/broken weapons or repeatedly
-issue unusable attacks with injured arms. Target requests are spaced by at least 500 ms; an unanswered
+The mode waits while knocked out, moving, busy, performing queued actions, using other screens or the
+console, or while the defense is resting/frozen. Knockout keeps the mode and its HUD tab enabled;
+automatic target selection and attacks resume after standing up, once AP and busy-state checks allow.
+It does not reload, attack with empty/broken weapons or repeatedly issue unusable attacks with injured
+arms. Target requests are spaced by at least 500 ms; an unanswered
 request expires after 2 seconds. Manual actions invalidate pending selection replies and take priority.
 Toggling off also cancels queued automatic attacks/approaches. Map load, disconnect, death or changing
 the controlled critter disables the mode; it is not saved in user options.
