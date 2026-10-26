@@ -2,7 +2,7 @@
 // SERVER: один бросок поведения до выбора прототипа; DenDefense вызывает Process до выбора жертвы.
 // Режим, цели, напарник и реальные сроки хранятся на NPC; общих изменяемых таблиц нет.
 // Бегуны кружат вокруг допустимого противника и отскакивают после сближения.
-// Любая роль завершается не позднее трёх реальных минут после появления NPC.
+// Любая роль завершается не позднее пяти реальных минут после появления NPC.
 // Связи: DenDefense (допуск атак и урона), MainPlanes (оружие), NpcPlanes, Messaging.
 namespace DenWander
 {
@@ -21,6 +21,8 @@ namespace DenWander
 ///@ Property Critter Server ident DenWanderPartnerId Mutable
 ///@ Property Critter Server bool DenWanderReady Mutable
 ///@ Property Critter Server bool DenWanderFleeing Mutable
+///@ Property Critter Server mpos DenWanderFleeOrigin Mutable
+///@ Property Critter Server nanotime DenWanderPauseUntil Mutable
 ///@ Property Critter Server ident DenWanderTargetId Mutable
 ///@ Property Critter Server int32 DenWanderRunPhase Mutable
 ///@ Property Critter Server int32 DenWanderRunTurn Mutable
@@ -33,7 +35,8 @@ const int RUN = 5;
 const int RUN_CIRCLE = 0;
 const int RUN_APPROACH = 1;
 const int RUN_RETREAT = 2;
-const int MAX_DISTRACTION_SECONDS = 180;
+const int MAX_DISTRACTION_SECONDS = 300;
+const int BrawlFleeRadius = 6;
 
 [[ModuleInit]]
 void Init()
@@ -100,6 +103,8 @@ void Finish(Critter npc, bool stop = true)
     npc.DenWanderPartnerId = ZERO_IDENT;
     npc.DenWanderReady = false;
     npc.DenWanderFleeing = false;
+    npc.DenWanderFleeOrigin = mpos();
+    npc.DenWanderPauseUntil = ZERO_NANOTIME;
     npc.DenWanderUntil = ZERO_NANOTIME;
     npc.DenWanderSayAt = ZERO_NANOTIME;
     npc.DenWanderRecheckAt = ZERO_NANOTIME;
@@ -110,6 +115,8 @@ void Finish(Critter npc, bool stop = true)
 
 bool CanRun(Critter npc)
 {
+    // Сценарный бег не зависит от TimeoutBattle и общего Movement.RunOnCombat:
+    // бегуны сохраняют право бегать в бою, но не обходят запрет модели и травмы в плане.
     auto type = CritterTypes::GetCritterType(npc);
     return type != null && type.CanRun && !npc.IsNoRun;
 }
@@ -136,10 +143,10 @@ int RollMode()
     if (roll <= 60) {
         return ROCKS;
     }
-    if (roll <= 70) {
+    if (roll <= 80) {
         return BRAWL;
     }
-    if (roll <= 80) {
+    if (roll <= 90) {
         return RUN;
     }
     return 0;
@@ -185,7 +192,8 @@ bool CanAttack(Critter npc, Critter target)
         return true;
     }
     if (npc.DenWanderMode == BRAWL) {
-        return IsPair(npc, target) && npc.DenWanderReady && target.DenWanderReady && !npc.DenWanderFleeing && npc.CurrentHp * 100 >= npc.MaxLife * 10;
+        return IsPair(npc, target) && npc.DenWanderReady && target.DenWanderReady && !npc.DenWanderFleeing && Game.FrameTime >= npc.DenWanderPauseUntil &&
+               npc.CurrentHp * 100 >= npc.MaxLife * 10;
     }
     if (npc.DenWanderMode == ROCKS) {
         return Game.GetDistance(npc, target) <= 1 + npc.Multihex + target.Multihex || npc.GetItem(Content::Item::rock) != null;
@@ -431,11 +439,50 @@ bool FindPartner(Critter npc, Map map)
         partner.DenWanderSayAt = ZERO_NANOTIME;
         partner.DenWanderAttackerIds = {};
         partner.DenWanderFleeing = false;
+        partner.DenWanderFleeOrigin = mpos();
+        partner.DenWanderPauseUntil = ZERO_NANOTIME;
         npc.DenWanderPartnerId = partner.Id;
         partner.DenWanderPartnerId = npc.Id;
         return true;
     }
     return false;
+}
+
+void ProcessBrawlEscape(Critter npc, Critter partner, Map map)
+{
+    if (npc.IsNoMove || CritterState::IsBusy(npc) || npc.GetMovingState() == MovingState::InProgress) {
+        return;
+    }
+    Stop(npc);
+    mpos[] candidates = {};
+    int bestDistance = -1;
+    for (int dir = 0; dir < 6; dir++) {
+        mpos hex = npc.Hex;
+        if (map.MoveHexByDir(hex, mdir(hdir(dir)), 1) != 1 || Game.GetDistance(npc.DenWanderFleeOrigin, hex) > BrawlFleeRadius || !CanStand(npc, map, hex) ||
+            map.GetPathLength(npc, hex, 0, MainPlanes::CanOpenDoor) != 1) {
+            continue;
+        }
+        int distance = Game.GetDistance(hex, partner.Hex);
+        if (distance > bestDistance) {
+            candidates = {};
+            bestDistance = distance;
+        }
+        if (distance == bestDistance) {
+            candidates.insertLast(hex);
+        }
+    }
+    if (candidates.isEmpty()) {
+        return;
+    }
+    npc.DenWanderGoal = candidates[Game.Random(0, candidates.length() - 1)];
+    bool run = CanRun(npc) && !npc.IsDamagedLeftLeg && !npc.IsDamagedRightLeg && !npc.IsOverweight;
+    if (!NpcPlanes::CheckHasEnoughAP(npc, run ? Settings.Movement.RtApCostCritterRun : Settings.Movement.RtApCostCritterWalk)) {
+        return;
+    }
+    int speed = run ? npc.WalkSpeed * 2 : npc.WalkSpeed;
+    // Ограничиваем не только конечный гекс: один соседний шаг не позволяет пути
+    // обогнуть препятствие с выходом за шестигексовый круг. Телепортации нет.
+    npc.MoveToHex(npc.DenWanderGoal, 0, ipos(0, 0), 1, speed, MainPlanes::CanOpenDoor);
 }
 
 void ProcessBrawl(Critter npc, Map map)
@@ -484,23 +531,37 @@ void ProcessBrawl(Critter npc, Map map)
     SayPeriodically(npc, "Brawl", 13);
     if (!npc.DenWanderFleeing && npc.CurrentHp * 100 < npc.MaxLife * 10) {
         npc.DenWanderFleeing = true;
+        npc.DenWanderFleeOrigin = npc.Hex;
         npc.DenWanderGoal = mpos();
-        npc.DenWanderRecheckAt = ZERO_NANOTIME;
+        npc.DenWanderPauseUntil = ZERO_NANOTIME;
+        npc.DenWanderUntil = ZERO_NANOTIME;
         Stop(npc);
     }
     if (npc.DenWanderFleeing) {
-        if (Game.FrameTime >= npc.DenWanderRecheckAt || npc.Hex == npc.DenWanderGoal) {
-            npc.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
-            if (npc.Hex == npc.DenWanderGoal || !CanStand(npc, map, npc.DenWanderGoal) || Game.GetDistance(npc.DenWanderGoal, partner.Hex) < 6) {
-                Stop(npc);
-                PickGoal(npc, map, partner);
-            }
+        ProcessBrawlEscape(npc, partner, map);
+        return;
+    }
+    if (partner.DenWanderFleeing) {
+        if (Game.FrameTime < npc.DenWanderPauseUntil) {
+            Stop(npc);
+            return;
         }
-        Walk(npc, true);
+        if (npc.DenWanderUntil == ZERO_NANOTIME) {
+            npc.DenWanderUntil = Game.FrameTime + Time::Seconds(Game.Random(5, 10));
+        }
+        else if (Game.FrameTime >= npc.DenWanderUntil) {
+            // Небольшие остановки дают раненому шанс оторваться, не прекращая драку.
+            Stop(npc);
+            npc.DenWanderPauseUntil = Game.FrameTime + Time::Seconds(Game.Random(1, 3));
+            npc.DenWanderUntil = npc.DenWanderPauseUntil + Time::Seconds(Game.Random(5, 10));
+            return;
+        }
     }
     else {
-        Attack(npc, partner, true);
+        npc.DenWanderPauseUntil = ZERO_NANOTIME;
+        npc.DenWanderUntil = ZERO_NANOTIME;
     }
+    Attack(npc, partner, true);
 }
 
 Critter? FindRockTarget(Critter npc, Map map)

@@ -428,15 +428,17 @@ at attack time. Ordinary wave-1 enemies reuse `Loser2`/`Loser` models (`nftrmp`/
 `all_narcoman` (**Наркоман / Drug addict**); rock throwers use
 [`DenDefensePsycho`](../Critters/DenDefensePsycho.focr), civilian `nmbsnp` and `den_crazy_man`
 (**Псих / Madman**). Both inherit `Loser` combat stats but override its no-run flag, movement speed
-and animation table with the selected civilian model's values. Their stock bag is 11, with AI 11.
+and animation table. The thrower's walk speed is 40; the runner's is 60, yielding run speed 120,
+above the client's `Render.RunAnimStartSpeed = 81` (the previous 40 × 2 = 80 still selected walking).
+Their stock bag is 11, with AI 11.
 Stock bags supply knives/switchblades/shivs, jet, flowers and caps; ordinary drunkards additionally
 carry beer/booze and rocks. Bags are filled once, not refreshed during combat; city quest state is
 not copied to these attackers.
 
 [`Scripts/DenWander.fos`](../Scripts/DenWander.fos) owns wave-1 distractions. One uniform roll per
 new enemy, **before prototype selection**, assigns mutually exclusive modes: **30% lost**,
-**10% object fascination**, **20% rock thrower**, **10% brawl initiator**, **10% circling runner**,
-otherwise normal siege AI. Throwers/runners always receive their animation-capable civilian
+**10% object fascination**, **20% rock thrower**, **20% brawl initiator**, **10% circling runner**,
+and **10% normal siege AI**. Throwers/runners always receive their animation-capable civilian
 prototype instead of discarding roles rolled for an incompatible model. Initialization asserts the
 required throwing/running capability. A brawl initiator can forcibly recruit an unpaired living wave
 enemy, overriding that enemy's earlier mode; these are initiation probabilities, not final population
@@ -449,8 +451,8 @@ and exact stopping position; unreachable/occupied goals are reconsidered every f
 Unavailable destinations wait without teleporting or enabling ordinary aggression. The small
 player/companion spawn yard is independent of these bounds.
 
-Every wave-1 NPC gets one absolute **180-real-second distraction deadline at spawn**, including
-ordinary attackers that may later be recruited into a brawl. Role changes, partner selection,
+Every wave-1 NPC gets one absolute **300-real-second (five-minute) distraction deadline at spawn**,
+including ordinary attackers that may later be recruited into a brawl. Role changes, partner selection,
 blocked paths, circling and rock recovery never extend it. On the first controller tick at/after
 the deadline, any active distraction drops its plans and attack/weapon restrictions; normal target
 selection resumes in that same tick, attacking a visible reachable defender or advancing on living
@@ -478,10 +480,15 @@ timers below, so no role can indefinitely park a surviving enemy near the exit.
   each other before fighting. Only this mutually linked pair bypasses same-side attack/damage
   rejection, and `MainPlanes` forces unarmed primary attacks. Each member speaks a `Brawl1..13` line
   every **30–60 real seconds** after assembly. Below **10% maximum HP**, a member stops attacking
-  and repeatedly chooses distant escape destinations; its opponent pursues, using running only
-  when supported. If both are below the threshold, both flee. Losing the partner restores normal
-  AI; an unpaired initiator waits for later batches, but gives up when spawning is finished and
-  no partner is available. Damage/HP balance and lethal-hit rules are unchanged.
+  and records its current hex as a fixed escape origin. It flees within **six hexes of that origin**,
+  choosing the reachable adjacent hex farthest from its partner. Each movement request permits only
+  one path step, so an obstacle detour cannot leave the circle; the NPC is neither removed nor
+  teleported. Movement keeps the ordinary AP/capability checks. Its opponent pursues, using running
+  only when supported, but pauses **1–3 real seconds after each 5–10 seconds of pursuit**; attacks
+  are blocked during a pause. If both are below the threshold, both flee in their own circles.
+  Losing the partner restores normal AI; an unpaired initiator waits for later batches, but gives
+  up when spawning is finished and no partner is available. Damage/HP balance and lethal-hit rules
+  are unchanged.
 - **Runner:** randomly chooses a visible reachable participant, companion or Smitty admitted by
   `DenDefense.CanSelectTarget` (the same faction/map/workshop rules as attack selection, without
   granting permission to attack). It retains that target while valid and runs successive arcs in
@@ -493,14 +500,17 @@ timers below, so no role can indefinitely park a surviving enemy near the exit.
   replanning/reselection. Destinations stay in the central field; if the inner ring is inaccessible,
   it skips that approach and continues outside, without entering melee or choosing allies/neutral
   NPCs instead. With no suitable target it waits and retries. Eligibility uses `CritterTypes.CanRun`
-  and `IsNoRun`; no missing run animation is requested. Runners do not attack while this role is
-  active; at the absolute deadline they can attack normally.
+  and `IsNoRun`; no missing run animation is requested. These scripted run plans and their immediate
+  first step do **not** consult `Movement.RunOnCombat` or the battle timeout: runners can run during
+  combat without enabling combat running globally. Leg injuries and overweight still suppress
+  running. Runners do not attack while this role is active; at the absolute deadline they can attack
+  normally.
 
 Both languages define all `DenWander` lines in `Texts/Text.{russ,engl}.fotxt`. Plan admission,
 actual attacks and damage use the same `DenDefense.CanAttack` gate, with the narrow reciprocal
-brawl-pair exception. Mode, goals, partner, runner target/phase/direction, aggressor IDs and deadlines
-are transient server-only critter properties; no public property, RemoteCall or rename/removal
-migration is added.
+brawl-pair exception. Mode, goals, partner, fixed escape origin/pursuit pause, runner target/phase/direction,
+aggressor IDs and deadlines are transient server-only critter properties; no public property, RemoteCall
+or rename/removal migration is added.
 
 The first batch is admitted when the 10:00 rest transition finishes. Wave 1 admits **2, 4 or 6 enemies
 at once**, each size equally likely: twice the previous 1–3 per group, over the same **50 batches**
