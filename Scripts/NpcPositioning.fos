@@ -1,5 +1,5 @@
 // NpcPositioning — раздельные конечные позиции NPC без запрета проходить сквозь криттеров.
-// SERVER: занятые гексы и конечные точки движения не подходят для остановки; трупы не мешают.
+// SERVER: места персонажей с ОЖ > 0 и концы их путей заняты; тела с ОЖ <= 0 не мешают.
 // В бою сначала ищет ближайшее к цели доступное кольцо, затем место ожидания рядом с ним.
 // Общего изменяемого состояния нет: резервы берутся из текущих контекстов движения.
 // Связи: NpcPlanes (маршруты), CritterActions и Combat (запрет атаки из общего гекса).
@@ -9,15 +9,20 @@ namespace NpcPositioning
 #if SERVER
 
 // Проверяем всех соседей, а не единственного GetCritterOnHex: им может оказаться сам NPC.
-bool IsCrowded(Critter npc, Map map)
+bool IsFreeHex(Critter npc, Map map, mpos hex)
 {
-    Critter[] others = map.GetCrittersInRadius(npc.Hex, npc.Multihex, CritterFindType::NonDead);
+    Critter[] others = map.GetCrittersInRadius(hex, npc.Multihex, CritterFindType::NonDead);
     for (int i = 0; i < others.length(); i++) {
-        if (others[i].Id != npc.Id) {
-            return true;
+        if (others[i].Id != npc.Id && others[i].CurrentHp > 0) {
+            return false;
         }
     }
-    return false;
+    return true;
+}
+
+bool IsCrowded(Critter npc, Map map)
+{
+    return !IsFreeHex(npc, map, npc.Hex);
 }
 
 bool CanAttack(Critter cr)
@@ -41,7 +46,7 @@ class StopPositions
         Critter[] others = map.GetCritters(CritterFindType::NonDead);
         for (int i = 0; i < others.length(); i++) {
             Critter other = others[i];
-            if (other.Id == npc.Id) {
+            if (other.Id == npc.Id || other.CurrentHp <= 0) {
                 continue;
             }
             Hexes.insertLast(other.Hex);
@@ -151,4 +156,3 @@ void SeparateIdle(Critter npc, Map map)
 #endif
 
 }
-

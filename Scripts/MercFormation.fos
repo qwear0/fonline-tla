@@ -37,7 +37,7 @@ int SpreadPenalty(Critter merc, Critter master, Critter[] peers, mpos hex, int r
 
 bool IsFreePosition(Critter merc, Map map, mpos hex)
 {
-    return hex == merc.Hex || (map.IsHexMovable(hex) && map.GetCritterOnHex(hex) == null);
+    return map.IsHexMovable(hex) && NpcPositioning::IsFreeHex(merc, map, hex);
 }
 
 // Сначала минимизируем разрыв строя, затем выбираем гекс с убывающим весом дальних колец.

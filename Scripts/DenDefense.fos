@@ -1192,6 +1192,9 @@ void ChooseTarget(Critter npc)
     if (best == null && smitty != null && smitty.IsAlive() && CanAttack(npc, smitty) && npc.IsSee(smitty)) {
         best = smitty;
     }
+    if (enemy && DenWander::TryStartIdleRole(npc, best) && DenWander::Process(npc, map)) {
+        return;
+    }
     auto plans = NpcPlanes::GetPlanes(npc);
     if (best != null) {
         if (plans != null && plans[0].Type == NpcPlanes::AI_PLANE_ATTACK && plans[0].Attack_TargId == best.Id) {

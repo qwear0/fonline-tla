@@ -445,13 +445,24 @@ carry beer/booze and rocks. Bags are filled once, not refreshed during combat; c
 not copied to these attackers.
 
 [`Scripts/DenWander.fos`](../Scripts/DenWander.fos) owns wave-1 distractions. One uniform roll per
-new enemy, **before prototype selection**, assigns mutually exclusive modes: **30% lost**,
-**10% object fascination**, **20% rock thrower**, **20% brawl initiator**, **10% circling runner**,
-and **10% normal siege AI**. Throwers/runners always receive their animation-capable civilian
+new enemy, **before prototype selection**, assigns mutually exclusive modes: **20% lost**,
+**10% object fascination**, **10% rock thrower**, **20% brawl initiator**, **10% circling runner**,
+and **30% normal siege AI**. Throwers/runners always receive their animation-capable civilian
 prototype instead of discarding roles rolled for an incompatible model. Initialization asserts the
 required throwing/running capability. A brawl initiator can forcibly recruit an unpaired living wave
 enemy, overriding that enemy's earlier mode; these are initiation probabilities, not final population
 quotas. Waves 2/3 are unchanged.
+
+An ordinary wave-1 attacker standing on the same hex for **30 real seconds**, within **three hexes
+of its selected attack target** (plus both multihex radii), receives a random unusual role. Movement,
+attacks (including misses), and successful AP-charged actions such as reloading reset the idle timer;
+changing/losing the target or leaving that range also resets it. An AI wait for a free attack position
+is still inactivity, not an action. The choice is uniform among supported modes: lost, fascinated and
+brawl, plus running/rock throwing only when the existing model supports them. The NPC is not recreated
+or reskinned. Knocked-out actors and actors already performing an unusual role are excluded. This
+fallback cannot extend the original five-minute spawn deadline or assign a role after it expires.
+`DenDefense.ChooseTarget` checks it after selecting the target; `CritterActions.ProcessAp` and
+`DenWander` movement/attack callbacks record real activity.
 
 All random destinations use the expanded central approach field (`x=49..99`, `y=33..128`): between
 the workshop and left bunker, from the outer entrance approach to the base facade, excluding the
@@ -482,8 +493,9 @@ timers below, so no role can indefinitely park a surviving enemy near the exit.
   `nmlosr` is never assigned this role. Each thrower starts with exactly **one rock**, equipped in
   the main hand. A finite **3–6 rock** ground stack is also seeded once on a reachable field hex.
   The NPC walks to pick up real ground rocks, throws them using their primary attack and recovers
-  thrown rocks through normal pickup. No inventory refill is generated during combat. Only a target
-  already adjacent permits an unarmed attack; while this role is active, without rocks it never
+  thrown rocks through normal pickup. The starting supply is seeded only once per NPC, even if an
+  idle reassignment later selects rock throwing again. No inventory refill is generated during combat.
+  Only a target already adjacent permits an unarmed attack; while this role is active, without rocks it never
   chases a distant target into melee. At the absolute deadline it rejoins the ordinary siege AI.
 - **Brawl:** both members are forced to adjacent reachable random field destinations and wait for
   each other before fighting. Only this mutually linked pair bypasses same-side attack/damage
@@ -518,8 +530,8 @@ timers below, so no role can indefinitely park a surviving enemy near the exit.
 Both languages define all `DenWander` lines in `Texts/Text.{russ,engl}.fotxt`. Plan admission,
 actual attacks and damage use the same `DenDefense.CanAttack` gate, with the narrow reciprocal
 brawl-pair exception. Mode, goals, partner, fixed escape origin/pursuit pause, runner target/phase/direction,
-aggressor IDs and deadlines are transient server-only critter properties; no public property, RemoteCall
-or rename/removal migration is added.
+aggressor IDs, idle tracking, one-time rock-supply flag and deadlines are transient server-only critter
+properties; no public property, RemoteCall or rename/removal migration is added.
 
 The first batch is admitted when the 10:00 rest transition finishes. Wave 1 admits **2, 4 or 6 enemies
 at once**, each size equally likely: twice the previous 1–3 per group, over the same **50 batches**
@@ -549,12 +561,16 @@ an opening subplan before resuming the parent task; they do not force doors open
 Scenario attackers do not flee because of the ordinary minimum-hit-chance heuristic.
 
 The shared [`NpcPositioning`](../Scripts/NpcPositioning.fos) policy lets NPCs pass through occupied
-hexes but forbids an NPC attack while its footprint overlaps another non-dead actor. `CritterActions`
-checks before spending attack AP; `Combat` also guards direct scripted attacks. When a combat plan
+hexes but forbids an NPC attack while its footprint overlaps another non-dead actor with **positive HP**.
+`CritterActions` checks before spending attack AP; `Combat` also guards direct scripted attacks. When a combat plan
 needs to approach, clear its firing line or leave an overlap, it chooses an exact reachable free
 position on the nearest available ring around its target, respecting minimum weapon distance and
-ranged line of fire. Other actors' current positions and active route endpoints reserve space;
-corpses do not. If no attack position is available, it looks for waiting space on the next eight
+ranged line of fire. Only actors with positive HP reserve current positions and active route endpoints.
+Corpses and actors down at **zero or negative HP**, NPC or player, do not reserve space or prevent
+an NPC attacking from their hex. This applies to all NPCs in the game, not only siege enemies;
+scenario walk goals, Todd's truck positions and merc formation use the same HP-aware occupancy check.
+A positive-HP knockout still reserves space; HP recovery restores the normal occupancy/overlap rules.
+If no attack position is available, it looks for waiting space on the next eight
 rings and retries with the same target. If those rings are full, an overlapping NPC also tries to
 step aside locally. A free valid firing position is retained rather than forcing every
 ranged NPC into melee. Walk plans also choose distinct endpoints; an occupied exact goal can be

@@ -1,5 +1,6 @@
 // DenWander — растерянность, залипание, камни, парные драки и бег врагов первой волны.
-// SERVER: один бросок поведения до выбора прототипа; DenDefense вызывает Process до выбора жертвы.
+// SERVER: начальный бросок до выбора прототипа; после 30 секунд простоя рядом с жертвой — новая роль.
+// DenDefense вызывает Process до выбора жертвы и проверяет простой обычного атакующего.
 // Режим, цели, напарник и реальные сроки хранятся на NPC; общих изменяемых таблиц нет.
 // Бегуны кружат вокруг допустимого противника и отскакивают после сближения.
 // Любая роль завершается не позднее пяти реальных минут после появления NPC.
@@ -26,6 +27,10 @@ namespace DenWander
 ///@ Property Critter Server ident DenWanderTargetId Mutable
 ///@ Property Critter Server int32 DenWanderRunPhase Mutable
 ///@ Property Critter Server int32 DenWanderRunTurn Mutable
+///@ Property Critter Server nanotime DenWanderIdleSince Mutable
+///@ Property Critter Server mpos DenWanderIdleHex Mutable
+///@ Property Critter Server ident DenWanderIdleTargetId Mutable
+///@ Property Critter Server bool DenWanderRockSupplySeeded Mutable
 
 const int LOST = 1;
 const int STARE = 2;
@@ -37,6 +42,8 @@ const int RUN_APPROACH = 1;
 const int RUN_RETREAT = 2;
 const int MAX_DISTRACTION_SECONDS = 300;
 const int BrawlFleeRadius = 6;
+const int IdleRoleSeconds = 30;
+const int IdleTargetDistance = 3;
 
 [[ModuleInit]]
 void Init()
@@ -53,7 +60,7 @@ bool IsYardHex(mpos hex)
 
 bool CanStand(Critter npc, Map map, mpos hex)
 {
-    return IsYardHex(hex) && map.IsHexesMovable(hex, npc.Multihex) && (map.GetCritterOnHex(hex) == null || npc.Hex == hex) &&
+    return IsYardHex(hex) && map.IsHexesMovable(hex, npc.Multihex) && NpcPositioning::IsFreeHex(npc, map, hex) &&
            (npc.Hex == hex || map.GetPathLength(npc, hex, 0, MainPlanes::CanOpenDoor) > 0);
 }
 
@@ -64,7 +71,7 @@ bool PickGoal(Critter npc, Map map, Critter? avoid = null)
     for (int x = 49; x <= 99; x++) {
         for (int y = 33; y <= 128; y++) {
             mpos hex = mpos(x, y);
-            if (hex != npc.Hex && map.IsHexesMovable(hex, npc.Multihex) && map.GetCritterOnHex(hex) == null &&
+            if (hex != npc.Hex && map.IsHexesMovable(hex, npc.Multihex) && NpcPositioning::IsFreeHex(npc, map, hex) &&
                 (avoid == null || Game.GetDistance(hex, avoid.Hex) >= escapeDistance)) {
                 candidates.insertLast(hex);
             }
@@ -91,8 +98,22 @@ void Stop(Critter npc)
     NpcPlanes::DropPlanes(npc);
 }
 
+void ResetIdle(Critter npc)
+{
+    npc.DenWanderIdleSince = ZERO_NANOTIME;
+    npc.DenWanderIdleTargetId = ZERO_IDENT;
+}
+
+void RecordAction(Critter npc)
+{
+    if (npc.DenWanderIdleSince != ZERO_NANOTIME) {
+        ResetIdle(npc);
+    }
+}
+
 void Finish(Critter npc, bool stop = true)
 {
+    ResetIdle(npc);
     if (stop) {
         Stop(npc);
     }
@@ -134,38 +155,33 @@ int RollMode()
         return 0;
     }
     int roll = Game.Random(1, 100);
-    if (roll <= 30) {
+    if (roll <= 20) {
         return LOST;
     }
-    if (roll <= 40) {
+    if (roll <= 30) {
         return STARE;
     }
-    if (roll <= 60) {
+    if (roll <= 40) {
         return ROCKS;
     }
-    if (roll <= 80) {
+    if (roll <= 60) {
         return BRAWL;
     }
-    if (roll <= 90) {
+    if (roll <= 70) {
         return RUN;
     }
     return 0;
 }
 
-void TryStart(Critter npc, int mode)
+void StartMode(Critter npc, int mode)
 {
-    if (Game.DenDefenseWave != 1) {
-        return;
-    }
     verify(mode != RUN || CanRun(npc), "Siege runner animation missing", npc);
     verify(mode != ROCKS || CanThrow(npc), "Siege rock throw animation missing", npc);
-    // Срок общий для всех ролей, включая последующее принудительное вовлечение в драку.
-    // Завершение роли и поиск напарника его не продлевают: к штурму должен вернуться каждый враг.
-    npc.DenWanderDeadline = Game.FrameTime + Time::Seconds(MAX_DISTRACTION_SECONDS);
+    ResetIdle(npc);
     npc.DenWanderMode = mode;
     npc.DenWanderActive = mode != 0;
-    npc.OnNpcPlaneEnd.Subscribe(WalkEnd);
-    if (mode == ROCKS) {
+    if (mode == ROCKS && !npc.DenWanderRockSupplySeeded) {
+        npc.DenWanderRockSupplySeeded = true;
         Map? map = npc.GetMap();
         verify(map != null, "Rock thrower spawned without map", npc);
         // Один стартовый камень в руках; дальше только конечный запас на земле.
@@ -177,6 +193,53 @@ void TryStart(Critter npc, int mode)
             npc.DenWanderGoal = mpos();
         }
     }
+}
+
+void TryStart(Critter npc, int mode)
+{
+    if (Game.DenDefenseWave != 1) {
+        return;
+    }
+    // Срок общий для начальной роли, простоя и последующего вовлечения в драку.
+    // Ни одно переназначение не продлевает пять минут с появления NPC.
+    npc.DenWanderDeadline = Game.FrameTime + Time::Seconds(MAX_DISTRACTION_SECONDS);
+    npc.OnNpcPlaneEnd.Subscribe(WalkEnd);
+    StartMode(npc, mode);
+}
+
+bool TryStartIdleRole(Critter npc, Critter? target)
+{
+    if (Game.DenDefenseWave != 1 || npc.DenWanderActive || !DenDefense::IsWaveEnemy(npc) || !npc.IsAlive() || npc.CurrentHp <= 0 || !DenDefense::CanAct(npc) ||
+        npc.DenWanderDeadline == ZERO_NANOTIME || Game.FrameTime >= npc.DenWanderDeadline || target == null ||
+        Game.GetDistance(npc, target) > IdleTargetDistance + npc.Multihex + target.Multihex) {
+        ResetIdle(npc);
+        return false;
+    }
+    // Действия со списанием AP, движение и атаки сбрасывают отсчёт явно.
+    // IsBusy не проверяем: секундное ожидание места в NpcPlanes — тоже простой,
+    // а не действие, и иначе стоящий в очереди NPC никогда не получит новую роль.
+    if (npc.DenWanderIdleSince == ZERO_NANOTIME || npc.DenWanderIdleTargetId != target.Id || npc.DenWanderIdleHex != npc.Hex) {
+        npc.DenWanderIdleSince = Game.FrameTime;
+        npc.DenWanderIdleTargetId = target.Id;
+        npc.DenWanderIdleHex = npc.Hex;
+        return false;
+    }
+    if (Game.FrameTime < npc.DenWanderIdleSince + Time::Seconds(IdleRoleSeconds)) {
+        return false;
+    }
+    // Равновероятно выбираем необычную роль, которую умеет существующая модель.
+    // Не меняем внешность, характеристики, запас здоровья или инвентарь обычного NPC.
+    int[] modes = {LOST, STARE, BRAWL};
+    if (CanThrow(npc)) {
+        modes.insertLast(ROCKS);
+    }
+    if (CanRun(npc)) {
+        modes.insertLast(RUN);
+    }
+    int mode = modes[Game.Random(0, modes.length() - 1)];
+    Finish(npc);
+    StartMode(npc, mode);
+    return true;
 }
 
 bool IsPair(Critter first, Critter second)
@@ -203,6 +266,8 @@ bool CanAttack(Critter npc, Critter target)
 
 void OnAttacked(Critter npc, Critter attacker)
 {
+    // OnCritterAttacked приходит и при промахе: стоящий стрелок не считается бездействующим.
+    RecordAction(attacker);
     if (!npc.DenWanderActive || npc.DenWanderMode != LOST || !DenDefense::IsWaveEnemy(npc) || !npc.IsAlive() || !DenDefense::CanAct(npc) ||
         npc.MapId != attacker.MapId ||
         (!DenDefense::IsParticipant(attacker) && (!DenDefense::IsActor(attacker) || attacker.DenDefenseRole == DenDefense::ROLE_ENEMY))) {
@@ -295,7 +360,7 @@ bool FindNear(Critter npc, Map map, mpos center, int radius, mpos& goal)
                 }
                 mpos hex = mpos(x, y);
                 if (Game.GetDistance(center, hex) == ring && IsYardHex(hex) && map.IsHexesMovable(hex, npc.Multihex) &&
-                    (map.GetCritterOnHex(hex) == null || npc.Hex == hex)) {
+                    NpcPositioning::IsFreeHex(npc, map, hex)) {
                     candidates.insertLast(hex);
                 }
             }
@@ -433,6 +498,7 @@ bool FindPartner(Critter npc, Map map)
             continue;
         }
         // Выбранный напарник принудительно прекращает прежнее занятие.
+        ResetIdle(partner);
         partner.DenWanderActive = true;
         partner.DenWanderMode = BRAWL;
         partner.DenWanderUntil = ZERO_NANOTIME;
@@ -777,6 +843,7 @@ void ProcessRunner(Critter npc, Map map)
 [[Event]]
 void RunnerMoved(Critter npc, mpos oldHex)
 {
+    RecordAction(npc);
     if (!npc.DenWanderActive || npc.DenWanderMode != RUN || npc.DenWanderRunPhase == RUN_RETREAT || !npc.IsAlive() || !DenDefense::CanAct(npc) ||
         Game.DenDefenseStage != DenDefense::STAGE_FIGHTING || !DenDefense::IsWaveEnemy(npc)) {
         return;

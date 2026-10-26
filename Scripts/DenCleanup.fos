@@ -117,8 +117,7 @@ bool FindTruckHex(Critter todd, Map map, bool teleport, mpos& hex)
                 continue;
             }
             mpos candidate = mpos(x, y);
-            Critter? occupant = map.GetCritterOnHex(candidate);
-            if (Game.GetDistance(center, candidate) > radius || (occupant != null && occupant.Id != todd.Id) ||
+            if (Game.GetDistance(center, candidate) > radius || !NpcPositioning::IsFreeHex(todd, map, candidate) ||
                 (!map.IsHexMovable(candidate) && todd.Hex != candidate) || map.GetPathLength(candidate, workshop, 1, DenDefense::CanLeaveSpawnHouse) == 0 ||
                 (!teleport && todd.Hex != candidate && map.GetPathLength(todd, candidate, 0, MainPlanes::CanOpenDoor) == 0)) {
                 continue;
@@ -216,8 +215,7 @@ void BeforeWave(Map map)
 void ReturnToTruck(Critter todd, Map map)
 {
     mpos hex = todd.DenCleanupReturnHex;
-    Critter? occupant = map.GetCritterOnHex(hex);
-    if (todd.DenCleanupTargetUntil == ZERO_NANOTIME || Game.FrameTime >= todd.DenCleanupTargetUntil || (occupant != null && occupant.Id != todd.Id)) {
+    if (todd.DenCleanupTargetUntil == ZERO_NANOTIME || Game.FrameTime >= todd.DenCleanupTargetUntil || !NpcPositioning::IsFreeHex(todd, map, hex)) {
         ReleaseTarget(todd);
         if (!FindTruckHex(todd, map, false, hex)) {
             return; // Несомое тело не теряется; ждём, пока освободится подход к грузовику.

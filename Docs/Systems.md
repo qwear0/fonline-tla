@@ -55,10 +55,10 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | --- | --- | --- |
 | `Combat` | S | Hit resolution, damage and effects; `CombatAttack`, `ApplyDamage` |
 | `Parameters` | S/C | Derived property getters/setters and character rules; shared server-side skill/perk spending |
-| `CritterActions` | S | Authoritative actions and AP processing |
+| `CritterActions` | S | Authoritative actions and AP processing; successful AP-charged actions reset `DenWander` idle tracking |
 | `CritterState` | S | Alive, knockout and dead transitions |
 | `NpcPlanes` / `MainPlanes` / `Pattern*` | S | NPC plan processing, weapon selection and behavior patterns; `MainPlanes` reuses a usable cached weapon but retries failed searches against current inventory/ammo/state on the next selection |
-| `NpcPositioning` | S | Distinct NPC stopping positions, including other living actors' movement endpoints; `NpcPlanes` chooses exact walk/combat destinations, `CritterActions` and `Combat` reject attacks from overlapping positions |
+| `NpcPositioning` | S | Distinct NPC stopping positions, reserving only non-dead positive-HP actors and their movement endpoints; zero/negative-HP bodies do not block stopping or attacks, globally; `NpcPlanes` chooses exact walk/combat destinations, `CritterActions` and `Combat` reject positive-HP overlaps |
 | `Animation` | C/M | `InitAnimation` subscribes to critter animation events; Fallout/tactics selection; sounds only on C |
 | `ChosenActions` | S/C | Client action queue and server request handlers; reused for autoattack, priority-preserving self-care and exact-item ground-pickup batches |
 | `SelfCare` / `AutoFirstAid` | C | Alt+F1 First Aid / Alt+F2 Doctor on self; Alt+Shift+F1 toggles automatic First Aid below 50% HP; normal queued skills/AP/cooldowns, healing before automatic attacks; [ClientControls.md](ClientControls.md), [AutoFirstAid.md](AutoFirstAid.md) |
@@ -67,7 +67,7 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | `MercProgression` | S/C | Owner-only NPC Character/SPECIAL sheet, manual skills/perks; dialog `Show`, snapshot and server spending; [DenDefense.md](DenDefense.md) |
 | `DenDefense` | S/C | Main Sierra entrance start/re-entry, generation/primary, companions, rest/randomized waves, loot and failure; restart resets siege, not saved characters; `OnSuccessfulLogin`, `ResumeController`, `SpawnTick`; [DenDefense.md](DenDefense.md) |
 | `DenCleanup` | S/C | Authored Todd by Sierra's truck at `50:56`; post-wave corpse collection, return-to-truck unloading, leftover loot/workshop supplies and persistent processed-corpse counter with client presentation; `Init`, `Setup`, `Idle`; [DenDefense.md](DenDefense.md#todd-and-post-wave-cleanup) |
-| `DenWander` | S | Wave-1 lost walks (30%), object fascination (10%), rock throwers (20%), target-circling runners with combat running and two-hex feints (10%), forced paired brawls (20% initiation, six-hex escape radius and pursuit pauses), otherwise ordinary siege AI (10%); all distractions expire 300 real seconds after spawn and return to the siege; shared central field, transient NPC state and localized barks; `TryStart`, `Process`, `CanAttack`, `ChooseWeapon`, `WalkEnd`, `RunnerMoved`; [DenDefense.md](DenDefense.md#combat-and-completion) |
+| `DenWander` | S | Wave-1 lost walks (20%), object fascination (10%), rock throwers (10%), combat-running circlers (10%), paired brawls (20% initiation, six-hex escape radius and pursuit pauses), ordinary siege AI (30%); 30 seconds idle within three hexes of the attack target assigns a random model-compatible unusual role; all distractions still expire 300 real seconds after spawn; transient NPC state and localized barks; `TryStart`, `TryStartIdleRole`, `RecordAction`, `Process`, `CanAttack`, `ChooseWeapon`, `WalkEnd`, `RunnerMoved`; [DenDefense.md](DenDefense.md#combat-and-completion) |
 | `Merc` / `MercFormation` / `MercLoot` / `MercStorage` / `FavoriteItem` / `CritterAnims` | S / shared helpers | Companion ownership, leader-to-squad dialog behavior propagation (`SetBehaviorParameter`, `ROLE_LEADER`), distinct reserved Den follow positions, transient loot collection and categorized workshop-unloading jobs (`StoreLoot`, personal reserves, immediate-engagement pause), four usable workshop containers, persistent weapon readiness maintained outside combat, and weapon-animation admission; narrow Den exceptions, normal recruitment/animation policy otherwise |
 | `Replication` | S | Ordinary death/respawn/permanent-death flow; Den participants use their scenario's base resurrection instead |
 | `TownSupply` | S | Disabled city bounty-hunter retaliation; `CallTownSupply`, pending callbacks and direct spawns are inert; legacy guards are removed |
@@ -105,15 +105,17 @@ authoritative slot moves; the engine must apply slots before raising that event.
 existing localized skill names. The tabs disappear when their synchronized-time cooldown expires.
 
 NPCs can pass through other actors, but `NpcPositioning` keeps walk/combat endpoints separate from
-non-dead actors and their active movement endpoints, accounting for both actors' multihex footprints.
+non-dead positive-HP actors and their active movement endpoints, accounting for both actors' multihex footprints.
 Combat repositioning prefers the nearest reachable free ring around the target, respecting minimum
 weapon distance and ranged line of fire. If all attack positions are unavailable, the NPC looks for
 waiting space in the next eight rings without dropping its attack target; if those are full too,
 a crowded NPC tries to separate locally. Exact walk goals retain their
 completion contract: waiting nearby is not success. Idle NPCs without a plan step out of an overlap;
 immobile or talking actors are not displaced. `CritterActions` rejects an overlapping NPC attack
-before AP expenditure; `Combat` repeats the guard for direct scripted attacks. Corpses do not reserve
-space, and player-controlled attacks and engine movement collision remain unchanged. Reservations
+before AP expenditure; `Combat` repeats the guard for direct scripted attacks. Corpses and zero/negative-HP
+actors (including knocked-out NPCs and players) do not reserve space or block NPC attacks from that hex.
+Positive-HP knockouts still reserve space, and recovered HP restores ordinary overlap handling.
+Player-controlled attacks and engine movement collision remain unchanged. Reservations
 come from movement contexts, not new persistent state. See [DenDefense.md](DenDefense.md#combat-and-completion).
 
 Merc following keeps one `MercFollow` walk plan, not a queue of historical player positions.

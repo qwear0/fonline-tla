@@ -2,6 +2,7 @@
 // списание AP (ProcessAp), подбор/выброс/перенос предметов, операции с контейнерами/бартер/кража,
 // перезарядка оружия, использование умений/предметов, атака. Сторона: SERVER.
 // Связи: Tla (AP_DIVIDER), CritterState, ItemMovement, Combat, Parameters, WeaponHelpers, Messaging, MsgStr.
+// DenWander учитывает успешное списание AP как действие, прерывающее простой врага осады.
 namespace CritterActions
 {
 
@@ -89,6 +90,7 @@ bool ProcessAp(Critter cr, int ap)
     cr.CurrentAp = (cr.CurrentAp / Tla::AP_DIVIDER - ap) * Tla::AP_DIVIDER;
     cr.ApRegenerationTick = Game.FrameTime + Time::Milliseconds(Settings.Movement.Breaktime);
     CritterState::Wait(cr, Settings.Movement.Breaktime);
+    DenWander::RecordAction(cr);
 
     return true;
 }
@@ -1082,4 +1084,3 @@ void UseItemOn(Critter cr, ident usedItemId, ident targetCrId, ident targetItemI
 #endif
 
 }
-
