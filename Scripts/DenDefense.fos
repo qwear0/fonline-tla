@@ -1077,6 +1077,8 @@ void SpawnEnemy(Map map, mpos hex)
                                         {CritterProperty::DenDefenseBrother, brother},
                                         {CritterProperty::TeamId, int(Teams::Mob0)}};
     Critter enemy = map.AddCritter(proto, hex, HDIR_Random, props);
+    // Все враги волн — люди: категория убийства не зависит от полноты общего прототипа.
+    enemy.BodyType = enemy.Gender == GenderType::Female ? BodyTypes::Women : BodyTypes::Men;
     // Удвоенный пул опыта только для врагов осады, без изменения общих прототипов.
     enemy.KillExperience *= 2;
     // Первая волна: ещё вдвое меньше прежних 50%; остальные волны без изменений.
@@ -1330,12 +1332,13 @@ void ConfirmEnemyDeath(Critter cr)
     if (index >= 0) {
         enemies.removeAt(index);
         Game.DenDefenseEnemyIds = enemies;
-        ShareKillExperience(cr);
+        ShareKillRewards(cr);
     }
 }
 
-// Пул за смерть врага выдаём один раз, независимо от добившего, включая Смитти и среду.
-void ShareKillExperience(Critter enemy)
+// Подтверждённая смерть один раз пополняет «Убито» защитников и делит опыт,
+// независимо от добившего, включая Смитти и среду. Старые NPC также считаются по полу.
+void ShareKillRewards(Critter enemy)
 {
     auto ids = Game.DenDefenseParticipantIds.clone();
     ids.insertLast(Game.DenDefenseCompanionIds);
@@ -1344,6 +1347,11 @@ void ShareKillExperience(Critter enemy)
         Critter? cr = Game.GetCritter(ids[i]);
         if (cr != null && (IsParticipant(cr) || IsCompanion(cr)) && !cr.IsDead() && cr.MapId == enemy.MapId) {
             recipients.insertLast(cr);
+            int[] kills = cr.Kills.clone();
+            kills.resize(Tla::MaxBodyTypes);
+            int bodyType = enemy.Gender == GenderType::Female ? BodyTypes::Women : BodyTypes::Men;
+            kills[bodyType] += 1;
+            cr.Kills = kills;
         }
     }
     if (recipients.isEmpty() || enemy.KillExperience <= 0) {

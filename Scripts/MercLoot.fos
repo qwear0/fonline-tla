@@ -16,7 +16,7 @@ namespace MercLoot
 ///@ Property Critter Server nanotime MercLootTargetUntil Mutable
 ///@ Property Critter Server ident[] MercLootSkippedIds Mutable
 
-const int RADIUS = 10;
+const int RADIUS = 20;
 const int START_INTERVAL_SECONDS = 2;
 const int TARGET_TIMEOUT_SECONDS = 30;
 

@@ -2055,11 +2055,9 @@ void ApplyDamage(AttackStruct attack, Critter target, int rounds, bool isCritica
             EnemyStack::EraseEnemyFromStack(attacker, target.Id);
         }
 
-        if (attacker != null) {
-            // Опыт за врага волны делится в DenDefense после подтверждения его смерти.
-            if (!DenDefense::IsWaveEnemy(target)) {
-                attacker.Experience += target.KillExperience;
-            }
+        // Опыт и «Убито» за врага волны выдаёт DenDefense после подтверждения смерти.
+        if (attacker != null && !DenDefense::IsWaveEnemy(target)) {
+            attacker.Experience += target.KillExperience;
             if (bt < attacker.Kills.length()) {
                 int[] kills = attacker.Kills.clone();
                 kills[bt] += 1;

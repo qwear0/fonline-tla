@@ -144,16 +144,23 @@ for storage and restart instructions. Other profiles remain Memory unless overri
   [`Merc.fos`](../Scripts/Merc.fos) retains ownership through death and exempts these companions from
   ordinary dismissal/expiry. Scenario-only Charisma counting in `Merc`/`GlobalmapGroup` does not enlarge
   vehicle seating or exempt unrelated recruits.
-- **Wave kill XP is shared**, not awarded to the last hitter. `Combat` suppresses its ordinary
-  killer-only award for current-generation wave enemies; `ConfirmEnemyDeath` removes a registered
-  enemy and distributes its `KillExperience` once. `SpawnEnemy` doubles that pool for every siege
-  enemy, including the brothers, without changing shared prototypes or unrelated enemies.
+- **Wave kill XP and kill statistics are shared**, not awarded only to the last hitter. `Combat`
+  suppresses its ordinary killer-only XP/statistics awards for current-generation wave enemies;
+  `ConfirmEnemyDeath` removes a registered enemy and `ShareKillRewards` credits each eligible
+  defender's Kills list once and distributes the enemy's `KillExperience` once. Wave enemies use
+  the Men/Women body categories according to Gender; confirmed-death accounting also categorizes
+  older saved enemies by Gender, without changing shared prototypes. `SpawnEnemy` doubles that
+  pool for every siege enemy, including the brothers, without changing shared prototypes or unrelated enemies.
   Every non-dead participant and scenario companion
   on that map gets an equal base share, including knocked-out defenders, regardless of damage dealt
   or whether a player, companion, Smitty or the environment finished the enemy. Integer remainder
   points go to randomly rotated recipients; sharing does not further multiply or discard the pool. More
   eligible defenders means less XP each. Dead/off-map actors and Smitty do not take a share. Ordinary
   experience setters, level-ups and personal XP perks still apply; unrelated kills are unchanged.
+  Every eligible defender receives one kill entry (not a fractional share), including when a
+  companion, Smitty or the environment finishes the enemy. Statistics do not depend on positive XP;
+  dead/off-map defenders are excluded by the same eligibility rule as XP. The old direct last-hitter
+  entry is suppressed to avoid double credit. Existing historical counters are not reconstructed.
 - The primary can press **Barter** in a living companion's dialog to transfer items freely in either
   direction, without payment or a matching offer. `Barter` sends inventory and equipped belongings,
   excluding hidden, gag and bad items; server checks retain item ownership/counts, distance, session,
@@ -235,7 +242,7 @@ for storage and restart instructions. Other profiles remain Memory unless overri
 - Every companion also offers a one-shot **collect loot** order through `DenDefense::CollectLoot`.
   [`MercLoot.fos`](../Scripts/MercLoot.fos) owns target selection, reservations and collection.
   The ordinary dialog orders only that NPC; the leader starts himself immediately and the other
-  living owned mercenaries on this map at two-second intervals. The ten-hex search radius is fixed
+  living owned mercenaries on this map at two-second intervals. The twenty-hex search radius is fixed
   around the speaker's position at command time (shared by the leader's batch, not a drifting radius).
   Eligible targets are current-generation wave corpses and loose pickable map items; no living NPC,
   player/companion corpse, hidden/gag or no-loot item is harvested. Containers are carried intact.
@@ -312,7 +319,7 @@ Owner: `Scripts/DenCleanup.fos` (server cleanup and client truck label); authore
 `Maps/sad_enter.fomap`, `Items/DenDefenseSupplies.foitem`, `Dialogs/den_defense_todd.fodlg`
 and `Texts/Text.{russ,engl}.fotxt`.
 
-- Todd is authored at `50:56`, behind the truck (`51:51`). Attempt setup reuses him (or creates him
+- Todd is authored at `50:56`, beside the truck (`51:51`). Attempt setup reuses him (or creates him
   on older saved Sierra maps) and cancels his old walk without duplicating the NPC. Setup and each
   confirmed wave start uniformly choose an available hex within **hex distance 3 of the original
   `50:56`**, with a route to the workshop, and teleport him there with a random direction. This is
@@ -324,9 +331,11 @@ and `Texts/Text.{russ,engl}.fotxt`.
   bodies are excluded. Ordinary collection respects `MercLoot` reservations both at selection and
   immediately before removal.
 - Todd walks with ordinary door-aware NPC plans to corpse-looting distance (one hex plus both
-  multihex radii), faces the body and removes it immediately. He then walks back behind the truck,
-  preferably to `50:56`, otherwise to a reachable available hex within three hexes. At the exact
-  unloading hex he faces the truck and waits **one real second**, credits one body to the truck,
+  multihex radii), faces the body and removes it immediately. He then walks to the western rear
+  of the `TRUCK2.FRM` sprite, preferably to `56:48`, otherwise to a reachable available hex within
+  **one hex of `56:48`**. This unloading area is separate from his wider waiting area at `50:56`;
+  a blocked rear approach does not send him to the cab or the opposite side. At the exact
+  unloading hex he faces into the truck and waits **one real second**, credits one body to the truck,
   then may select the next corpse. His `nmlosr` model has no pickup/use frames, so the pause retains
   his standing sprite. A blocked return is retried without losing the carried body; it never
   teleports during ordinary collection.
