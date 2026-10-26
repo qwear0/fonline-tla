@@ -8,7 +8,9 @@ use `sad_enter`, the entrance of `sierra_army_depot`. This replaces Den as the s
 renaming the existing `DenDefense*` properties, script owners or dialog resource IDs.
 [`Maps/sad_enter.fomap`](../Maps/sad_enter.fomap) authors Smitty at `37:60` inside the workshop
 on the right of the truck (`51:51`), Todd beside the truck at `50:56`, and supplies at `35:60`.
-Initial participant placement searches around `43:55`; companions use the same connected-hex search.
+Initial participant placement searches around `55:64`; companions use the same connected-hex search
+near the player. Both stay in the outdoor `DenWander` yard (`x=49..61`, `y=56..72`), the destination
+of the first-wave enemies that randomly wander before attacking.
 The workshop door at `40:57` is reopened for each attempt. Its interior is `x=33..47`, `y=58..68`.
 The two visible workshop pairs are four named usable containers: screen-left melee/self-use supplies
 and screen-right ranged weapons/ammunition/other loot. Left is map `35:59`, right `33:59` (increasing
@@ -99,9 +101,10 @@ for storage and restart instructions. Other profiles remain Memory unless overri
 - Briefing gives each participant **one crowbar, one leather jacket and two stimpaks once per generation**. Joining alone
   does not grant them. Any briefed participant may request eligible rest; every participant may claim
   their final reward. Only the primary may issue follow/wait/defend/assist orders.
-- Participant and companion placement searches nearby hex rings, rejects occupied hexes and requires
-  a route to the workshop through openable unlocked doors. A locally free pocket between cars is not
-  a valid spawn; failure to find a connected hex aborts placement instead of trapping an actor.
+- Participant and companion placement searches nearby hex rings within the outdoor `DenWander` yard,
+  rejects occupied hexes and requires a route to the workshop through openable unlocked doors.
+  A locally free pocket between cars is not a valid spawn; failure to find a connected hex aborts
+  placement instead of trapping an actor.
 - The four-person squad has exactly one leader (the first companion), using
   [`Critters/DenDefenseLeader.focr`](../Critters/DenDefenseLeader.focr), inheriting the ordinary
   companion's stats, long-haired leather-jacket model `hmlmax`, and starting sledgehammer.
@@ -352,8 +355,13 @@ and `Texts/Text.{russ,engl}.fotxt`.
   without it create exactly one crate on demand.
 - `Map.DenCleanupCorpseCount` is **Common, PublicSync, Persistent int64**. The CLIENT branch draws
   `DenCleanup/TruckCorpses` above the truck on every interface frame: **“В грузовике X трупов”** /
-  **“Bodies in the truck: X”**, including zero. It is independent of NPC names, speech expiry and
-  `MapText`; map entry/reconnect and count changes use ordinary property synchronization.
+  **“Bodies in the truck: X”**, including zero. The above-truck anchor is calibrated to the original
+  label position at the client's displayed **60%** zoom (`SpritesZoom = 100 / 60`), then lowered by
+  78 map pixels (about 1.3 standing human sprite heights). The entire vertical offset is converted
+  from map to screen coordinates with the current `Map.SpritesZoom`, not just the added lowering;
+  changing Z+scroll therefore preserves its map-relative position. Text size remains unchanged.
+  It is independent of NPC names, speech expiry and `MapText`; map entry/reconnect and count changes
+  use ordinary property synchronization.
   `Map.DenCleanupCarrying` is server-only Persistent and denotes exactly one already removed body
   awaiting unloading. `DeliverCarried` clears it when credited, including on attempt setup and
   server-start reset; the cumulative count itself is never reset by a new wave or generation.

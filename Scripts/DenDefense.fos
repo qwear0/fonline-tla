@@ -74,7 +74,7 @@ Map? GetBaseMap()
     return Game.GetMap(Content::Map::sad_enter);
 }
 
-// Свободный гекс должен иметь выход к мастерской, а не быть карманом между машинами.
+// Спавн — на площадке DenWander перед домом, с выходом к мастерской, не в кармане между машинами.
 // Проверяем все кольца от центра: случайная проверка одного гекса связность не гарантирует.
 bool FindBaseSpawnHex(Map map, mpos center, int radius, mpos& hex)
 {
@@ -86,7 +86,7 @@ bool FindBaseSpawnHex(Map map, mpos center, int radius, mpos& hex)
                     continue;
                 }
                 mpos candidate = mpos(x, y);
-                if (Game.GetDistance(center, candidate) == ring && map.IsHexMovable(candidate) && map.GetCritterOnHex(candidate) == null &&
+                if (DenWander::IsYardHex(candidate) && Game.GetDistance(center, candidate) == ring && map.IsHexMovable(candidate) && map.GetCritterOnHex(candidate) == null &&
                     (Game.GetDistance(candidate, workshop) <= 1 || map.GetPathLength(candidate, workshop, 1, CanLeaveSpawnHouse) > 0)) {
                     hex = candidate;
                     return true;
@@ -105,7 +105,7 @@ bool PlacePlayer(Critter cr)
         return false;
     }
 
-    mpos hex = mpos(43, 55);
+    mpos hex = mpos(55, 64);
     if (!FindBaseSpawnHex(map, hex, 6, hex)) {
         return false;
     }
