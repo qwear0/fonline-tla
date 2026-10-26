@@ -375,12 +375,15 @@ bool PairGoals(Critter npc, Critter partner, Map map)
             Stop(npc);
             Stop(partner);
             partner.DenWanderGoal = other;
-            npc.DenWanderReady = partner.DenWanderReady = false;
-            npc.DenWanderRecheckAt = partner.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
+            partner.DenWanderReady = false;
+            npc.DenWanderReady = false;
+            partner.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
+            npc.DenWanderRecheckAt = partner.DenWanderRecheckAt;
             return true;
         }
     }
-    npc.DenWanderGoal = partner.DenWanderGoal = mpos();
+    partner.DenWanderGoal = mpos();
+    npc.DenWanderGoal = mpos();
     return false;
 }
 
@@ -441,7 +444,8 @@ void ProcessBrawl(Critter npc, Map map)
             if ((!CanStand(npc, map, npc.DenWanderGoal) || !CanStand(partner, map, partner.DenWanderGoal)) && !PairGoals(npc, partner, map)) {
                 Stop(npc);
                 Stop(partner);
-                npc.DenWanderReady = partner.DenWanderReady = false;
+                partner.DenWanderReady = false;
+                npc.DenWanderReady = false;
                 partner.DenWanderRecheckAt = npc.DenWanderRecheckAt;
             }
         }
