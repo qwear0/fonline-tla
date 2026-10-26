@@ -697,7 +697,7 @@ void OperateContainer(Critter cr, bool take, bool all, ident itemId, int itemCou
         }
     }
 
-    // AP списываются authoritative на сервере. Клиент повторяет списание только для плавного UI.
+    // AP окончательно списываются на сервере. Клиент повторяет списание только для плавного интерфейса.
     if (!ProcessAp(cr, Settings.Movement.RtApCostMoveItemContainer)) {
         SendContainerSnapshot(cr, transferType, itemCont, crCont);
         return;
@@ -835,11 +835,11 @@ void ReloadWeapon(Critter cr, ident weaponId, ident ammoId)
 
 // Атака цели оружием. mode упаковывает режим использования (младшие 4 бита) и зону прицеливания
 // (старшие биты). Проверяет руки/двуручность, прицел, дистанцию и трассу до цели, наличие патрона,
-// взводит таймаут агрессора и передаёт удар в Combat::CombatAttack.
+// взводит таймаут агрессора и передаёт удар в Combat::CombatAttack. NPC с общего гекса не атакует и AP не тратит.
 void Attack(Critter cr, ident targetId, int mode)
 {
     Critter? target = Game.GetCritter(targetId);
-    if (target != null && !DenDefense::CanAttack(cr, target)) {
+    if (!NpcPositioning::CanAttack(cr) || (target != null && !DenDefense::CanAttack(cr, target))) {
         return;
     }
 
@@ -1033,8 +1033,8 @@ void UseItemOn(Critter cr, ident usedItemId, ident targetCrId, ident targetItemI
                 throw("Target critter not found in global group", cr, targetCrId);
             }
         }
-        // Self-use в контракте OnCritterUseItemOn представлен пустыми target handles.
-        // selfTarget уже вычислен выше для capability/timer-проверок.
+        // Применение на себя в контракте OnCritterUseItemOn представлено пустыми ссылками на цели.
+        // selfTarget уже вычислен выше для проверки разрешений и таймера.
     }
     else if (targetItemId != ZERO_IDENT || sceneryPid != EMPTY_HSTRING) {
         Map? map = cr.GetMap();
@@ -1082,3 +1082,4 @@ void UseItemOn(Critter cr, ident usedItemId, ident targetCrId, ident targetItemI
 #endif
 
 }
+

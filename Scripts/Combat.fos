@@ -1,7 +1,7 @@
 // Combat — серверная механика боя: расчёт попадания, урона, критов и рассылка результатов клиентам.
 // Отвечает за проведение атак (CombatAttack), применение урона (ApplyDamage/InjureCritter), критические промахи, взрывы (CommenceExplosion), прицельные выстрелы, очереди и выбор случайной цели.
 // Только сторона SERVER; результаты боя собираются в дерево CombatRes и отправляются игрокам через PlayerClientCall.CombatResult.
-// DenDefense задаёт ослабление рукопашного урона и общий опыт за смерть врагов своих волн.
+// DenDefense задаёт ослабление рукопашного урона и общий опыт за смерть врагов своих волн; NpcPositioning запрещает NPC атаковать с общего гекса.
 namespace Combat
 {
 
@@ -175,7 +175,7 @@ class AttackStruct
 
 void CombatAttack(Critter cr, Critter target, AbstractItem weapon, int weaponMode, ProtoItem? ammo)
 {
-    if (!cr.IsAlive() || !DenDefense::CanAttack(cr, target)) {
+    if (!cr.IsAlive() || !DenDefense::CanAttack(cr, target) || !NpcPositioning::CanAttack(cr)) {
         return;
     }
 
@@ -297,7 +297,7 @@ void CombatAttack(Critter cr, Critter target, AbstractItem weapon, int weaponMod
     }
 
     if (cr.PerkVampireAccuracy != 0 && GameTime::IsNight(GameTime::GetHour())) {
-        baseToHit += 13; // Quest pe
+        baseToHit += 13; // Квестовый бонус восприятия
     }
 
     if (!isUnarmed) {
@@ -1566,7 +1566,7 @@ void CombatAttack(Critter cr, Critter target, AbstractItem weapon, int weaponMod
             AiSettings::TrySayCombatText(target, CombatText::Miss);
         }
 
-        target.Action(CritterAction::Dodge, 0, null); // Todo: тип спереди/сзади
+        target.Action(CritterAction::Dodge, 0, null); // TODO: тип спереди/сзади
     }
 
     return;
@@ -1823,7 +1823,7 @@ void ApplyDamage(AttackStruct attack, Critter target, int rounds, bool isCritica
 
                 if (!target.ControlledByPlayer) {
                     NpcPlanes::NpcPlane plane = NpcPlanes::CreatePlane();
-                    NpcPlanes::NpcPlane[] crPlanes = {}; // array<NpcPlanes::NpcPlane>( 0 );
+                    NpcPlanes::NpcPlane[] crPlanes = {}; // Изначально пустой список планов.
 
                     if (NpcPlanes::GetPlanes(target, crPlanes) > 0) {
                         plane.Priority = crPlanes[0].Priority + 1;
@@ -2236,7 +2236,7 @@ void ApplyDamage(AttackStruct attack, Critter target, int rounds, bool isCritica
     }
 
     if (isCritical) {
-        sendEff[now] = extraMessage + 1500; // men_player - men_npc
+        sendEff[now] = extraMessage + 1500; // Разница между сообщениями об игроке и NPC.
     }
 
     AddEff(target, sendEff, results);
@@ -2925,7 +2925,7 @@ void NotifyOops(Critter cr, Critter t1, Critter? t2, CombatRes[] results)
     else {
         any[] allEff = {MessageSpecifications::Oops, t1.Id, t2.Id};
         Critter[] crits = t1.GetCritters(CritterSeeType::WhoSeeMe, CritterFindType::Players);
-        // Todo: добавить существ которые видят t2 и сделать массив уникальным
+        // TODO: добавить существ, которые видят t2, и сделать массив уникальным.
         for (int i = 0; i < crits.length(); i++) {
             AddEff(crits[i], allEff, results);
         }
@@ -3239,3 +3239,4 @@ const int[] CriticalFailureTable =
 #endif
 
 }
+

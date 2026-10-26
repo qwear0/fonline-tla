@@ -1,6 +1,6 @@
 // NpcPlanes — серверная система AI-планов NPC: приоритетная очередь поведенческих задач (misc/attack/walk/pick; патруль и курьер — в разработке).
 // Тайм-эвент OnCritterIdle сначала проверяет боевое самолечение Merc до занятости, затем вызывает ProcessAi: движение, атаки, подбор, скрипты и смена планов.
-// Планы хранятся в AllNpcPlanes в памяти сервера; порождает события OnNpcPlaneBegin/End/Run. Опирается на EnemyStack, CritterState, Messaging, Dialogs, LineTracer. Только сторона SERVER.
+// Планы хранятся в AllNpcPlanes в памяти сервера; порождает события OnNpcPlaneBegin/End/Run. Опирается на EnemyStack, CritterState, NpcPositioning, Messaging, Dialogs, LineTracer. Только сторона SERVER.
 // AllNpcPlanes и счётчик id глобальны: очередь должна быть общей для вложенных событий всех NPC.
 namespace NpcPlanes
 {
@@ -169,12 +169,20 @@ int ProcessAi(Critter npc)
             }
         }
 
-        // Идти домой
+        // Сначала освобождаем общий гекс; без плана уже идущий NPC не меняет маршрут.
+        NpcPositioning::SeparateIdle(npc, map);
+        if (GetCurPlane(npc) != null || npc.GetMovingState() == MovingState::InProgress) {
+            return 0;
+        }
+
+        // Идти домой. Если точка занята, остаёмся на ближайшей свободной позиции,
+        // а не ходим бесконечно между домашним гексом и соседом.
         if (!npc.IsNoHome && map.Id == npc.HomeMapId && (npc.Hex != npc.HomeHex)) {
             if (!npc.IsNoMove) {
-                // Домашнее направление, а не переключатель 0/1: соседние ветки и остальные
-                // производители плана «идти домой» используют именно npc.HomeDir
-                AddWalkPlane(npc, 0, 0, 0, npc.HomeHex, mdir(hdir(npc.HomeDir)), false, 0, REASON_GO_HOME);
+                mpos home;
+                if (NpcPositioning::FindWalkStop(npc, map, npc.HomeHex, 0, home) && home != npc.Hex) {
+                    AddWalkPlane(npc, 0, 0, 0, home, mdir(hdir(npc.HomeDir)), false, 0, REASON_GO_HOME);
+                }
             }
             else if (map.IsHexesMovable(npc.HomeHex, npc.Multihex)) {
                 npc.TransferToMap(map, npc.HomeHex, hdir(npc.HomeDir));
@@ -325,6 +333,8 @@ int ProcessAi(Critter npc)
 
                 // Движется
                 if (npc.GetMovingState() == MovingState::InProgress) {
+                    plane.IsMove = true;
+                    SavePlan(npc, plane);
                     return 1000;
                 }
 
@@ -426,8 +436,7 @@ int ProcessAi(Critter npc)
                 }
 
                 /* Шаг 2: движение к цели                                               */
-                bool is_can_walk = !npc.IsNoMove;
-                int bestDist = 0, min_dist = 0, maxDist = 0;
+                int min_dist = 0, maxDist = 0;
                 r0 = targ.Id;
                 r1 = 0;
                 r2 = 0;
@@ -440,7 +449,6 @@ int ProcessAi(Critter npc)
                     break; // Проверка плана
                 }
 
-                bestDist = r0;
                 min_dist = r1;
                 maxDist = r2;
 
@@ -466,75 +474,33 @@ int ProcessAi(Critter npc)
                     min_dist = maxDist;
                 }
 
-                bestDist = Math::Clamp(bestDist, min_dist, maxDist);
                 int actualDist = Game.GetDistance(npc.Hex, targ.Hex);
-
-                if (actualDist > maxDist) {
-                    if (!npc.IsNoMove) {
-                        plane.IsMove = true;
-                        SavePlan(npc, plane);
-                        npc.MoveToHex(targ.Hex, bestDist, plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, MainPlanes::CanOpenDoor);
-                        break;
-                    }
-
-                    NextPlane(npc, REASON_CANT_WALK);
-                    break;
-                }
-
-                // Найти позицию получше
-                mpos hex = npc.Hex;
-                mpos targetHex = targ.Hex;
-                mpos resHex = targetHex;
-
                 bool is_range = (maxDist > 2);
-                if (is_range && !npc.IsNoMove) {
-                    // Проверка достижимости цели
-                    auto tracer = AttackCritterTracer(targ);
-                    LineTracer::LineTracerHex(map, hex, targetHex, maxDist, tracer);
-                    if (!tracer.Success) {
-                        bool repositioned = false;
-                        float angleDir = (Game.Random(0, 1) == 0 ? 1 : -1);
-                        for (int i = 0; i < 17; i++) {
-                            float angle = 20.0 * float(i / 2 + 1) * (i % 2 == 0 ? angleDir : -angleDir);
-                            mpos thex = hex;
-                            map.GetWallHexInPath(targetHex, thex, angle, bestDist);
-                            int dist = Game.GetDistance(targetHex, thex);
-                            if (dist >= min_dist) {
-                                LineTracer::LineTracerHex(map, thex, targetHex, maxDist, tracer);
-                                if (tracer.Success) {
-                                    plane.IsMove = true;
-                                    SavePlan(npc, plane);
-                                    npc.MoveToHex(thex, 0, plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, MainPlanes::CanOpenDoor);
-                                    repositioned = true;
-                                    break;
-                                }
-                            }
-                        }
-
-                        // Позиция получше не найдена. Break из цикла выходит только из него,
-                        // поэтому без флага удачный манёвр тут же отменялся вместе с планом
-                        if (!repositioned) {
-                            NextPlane(npc, REASON_POSITION_NOT_FOUND);
-                        }
-
-                        break;
-                    }
+                bool clearShot = true;
+                if (is_range && !npc.IsNoMove && actualDist <= maxDist) {
+                    auto tracer = AttackCritterTracer(targ, npc);
+                    LineTracer::LineTracerHex(map, npc.Hex, targ.Hex, maxDist, tracer);
+                    clearShot = tracer.Success;
                 }
 
-                // Найти точную рукопашную атаку
-                else if (!is_range) {
-                    if (Game.GetDistance(npc.Hex, targ.Hex) > maxDist) {
-                        if (!is_can_walk) {
+                // Проходить сквозь соседей можно, атаковать с общего гекса — нельзя.
+                // Выбираем точный свободный конец пути, а не произвольный гекс в радиусе.
+                if (actualDist > maxDist || actualDist < min_dist || NpcPositioning::IsCrowded(npc, map) || !clearShot) {
+                    if (npc.IsNoMove) {
+                        if (actualDist > maxDist) {
                             NextPlane(npc, REASON_CANT_WALK);
                         }
-                        else if (maxDist > 1 && bestDist == 1) {
-                            plane.IsMove = true;
-                            SavePlan(npc, plane);
-                            npc.MoveToHex(targ.Hex, bestDist, plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, MainPlanes::CanOpenDoor);
-                        }
-
                         break;
                     }
+                    mpos stopHex;
+                    if (NpcPositioning::FindCombatStop(npc, map, targ, min_dist, maxDist, is_range, stopHex) && stopHex != npc.Hex) {
+                        plane.IsMove = true;
+                        SavePlan(npc, plane);
+                        npc.MoveToHex(stopHex, 0, plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed, MainPlanes::CanOpenDoor);
+                    }
+                    // Все ударные места заняты: сохраняем цель, ждём и перепроверяем
+                    // на следующем тике. Уже занятый свободный гекс не перезапускает путь.
+                    break;
                 }
 
                 /* Шаг 3: атака                                                       */
@@ -582,7 +548,7 @@ int ProcessAi(Critter npc)
                     break;
                 }
 
-                // AttackPlan движется к последней позиции
+                // Боевой план движется к последней известной позиции
                 if (npc.GetMovingState() == MovingState::InProgress) {
                     break;
                 }
@@ -601,10 +567,8 @@ int ProcessAi(Critter npc)
                 break;
             }
 
-            if (Game.GetDistance(npc.Hex, plane.Walk_Hex) <= plane.Walk_Cut) {
-                if (npc.GetMovingState() == MovingState::InProgress) {
-                    npc.StopMoving();
-                }
+            if (npc.GetMovingState() != MovingState::InProgress && Game.GetDistance(npc.Hex, plane.Walk_Hex) <= plane.Walk_Cut &&
+                !NpcPositioning::IsCrowded(npc, map)) {
                 if (plane.Walk_Dir < 6) {
                     npc.SetDir(mdir(hdir(plane.Walk_Dir)));
                 }
@@ -623,15 +587,21 @@ int ProcessAi(Critter npc)
                 // Не начинаем тот же маршрут заново на каждом тике; смена цели,
                 // радиуса или скорости (включая травму ноги) требует нового маршрута.
                 int speed = plane.Run && !npc.IsNoRun ? npc.WalkSpeed * 2 : npc.WalkSpeed;
-                if (!plane.IsMove || npc.GetMovingState() != MovingState::InProgress || plane.Walk_MovingHex != plane.Walk_Hex ||
-                    plane.Walk_MovingCut != plane.Walk_Cut || plane.Walk_MovingSpeed != speed) {
-                    npc.MoveToHex(plane.Walk_Hex, plane.Walk_Cut, speed, MainPlanes::CanOpenDoor);
+                if (npc.GetMovingState() != MovingState::InProgress || plane.Walk_MovingHex != plane.Walk_Hex || plane.Walk_MovingCut != plane.Walk_Cut ||
+                    plane.Walk_MovingSpeed != speed) {
+                    mpos stopHex;
+                    if (!NpcPositioning::FindWalkStop(npc, map, plane.Walk_Hex, plane.Walk_Cut, stopHex) || stopHex == npc.Hex) {
+                        plane.IsMove = false;
+                        SavePlan(npc, plane);
+                        break; // Ждём свободную точку, не объявляя точный маршрут завершённым.
+                    }
+                    npc.MoveToHex(stopHex, 0, speed, MainPlanes::CanOpenDoor);
                     plane.Walk_MovingHex = plane.Walk_Hex;
                     plane.Walk_MovingCut = plane.Walk_Cut;
                     plane.Walk_MovingSpeed = speed;
-                    plane.IsMove = true;
-                    SavePlan(npc, plane);
                 }
+                plane.IsMove = true;
+                SavePlan(npc, plane);
             }
         } break;
         /* ========================   Pick   ================================== */
@@ -699,11 +669,13 @@ int LastPlaneId = 0;
 class AttackCritterTracer : LineTracer::ITraceContext
 {
     Critter Target;
+    ident AttackerId;
     bool Success;
 
-    AttackCritterTracer(Critter target)
+    AttackCritterTracer(Critter target, Critter attacker)
     {
         Target = target;
+        AttackerId = attacker.Id;
     }
 
     void StartExec(Map map, mpos hexFrom, mpos hexTo, int maxDist) override
@@ -722,13 +694,16 @@ class AttackCritterTracer : LineTracer::ITraceContext
             return true;
         }
 
-        Critter? cr = map.GetCritterOnHex(hex);
-        if (cr != null && cr.Condition != CritterCondition::Dead) {
-            Success = (cr.Id == Target.Id);
-            return true;
+        bool blocked = false;
+        Critter[] critters = map.GetCrittersOnHex(hex, CritterFindType::NonDead);
+        for (int i = 0; i < critters.length(); i++) {
+            if (critters[i].Id == Target.Id) {
+                Success = true;
+                return true;
+            }
+            blocked = blocked || critters[i].Id != AttackerId;
         }
-
-        return false;
+        return blocked;
     }
 };
 
@@ -1497,3 +1472,4 @@ Item? FindAmmoForWeapon(Critter npc, AbstractItem weapon)
 #endif
 
 }
+

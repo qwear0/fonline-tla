@@ -471,6 +471,20 @@ plans admit those doors during path search, then interpret the engine's `HexBusy
 an opening subplan before resuming the parent task; they do not force doors open at spawn time.
 Scenario attackers do not flee because of the ordinary minimum-hit-chance heuristic.
 
+The shared [`NpcPositioning`](../Scripts/NpcPositioning.fos) policy lets NPCs pass through occupied
+hexes but forbids an NPC attack while its footprint overlaps another non-dead actor. `CritterActions`
+checks before spending attack AP; `Combat` also guards direct scripted attacks. When a combat plan
+needs to approach, clear its firing line or leave an overlap, it chooses an exact reachable free
+position on the nearest available ring around its target, respecting minimum weapon distance and
+ranged line of fire. Other actors' current positions and active route endpoints reserve space;
+corpses do not. If no attack position is available, it looks for waiting space on the next eight
+rings and retries with the same target. If those rings are full, an overlapping NPC also tries to
+step aside locally. A free valid firing position is retained rather than forcing every
+ranged NPC into melee. Walk plans also choose distinct endpoints; an occupied exact goal can be
+waited for nearby without reporting successful arrival. Idle NPCs without a plan leave overlaps,
+except immobile/talking actors. No teleporting, engine collision changes or persistent reservation
+properties are introduced; player-controlled attacks are unchanged.
+
 Smitty stays inside an explicit workshop hex set (door `40:57` excluded), cannot pursue or be knocked
 outside, and uses a model-compatible 10mm pistol. Admission **and actual attack execution** reject
 outside targets, including a target that leaves after acquisition. `Combat.ApplyDamage` checks

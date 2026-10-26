@@ -58,6 +58,7 @@ Encounter/caravan data extraction is tracked in [AuditPlan.md](AuditPlan.md), no
 | `CritterActions` | S | Authoritative actions and AP processing |
 | `CritterState` | S | Alive, knockout and dead transitions |
 | `NpcPlanes` / `MainPlanes` / `Pattern*` | S | NPC plan processing, weapon selection and behavior patterns; `MainPlanes` reuses a usable cached weapon but retries failed searches against current inventory/ammo/state on the next selection |
+| `NpcPositioning` | S | Distinct NPC stopping positions, including other living actors' movement endpoints; `NpcPlanes` chooses exact walk/combat destinations, `CritterActions` and `Combat` reject attacks from overlapping positions |
 | `Animation` | C/M | `InitAnimation` subscribes to critter animation events; Fallout/tactics selection; sounds only on C |
 | `ChosenActions` | S/C | Client action queue and server request handlers; reused for autoattack, priority-preserving self-care and exact-item ground-pickup batches |
 | `SelfCare` / `AutoFirstAid` | C | Alt+F1 First Aid / Alt+F2 Doctor on self; Alt+Shift+F1 toggles automatic First Aid below 50% HP; normal queued skills/AP/cooldowns, healing before automatic attacks; [ClientControls.md](ClientControls.md), [AutoFirstAid.md](AutoFirstAid.md) |
@@ -102,6 +103,18 @@ authoritative slot moves; the engine must apply slots before raising that event.
 `ChosenTabs::DrawChosenTabs` shows red Doctor/First Aid tabs while the chosen's owner-synced
 `TimeoutSkDoctor` / `TimeoutSkFirstAid` is active, using the same sprite/color as the injury tab and
 existing localized skill names. The tabs disappear when their synchronized-time cooldown expires.
+
+NPCs can pass through other actors, but `NpcPositioning` keeps walk/combat endpoints separate from
+non-dead actors and their active movement endpoints, accounting for both actors' multihex footprints.
+Combat repositioning prefers the nearest reachable free ring around the target, respecting minimum
+weapon distance and ranged line of fire. If all attack positions are unavailable, the NPC looks for
+waiting space in the next eight rings without dropping its attack target; if those are full too,
+a crowded NPC tries to separate locally. Exact walk goals retain their
+completion contract: waiting nearby is not success. Idle NPCs without a plan step out of an overlap;
+immobile or talking actors are not displaced. `CritterActions` rejects an overlapping NPC attack
+before AP expenditure; `Combat` repeats the guard for direct scripted attacks. Corpses do not reserve
+space, and player-controlled attacks and engine movement collision remain unchanged. Reservations
+come from movement contexts, not new persistent state. See [DenDefense.md](DenDefense.md#combat-and-completion).
 
 Merc following keeps one `MercFollow` walk plan, not a queue of historical player positions.
 Ordinary mercs target the master's latest hex with `MercMasterDist` as the stop radius. Den companions

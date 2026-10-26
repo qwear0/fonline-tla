@@ -1,0 +1,154 @@
+// NpcPositioning — раздельные конечные позиции NPC без запрета проходить сквозь криттеров.
+// SERVER: занятые гексы и конечные точки движения не подходят для остановки; трупы не мешают.
+// В бою сначала ищет ближайшее к цели доступное кольцо, затем место ожидания рядом с ним.
+// Общего изменяемого состояния нет: резервы берутся из текущих контекстов движения.
+// Связи: NpcPlanes (маршруты), CritterActions и Combat (запрет атаки из общего гекса).
+namespace NpcPositioning
+{
+
+#if SERVER
+
+// Проверяем всех соседей, а не единственного GetCritterOnHex: им может оказаться сам NPC.
+bool IsCrowded(Critter npc, Map map)
+{
+    Critter[] others = map.GetCrittersInRadius(npc.Hex, npc.Multihex, CritterFindType::NonDead);
+    for (int i = 0; i < others.length(); i++) {
+        if (others[i].Id != npc.Id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool CanAttack(Critter cr)
+{
+    if (cr.ControlledByPlayer) {
+        return true;
+    }
+    Map? map = cr.GetMap();
+    verify(map != null, "NPC attack requires the attacker to be on a map", cr);
+    return !IsCrowded(cr, map);
+}
+
+// Снимок занятых мест и уже выбранных концов пути. Проход через них остаётся разрешён движком.
+class StopPositions
+{
+    mpos[] Hexes = {};
+    int[] Radii = {};
+
+    StopPositions(Critter npc, Map map)
+    {
+        Critter[] others = map.GetCritters(CritterFindType::NonDead);
+        for (int i = 0; i < others.length(); i++) {
+            Critter other = others[i];
+            if (other.Id == npc.Id) {
+                continue;
+            }
+            Hexes.insertLast(other.Hex);
+            Radii.insertLast(npc.Multihex + other.Multihex);
+            if (other.GetMovingState() == MovingState::InProgress) {
+                MovingContext? moving = other.GetMovingContext();
+                if (moving != null) {
+                    Hexes.insertLast(moving.GetEndHex());
+                    Radii.insertLast(npc.Multihex + other.Multihex);
+                }
+            }
+        }
+    }
+
+    bool IsFree(mpos hex)
+    {
+        for (int i = 0; i < Hexes.length(); i++) {
+            if (Game.GetDistance(hex, Hexes[i]) <= Radii[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+// Сначала расстояние до желаемой точки, внутри кольца — близость к самому NPC.
+// Путь проверяем только у лучших оставшихся кандидатов, с обычным разрешением открыть дверь.
+bool FindStop(Critter npc, Map map, mpos center, int minRadius, int maxRadius, StopPositions occupied, Critter? target, int attackRange, mpos& result)
+{
+    for (int radius = minRadius; radius <= maxRadius; radius++) {
+        mpos[] candidates = {};
+        for (int x = Math::Max(0, int(center.x) - radius); x <= Math::Min(int(map.Size.width) - 1, int(center.x) + radius); x++) {
+            for (int y = Math::Max(0, int(center.y) - radius); y <= Math::Min(int(map.Size.height) - 1, int(center.y) + radius); y++) {
+                mpos hex = mpos(x, y);
+                if (Game.GetDistance(center, hex) != radius || !occupied.IsFree(hex) || !map.IsHexesMovable(hex, npc.Multihex)) {
+                    continue;
+                }
+                // Разведение позиций не должно выводить Смитти из его мастерской.
+                if (DenDefense::IsActor(npc) && npc.DenDefenseRole == DenDefense::ROLE_SMITTY && !DenDefense::IsWorkshopHex(hex)) {
+                    continue;
+                }
+                if (target != null) {
+                    auto tracer = NpcPlanes::AttackCritterTracer(target, npc);
+                    LineTracer::LineTracerHex(map, hex, target.Hex, attackRange, tracer);
+                    if (!tracer.Success) {
+                        continue;
+                    }
+                }
+                candidates.insertLast(hex);
+            }
+        }
+        while (!candidates.isEmpty()) {
+            int best = 0;
+            for (int i = 1; i < candidates.length(); i++) {
+                if (Game.GetDistance(npc.Hex, candidates[i]) < Game.GetDistance(npc.Hex, candidates[best])) {
+                    best = i;
+                }
+            }
+            mpos hex = candidates[best];
+            if (hex == npc.Hex || map.GetPathLength(npc, hex, 0, MainPlanes::CanOpenDoor) > 0) {
+                result = hex;
+                return true;
+            }
+            candidates.removeAt(best);
+        }
+    }
+    return false;
+}
+
+bool FindCombatStop(Critter npc, Map map, Critter target, int minDist, int maxDist, bool checkShot, mpos& result)
+{
+    auto occupied = StopPositions(npc, map);
+    int firstRing = Math::Max(minDist, 1 + npc.Multihex + target.Multihex);
+    Critter? shotTarget = checkShot ? target : null;
+    if (FindStop(npc, map, target.Hex, firstRing, maxDist, occupied, shotTarget, maxDist, result)) {
+        return true;
+    }
+    // Все ударные позиции заняты: подходим к следующему свободному кольцу и ждём,
+    // не теряя цель и не разрешая атаку с чужого гекса.
+    int waitRing = Math::Max(firstRing, maxDist + 1);
+    if (FindStop(npc, map, target.Hex, waitRing, waitRing + 7, occupied, null, 0, result)) {
+        return true;
+    }
+    // Вся очередь у цели заполнена: хотя бы выходим из наложения возле себя.
+    // Не ищем путь ко всем гексам карты на каждом тике большого отряда.
+    return IsCrowded(npc, map) && FindStop(npc, map, npc.Hex, 1, 3, occupied, null, 0, result);
+}
+
+bool FindWalkStop(Critter npc, Map map, mpos center, int cut, mpos& result)
+{
+    auto occupied = StopPositions(npc, map);
+    return FindStop(npc, map, center, 0, cut + 3, occupied, null, 0, result);
+}
+
+// Без плана расходимся только после остановки. Сюжетные неподвижные NPC не сдвигаются.
+void SeparateIdle(Critter npc, Map map)
+{
+    if (npc.IsNoMove || npc.GetMovingState() == MovingState::InProgress || !IsCrowded(npc, map)) {
+        return;
+    }
+    mpos hex;
+    if (FindWalkStop(npc, map, npc.Hex, 0, hex)) {
+        NpcPlanes::AddWalkPlane(npc, 0, hex, Game.GetDirection(npc.Hex, hex), false, 0);
+    }
+}
+
+#endif
+
+}
+
