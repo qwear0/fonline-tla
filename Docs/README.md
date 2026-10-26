@@ -12,8 +12,9 @@ TLA enables `FO_DATA_SOURCE_DAT`, `FO_DATA_SOURCE_ZIP`, `FO_IMAGE_FRM`, `FO_IMAG
 importers are built in. `Server.DbStorage = Memory` remains the base setting and needs no optional
 provider. The game enables `FO_DATABASE_SQLITE`; the `LAN` profile uses it to persist characters in
 `TLA-Storage/LAN/`, outside its package (see [ClientUpdates.md](ClientUpdates.md)). Sierra siege progress
-resets at server start without deleting those characters. To select another persistent provider,
-enable its positive `FO_DATABASE_JSON` or `FO_DATABASE_MONGO` CMake option and reconfigure.
+resets at server start without deleting those characters or replacing an established owner's saved
+mercenaries. To select another persistent provider, enable its positive `FO_DATABASE_JSON` or
+`FO_DATABASE_MONGO` CMake option and reconfigure.
 Engine `2026.1.26-dev` requires new empty storage for JSON and SQLite; it does not convert their old formats.
 See the Engine's [component selection](../Engine/Docs/en/how-to/build/project-configuration.md#optional-native-components)
 and [storage upgrade boundary](../Engine/Docs/en/explanation/persistence/index.md#storage-formats-and-upgrade-boundary).

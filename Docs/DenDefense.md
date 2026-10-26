@@ -23,8 +23,9 @@ containers on older maps, removes that exact decoration and sorts the original r
 before removing the old furniture. Other scenery and its blocking footprint are unchanged.
 The seven original AutoCannons stay visible but use `DenDefense::DisableTurret`: no scanning timer,
 appearance/attack-plane subscriptions or active plans, no enemy stack, and invulnerable.
-Attempt setup also disables saved turrets and removes other entrance NPCs except Smitty and Todd,
-spilling their belongings first. Map items are not purged. The old Den location is not deleted.
+Attempt setup also disables saved turrets and removes other entrance NPCs except Smitty, Todd and
+the squad being restored after restart, spilling removed NPCs' belongings first. Map items are not
+purged. The old Den location is not deleted.
 
 - [`PlayerRegistration.fos`](../Scripts/PlayerRegistration.fos) calls `OnSuccessfulLogin` with the
   **returned** `Player`, after successful registration/existing-account login and outside rollback
@@ -54,29 +55,36 @@ spilling their belongings first. Map items are not purged. The old Den location 
 
 ## One run, one primary
 
-The first confirmed entrant starts a generation and owns four tribal companions. All later entrants
-join that same generation without receiving another squad. Connected players also join a replacement
-run as secondaries; living inventories, builds, experience and levels are retained.
+The first confirmed entrant in a fresh world or after primary death starts a generation and owns four
+tribal companions. All later entrants join that same generation without receiving another squad.
+After a server restart, the first confirmed login starts the new generation but retains the saved
+primary and their existing squad, even if a different player logs in first. Connected players also join
+the replacement run; living inventories, builds, experience and levels are retained.
 
 | Stage | Transition |
 | --- | --- |
-| Starting | Reserve generation/primary before setup and reentrant callbacks; create the four companions, then Waiting |
+| Starting | Reserve generation/primary before setup and reentrant callbacks; create four companions or reattach the saved squad after restart, then Waiting |
 | Waiting | A living participant with their briefing kit may request rest; the previous wave must already be cleared |
 | Resting | Close conflicting dialogs, block actions, globally fade out, advance to 10:00, heal living defenders, fade in, start the next wave |
 | Fighting | Spawn the full wave gradually; complete only after every required enemy has actually died |
 | Victory | Stop waves; each participant may claim one `car_fuel_injection` |
-| Failed | Stop progression, actions, revival and claims; **only the next successful login** starts a new generation and selects its primary |
+| Failed | Stop progression, actions, revival and claims; **only the next successful login** starts a new generation; actual failure selects a new primary, restart retains the saved owner |
 
 Primary death fails the run, including after Victory. Smitty's death does **not** fail/freeze the run,
 show a movie, revive him or trigger a reset on login. An already active wave can finish, but no living
 Smitty means no briefing, next rest/wave or reward dialog. Death during Resting cancels that rest and
 clears the blackout without starting another wave. Secondary death does not fail the run, but the
 character stays dead until confirmed re-entry; there is no timed automatic revival. Dead companions
-stay dead until reset. Disconnecting and ordinary Active/Victory login do not select another primary.
-Restarting the server always ends the old attempt, including Victory; the first confirmed login then
-selects the new primary. A replacement generation after primary death or restart sets up Smitty and
-the squad anew. Saved characters retain their builds, levels, experience and remaining inventory;
-reset does not restore items lost on death.
+stay dead until a fresh attempt after primary death; restarting alone does not revive them.
+Disconnecting and ordinary Active/Victory login do not select another primary.
+Restarting the server always ends the old attempt, including Victory, and sets up Smitty again, but
+does not replace its squad or transfer ownership. Existing companion IDs, names, builds, experience,
+levels, unspent points/perks, inventory/equipment, HP/death state, position and follow/wait/defend/assist
+settings are retained. Old combat plans, enemy stacks and temporary loot/storage/formation jobs are
+cleared; creation bonuses and starter equipment are not reapplied. After actual primary death,
+the next confirmed login still selects a new primary and creates a fresh squad as before. Saved player
+characters retain their builds, levels, experience and remaining inventory; reset does not restore
+items lost on death.
 
 `Game` properties persist generation, IDs, stage, wave cursor, outstanding/history IDs and rest target/
 phase. Critter markers persist participation and once-per-generation kit/reward claims. Frame-time
@@ -85,13 +93,18 @@ On every start, `ResumeController` explicitly makes the Sierra location persiste
 inhabitants and items: engine-created locations are transient until opted in. Player critters are
 already explicitly persistent in `PlayerRegistration`. Other transient world locations are not opted
 in by this scenario. It then cancels the map controller and all rest callbacks, stops scenario
-actions, clears wave/spawn/rest progress and marks the attempt Failed. It retains generation and actor
-IDs for `StartAttempt` to clean up old companions/enemies on the next confirmed login; that login
-increments the generation, so prior kit/reward claims do not apply to the new attempt. No account,
-player character or old Den town content is deleted, and the world is not regenerated.
-A saved Den controller/spawn timer is stopped before switching bases; missing Smitty/Todd are created
-on an already-saved Sierra entrance rather than requiring world regeneration. Old scenario companions
-and wave enemies are cleaned up by ID on the next confirmed login, even if they remain on Den.
+actions, clears wave/spawn/rest progress and marks the attempt Failed. For an established attempt
+that had not actually failed, it first sets persistent `DenDefenseRestoreCompanions`; repeated restarts
+before login or completion of squad restoration keep that pending flag. `StartAttempt` retains the
+saved primary/companion IDs, checks each companion's presence and owner, and moves their generation
+markers forward instead of deleting/recreating them. A missing/inconsistent squad fails explicitly,
+not by silently generating replacements. The flag clears after setup reaches Waiting. Actual failure
+and incomplete initial squad creation retain the fresh-attempt path.
+Old wave enemies are cleaned up by ID, even if they remain on Den. Prior kit/reward claims do not apply
+to the new generation. No account, player character or old Den town content is deleted, and the world
+is not regenerated. A saved Den controller/spawn timer is stopped before switching bases; missing
+Smitty/Todd are created on an already-saved Sierra entrance rather than requiring world regeneration.
+The new restore flag defaults to false in older saves; startup derives it from the saved attempt stage.
 No existing serialized identifier is removed/renamed and no migration rule/engine revision bump is added.
 The `LAN` profile uses persistent SQLite outside the package; see [ClientUpdates.md](ClientUpdates.md)
 for storage and restart instructions. Other profiles remain Memory unless overridden.

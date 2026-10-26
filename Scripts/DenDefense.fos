@@ -31,6 +31,7 @@ const int REST_PHASE_MILLISECONDS = 2000;
 ///@ Property Game Server ident DenDefensePrimaryId Mutable Persistent
 ///@ Property Game Server ident DenDefenseSmittyId Mutable Persistent
 ///@ Property Game Server ident[] DenDefenseCompanionIds Mutable Persistent
+///@ Property Game Server bool DenDefenseRestoreCompanions Mutable Persistent
 ///@ Property Game Server ident[] DenDefenseParticipantIds Mutable Persistent
 ///@ Property Game Server int32 DenDefenseStage Mutable Persistent
 ///@ Property Game Server int32 DenDefenseWave Mutable Persistent
@@ -228,16 +229,23 @@ void JoinAttempt(Critter cr)
     }
 }
 
-void StartAttempt(Critter primary)
+void StartAttempt(Critter entrant)
 {
     Map? map = GetBaseMap();
     verify(map != null, "Sierra entrance map is missing");
+    bool restoreCompanions = Game.DenDefenseRestoreCompanions;
+    if (restoreCompanions) {
+        verify(Game.DenDefensePrimaryId != ZERO_IDENT && Game.DenDefenseCompanionIds.length() == 4, "Saved Sierra squad is incomplete");
+    }
 
     // Сначала инвалидируем предыдущих акторов; только затем запускаем вложенные события.
     Game.DenDefenseGeneration = Game.DenDefenseGeneration + 1;
     Game.DenDefenseStage = STAGE_STARTING;
     Game.DenDefenseMapId = map.Id;
-    Game.DenDefensePrimaryId = primary.Id;
+    // После рестарта первый вошедший не забирает чужой сохранённый отряд.
+    if (!restoreCompanions) {
+        Game.DenDefensePrimaryId = entrant.Id;
+    }
     map.StopTimeEvent(Controller);
     map.StopTimeEvent(SpawnTick);
     Game.StopTimeEvent(FinishRest);
@@ -264,11 +272,25 @@ void StartAttempt(Critter primary)
     }
 
     auto oldCompanions = Game.DenDefenseCompanionIds.clone();
-    Game.DenDefenseCompanionIds = {};
+    if (!restoreCompanions) {
+        Game.DenDefenseCompanionIds = {};
+    }
     Game.DenDefenseParticipantIds = {};
     for (int i = 0; i < oldCompanions.length(); i++) {
         Critter? old = Game.GetCritter(oldCompanions[i]);
-        if (old != null) {
+        if (restoreCompanions) {
+            verify(old != null, "Saved Sierra companion is missing", oldCompanions[i]);
+            verify(old.DenDefenseRole == ROLE_COMPANION && old.MercMasterId == Game.DenDefensePrimaryId, "Saved Sierra companion has wrong owner", old);
+            // Меняем только поколение и старые задания: тело, прокачка, вещи и приказы хозяина остаются.
+            old.DenDefenseGeneration = Game.DenDefenseGeneration;
+            MercLoot::Cancel(old);
+            MercStorage::Cancel(old);
+            old.StopMoving();
+            NpcPlanes::DropPlanes(old);
+            EnemyStack::ClearEnemyStack(old);
+            old.MercFormationReserved = false;
+        }
+        else if (old != null) {
             DisposeActor(old, map);
         }
     }
@@ -285,7 +307,7 @@ void StartAttempt(Critter primary)
             verify(smitty == null, "More than one Smitty on Sierra entrance");
             smitty = cr;
         }
-        else if (cr.DialogId != "den_defense_todd".hstr()) {
+        else if (cr.DialogId != "den_defense_todd".hstr() && !Game.DenDefenseCompanionIds.exists(cr.Id)) {
             DisposeActor(cr, map);
         }
     }
@@ -304,24 +326,27 @@ void StartAttempt(Critter primary)
     Item[] doors = map.GetItemsInRadius(mpos(40, 57), 0, Content::Item::door_2481);
     verify(doors.length() == 1, "Smitty workshop door is missing or ambiguous");
     Lockers::SwitchLocker(doors[0], true);
-    JoinAttempt(primary);
+    JoinAttempt(entrant);
 
-    for (int i = 0; i < 4; i++) {
-        CreateCompanion(primary, map, i);
+    if (!restoreCompanions) {
+        for (int i = 0; i < 4; i++) {
+            CreateCompanion(entrant, map, i);
+        }
     }
 
-    // Уже подключённые участники остаются второстепенными без переподключения.
+    // Подключённых участников включаем в новое поколение без переподключения.
     Player[] online = Game.GetOnlinePlayers();
     for (int i = 0; i < online.length(); i++) {
         Critter? secondary = online[i].GetControlledCritter();
-        if (secondary != null && secondary.Id != primary.Id) {
+        if (secondary != null && secondary.Id != entrant.Id) {
             JoinAttempt(secondary);
         }
     }
 
     Game.DenDefenseStage = STAGE_WAITING;
+    Game.DenDefenseRestoreCompanions = false;
     map.StartTimeEvent(Time::Asap(), Time::Seconds(1), Controller, Game.DenDefenseGeneration);
-    Game.Log("Sierra siege started, generation=" + Game.DenDefenseGeneration + " primary=" + primary.Id);
+    Game.Log("Sierra siege started, generation=" + Game.DenDefenseGeneration + " primary=" + Game.DenDefensePrimaryId + " restoredSquad=" + restoreCompanions);
 }
 
 // Турели остаются декорацией: без штатного сканирования, боевых планов и реакции на урон.
@@ -883,10 +908,15 @@ void StartAfterRest(any value)
     SpawnBatch();
 }
 
-// При каждом запуске сбрасываем осаду; сохранённые персонажи начинают её новым входом.
+// При запуске сбрасываем осаду, но сохраняем отряд и его хозяина до подтверждённого входа.
 [[Event]]
 void ResumeController()
 {
+    // Постоянный флаг переживает повторный рестарт до входа игрока или завершения восстановления.
+    // Настоящий провал и незавершённое первичное создание по-прежнему начинают новый отряд.
+    if (Game.DenDefenseGeneration > 0 && Game.DenDefenseStage != STAGE_FAILED && Game.DenDefenseStage != STAGE_STARTING) {
+        Game.DenDefenseRestoreCompanions = true;
+    }
     // Останавливаем также контроллер прежней базы из сохранения до смены карты.
     Map? previous = Game.GetMap(Game.DenDefenseMapId);
     if (previous != null) {
@@ -926,8 +956,8 @@ void ResumeController()
     Game.DenDefenseDawnLocked = false;
     Game.DenDefenseFailurePresented = false;
     map.DenDefenseNextSpawn = ZERO_NANOTIME;
-    // Сохраняем поколение и списки актёров: StartAttempt уберёт старый отряд и врагов,
-    // а новое поколение отделит прежние отметки участия, выдачи припасов и наград.
+    // StartAttempt удалит старых врагов, а сохранённый отряд переведёт в новое поколение.
+    // Прежние отметки участия, выдачи припасов и наград к нему уже не относятся.
     Game.Log("Sierra siege reset on server start, generation=" + Game.DenDefenseGeneration + " wave=" + Game.DenDefenseWave);
 }
 
