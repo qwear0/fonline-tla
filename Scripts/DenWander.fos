@@ -1,5 +1,5 @@
 // DenWander — растерянность, залипание, камни, парные драки и бег врагов первой волны.
-// SERVER: один бросок поведения при создании; DenDefense вызывает Process до выбора жертвы.
+// SERVER: один бросок поведения до выбора прототипа; DenDefense вызывает Process до выбора жертвы.
 // Режим, цели, напарник и реальные сроки хранятся на NPC; общих изменяемых таблиц нет.
 // Бегуны кружат вокруг допустимого противника и отскакивают после сближения.
 // Связи: DenDefense (допуск атак и урона), MainPlanes (оружие), NpcPlanes, Messaging.
@@ -113,41 +113,52 @@ bool CanRun(Critter npc)
 
 bool CanThrow(Critter npc)
 {
-    // В первой волне только две модели. У nftrmp есть NFTRMPAS (бросок),
-    // у nmlosr нет ни AS, ни AT. Сервер не загружает клиентский пакет спрайтов.
-    return npc.ModelName == "art/critters/nftrmpaa.frm".hstr();
+    // Метатели получают nmbsnp с NMBSNPAS (бросок); у nmlosr этой анимации нет.
+    // Сервер не загружает клиентский пакет спрайтов, поэтому модель проверяем явно.
+    return npc.ModelName == "art/critters/nmbsnpaa.frm".hstr();
 }
 
-void TryStart(Critter npc)
+int RollMode()
+{
+    if (Game.DenDefenseWave != 1) {
+        return 0;
+    }
+    int roll = Game.Random(1, 100);
+    if (roll <= 30) {
+        return LOST;
+    }
+    if (roll <= 40) {
+        return STARE;
+    }
+    if (roll <= 60) {
+        return ROCKS;
+    }
+    if (roll <= 70) {
+        return BRAWL;
+    }
+    if (roll <= 80) {
+        return RUN;
+    }
+    return 0;
+}
+
+void TryStart(Critter npc, int mode)
 {
     if (Game.DenDefenseWave != 1) {
         return;
     }
-    int roll = Game.Random(1, 100);
-    int mode = 0;
-    if (roll <= 30) {
-        mode = LOST;
-    }
-    else if (roll <= 40) {
-        mode = STARE;
-    }
-    else if (roll <= 50 && CanThrow(npc)) {
-        mode = ROCKS;
-    }
-    else if (roll > 50 && roll <= 60) {
-        mode = BRAWL;
-    }
-    else if (roll > 60 && roll <= 65 && CanRun(npc)) {
-        mode = RUN;
-    }
+    verify(mode != RUN || CanRun(npc), "Siege runner animation missing", npc);
+    verify(mode != ROCKS || CanThrow(npc), "Siege rock throw animation missing", npc);
     npc.DenWanderMode = mode;
     npc.DenWanderActive = mode != 0;
     npc.OnNpcPlaneEnd.Subscribe(WalkEnd);
     if (mode == ROCKS) {
         Map? map = npc.GetMap();
         verify(map != null, "Rock thrower spawned without map", npc);
-        // Конечный запас на земле, а не бесконечные камни в руках. Брошенные
-        // камни Combat оставляет у цели, откуда их можно подобрать снова.
+        // Один стартовый камень в руках; дальше только конечный запас на земле.
+        // Брошенные камни Combat оставляет у цели, откуда их можно подобрать снова.
+        Item rock = ItemStacks::AddItem(npc, Content::Item::rock, 1);
+        npc.ChangeItemSlot(rock.Id, CritterItemSlot::Main);
         if (PickGoal(npc, map)) {
             ItemStacks::AddItem(map, npc.DenWanderGoal, Content::Item::rock, Game.Random(3, 6));
             npc.DenWanderGoal = mpos();

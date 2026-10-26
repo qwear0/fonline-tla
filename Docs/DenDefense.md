@@ -410,7 +410,7 @@ unrelated caravan/encounter NPCs that happen to use bounty-hunter prototypes.
 
 | Wave | Composition and equipment |
 | --- | --- |
-| 1 | 50 groups of 1–3 attackers (uniform size; 50–150 total, mean 100), cycling Prostitute, Drunkard and Madman; original Den models/dialogs, one-shot stock bags 26/11, plus alcohol/rocks for drunkards |
+| 1 | 50 groups of 2/4/6 attackers (uniform size; 100–300 total, mean 200), cycling Prostitute, Drunkard and Madman, with dedicated Drug addict runners and Madman rock throwers; one-shot stock bags 26/11, plus alcohol/rocks for ordinary drunkards |
 | 2 | 30 tribals in ten simultaneous groups of three: exactly six spears, twenty-four unarmed; meat/flowers/healing powder |
 | 3 | 42 unarmed townspeople and Chuck/Buck Dunton; each brother has brass knuckles and a `10mm_pistol` with **one loaded + four spare rounds**; money/alcohol/miscellaneous loot |
 
@@ -422,19 +422,25 @@ damage range (weapon plus melee bonus) through `DenDefense.ScaleEnemyMeleeDamage
 critical and armor calculations. Ranged damage, Smitty, players and NPCs outside this scenario are
 unchanged. Health and melee scaling round down to whole points, with a minimum of one. Existing
 spawned actors keep their HP until a new attempt creates replacements; the melee modifier is applied
-at attack time. Wave 1 reuses `Loser2`/`Loser` models (`nftrmp`/`nmlosr`) and their existing animation
-and sound selection, with `all_prostitute`, `all_alco` and `den_crazy_man` names/descriptions/dialog
-lines. Its stock bags supply knives/switchblades/shivs, jet, flowers and caps; drunkards additionally
+at attack time. Ordinary wave-1 enemies reuse `Loser2`/`Loser` models (`nftrmp`/`nmlosr`), with
+`all_prostitute`, `all_alco` and `den_crazy_man` names/descriptions/dialog lines. Runners instead use
+[`DenDefenseAddict`](../Critters/DenDefenseAddict.focr), the civilian `nmpeas` model and
+`all_narcoman` (**Наркоман / Drug addict**); rock throwers use
+[`DenDefensePsycho`](../Critters/DenDefensePsycho.focr), civilian `nmbsnp` and `den_crazy_man`
+(**Псих / Madman**). Both inherit `Loser` combat stats but override its no-run flag, movement speed
+and animation table with the selected civilian model's values. Their stock bag is 11, with AI 11.
+Stock bags supply knives/switchblades/shivs, jet, flowers and caps; ordinary drunkards additionally
 carry beer/booze and rocks. Bags are filled once, not refreshed during combat; city quest state is
 not copied to these attackers.
 
 [`Scripts/DenWander.fos`](../Scripts/DenWander.fos) owns wave-1 distractions. One uniform roll per
-new enemy assigns mutually exclusive modes: **30% lost**, **10% object fascination**, **10% rock
-thrower** (only a model with throwing animation), **10% brawl initiator**, **5% circling runner**
-(only a model with running animation), otherwise normal siege AI. An ineligible animation roll
-falls back to normal AI, not another distraction. A brawl initiator can forcibly recruit an unpaired
-living wave enemy, overriding that enemy's earlier mode; these are initiation probabilities, not
-final population quotas. Waves 2/3 are unchanged.
+new enemy, **before prototype selection**, assigns mutually exclusive modes: **30% lost**,
+**10% object fascination**, **20% rock thrower**, **10% brawl initiator**, **10% circling runner**,
+otherwise normal siege AI. Throwers/runners always receive their animation-capable civilian
+prototype instead of discarding roles rolled for an incompatible model. Initialization asserts the
+required throwing/running capability. A brawl initiator can forcibly recruit an unpaired living wave
+enemy, overriding that enemy's earlier mode; these are initiation probabilities, not final population
+quotas. Waves 2/3 are unchanged.
 
 All random destinations use the expanded central approach field (`x=49..99`, `y=33..128`): between
 the workshop and left bunker, from the outer entrance approach to the base facade, excluding the
@@ -452,11 +458,12 @@ player/companion spawn yard is independent of these bounds.
   attack. Every independently randomized **30–60 seconds** it says a `Stare1..14` line, including the
   three emotes; the first due line is processed before expiry, guaranteeing at least one. Afterwards
   ordinary AI resumes.
-- **Rock thrower:** `nftrmp` has `NFTRMPAS`; `nmlosr` lacks the throw animation, so it is excluded.
-  A finite **3–6 rock** ground stack is seeded once on a reachable field hex. The NPC walks to pick
-  up real ground rocks, throws them using their primary attack and recovers thrown rocks through
-  normal pickup. No inventory refill is generated during combat. Only a target already adjacent
-  permits an unarmed attack; without rocks it never chases a distant target into melee.
+- **Rock thrower:** the dedicated `nmbsnp` model has `NMBSNPAS` (throw) and `NMBSNPAT` (run);
+  `nmlosr` is never assigned this role. Each thrower starts with exactly **one rock**, equipped in
+  the main hand. A finite **3–6 rock** ground stack is also seeded once on a reachable field hex.
+  The NPC walks to pick up real ground rocks, throws them using their primary attack and recovers
+  thrown rocks through normal pickup. No inventory refill is generated during combat. Only a target
+  already adjacent permits an unarmed attack; without rocks it never chases a distant target into melee.
 - **Brawl:** both members are forced to adjacent reachable random field destinations and wait for
   each other before fighting. Only this mutually linked pair bypasses same-side attack/damage
   rejection, and `MainPlanes` forces unarmed primary attacks. Each member speaks a `Brawl1..13` line
@@ -484,8 +491,9 @@ brawl-pair exception. Mode, goals, partner, runner target/phase/direction, aggre
 are transient server-only critter properties; no public property, RemoteCall or rename/removal
 migration is added.
 
-The first batch is admitted when the 10:00 rest transition finishes. Wave 1 admits **1–3 enemies
-at once**, each size equally likely, over the original **50 batches**. Sizes are rolled once at wave
+The first batch is admitted when the 10:00 rest transition finishes. Wave 1 admits **2, 4 or 6 enemies
+at once**, each size equally likely: twice the previous 1–3 per group, over the same **50 batches**
+and unchanged spawn intervals. Sizes are rolled once at wave
 start into the server-only persistent `DenDefenseSpawnGroups` queue; their sum is the exact enemy
 completion total, and blocked batches retain their selected size. A new attempt/server-start reset
 clears the queue. Wave 3 still admits one enemy per batch. Both waves keep the uniform

@@ -1,0 +1,11 @@
+[ProtoCritter]
+$Name = DenDefensePsycho
+$Parent = Loser
+
+WalkSpeedBase = 40
+IsNoRunBase = False
+Anims = 1 0 1 0 0 0 1 0 0 0 0 0 0 0 0 0
+ModelName = art/critters/nmbsnpaa.frm
+
+$Text russ = "Псих"
+$Text engl = "Madman"

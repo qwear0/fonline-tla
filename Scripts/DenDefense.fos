@@ -855,10 +855,10 @@ void StartAfterRest(any value)
     int[] groups = {};
     if (Game.DenDefenseWave == 1) {
         Game.DenDefenseSpawnTotal = 0;
-        // Сохраняем 50 выходов, но каждый теперь даёт равновероятную группу из 1..3 врагов.
+        // Удваиваем каждую группу: 2, 4 или 6 врагов за прежние 50 выходов и интервалы.
         // Размер заранее выбранной группы не меняется при повторе из-за занятой зоны выхода.
         for (int i = 0; i < 50; i++) {
-            int size = Game.Random(1, 3);
+            int size = Game.Random(1, 3) * 2;
             groups.insertLast(size);
             Game.DenDefenseSpawnTotal = Game.DenDefenseSpawnTotal + size;
         }
@@ -1039,10 +1039,19 @@ void SpawnEnemy(Map map, mpos hex)
 {
     int cursor = Game.DenDefenseSpawned;
     int brother = Game.DenDefenseWave == 3 && cursor >= Game.DenDefenseSpawnTotal - 2 ? cursor - Game.DenDefenseSpawnTotal + 3 : 0;
+    int wanderMode = DenWander::RollMode();
     hstring proto;
     if (Game.DenDefenseWave == 1) {
-        // Местные Проститутка (nftrmp), Алкоголик и Псих (nmlosr), как в den.fomap.
-        proto = cursor % 3 == 0 ? Content::Critter::Loser2 : Content::Critter::Loser;
+        // Выбираем роль до создания: бегунам и метателям нужны отдельные модели жителей.
+        if (wanderMode == DenWander::RUN) {
+            proto = Content::Critter::DenDefenseAddict;
+        }
+        else if (wanderMode == DenWander::ROCKS) {
+            proto = Content::Critter::DenDefensePsycho;
+        }
+        else {
+            proto = cursor % 3 == 0 ? Content::Critter::Loser2 : Content::Critter::Loser;
+        }
     }
     else if (Game.DenDefenseWave == 2) {
         proto = cursor % 2 == 0 ? Content::Critter::Wilder : Content::Critter::Wilder2;
@@ -1057,7 +1066,8 @@ void SpawnEnemy(Map map, mpos hex)
     }
     // Штатные реплики проститутки / зависимых, племени, бандитов и горожан.
     // Таблицы звуков и анимаций наследуются от моделей; общие прото и AiSettings не меняем.
-    int aiId = Game.DenDefenseWave == 1 ? (cursor % 3 == 0 ? 45 : 11) : (Game.DenDefenseWave == 2 ? 1 : (brother > 0 ? 13 : 14));
+    bool specialWanderer = wanderMode == DenWander::RUN || wanderMode == DenWander::ROCKS;
+    int aiId = Game.DenDefenseWave == 1 ? (!specialWanderer && cursor % 3 == 0 ? 45 : 11) : (Game.DenDefenseWave == 2 ? 1 : (brother > 0 ? 13 : 14));
     dict<CritterProperty, any> props = {{CritterProperty::BagId, int(Bags::Empty)},
                                         {CritterProperty::AiId, aiId},
                                         {CritterProperty::ReplicationTime, -1},
@@ -1089,14 +1099,15 @@ void SpawnEnemy(Map map, mpos hex)
     enemy.IsGeck = true;
     if (Game.DenDefenseWave == 1) {
         const hstring[] dialogs = {Content::Dialog::all_prostitute, Content::Dialog::all_alco, Content::Dialog::den_crazy_man};
-        enemy.DialogId = dialogs[cursor % dialogs.length()];
+        enemy.DialogId = wanderMode == DenWander::RUN ? Content::Dialog::all_narcoman :
+                                                        (wanderMode == DenWander::ROCKS ? Content::Dialog::den_crazy_man : dialogs[cursor % dialogs.length()]);
         // Сумки 26/11 — те же, что у этих жителей den.fomap. Наполняем один раз,
         // не включая обновление сумки и не копируя квестовое состояние городских NPC.
-        auto bagItems = NpcBags::GetBag(cursor % 3 == 0 ? 26 : 11).GetBagItems();
+        auto bagItems = NpcBags::GetBag(!specialWanderer && cursor % 3 == 0 ? 26 : 11).GetBagItems();
         for (int i = 0; i < bagItems.length(); i++) {
             bagItems[i].AddCritterItem(enemy);
         }
-        if (cursor % 3 == 1) {
+        if (!specialWanderer && cursor % 3 == 1) {
             ItemStacks::AddItem(enemy, cursor % 2 == 0 ? Content::Item::beer : Content::Item::booze, 1);
             ItemStacks::AddItem(enemy, Content::Item::rock, Game.Random(1, 3));
         }
@@ -1133,7 +1144,7 @@ void SpawnEnemy(Map map, mpos hex)
         enemy.LastWeaponNotFound = false;
         ItemStacks::AddItem(enemy, Content::Item::brass_knuckles, 1);
     }
-    DenWander::TryStart(enemy);
+    DenWander::TryStart(enemy, wanderMode);
     ChooseTarget(enemy);
 }
 

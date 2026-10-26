@@ -1,0 +1,11 @@
+[ProtoCritter]
+$Name = DenDefenseAddict
+$Parent = Loser
+
+WalkSpeedBase = 40
+IsNoRunBase = False
+Anims = 1 1 1 0 0 1 0 0 0 0 0 0 0 1 1 1
+ModelName = art/critters/nmpeasaa.frm
+
+$Text russ = "Наркоман"
+$Text engl = "Drug addict"
