@@ -345,13 +345,16 @@ and `Texts/Text.{russ,engl}.fotxt`.
   deadlines; busy/dialog time can delay completion. Unreachable bodies are ignored during ordinary
   collection; a stalled selected corpse is skipped after 30 seconds for that wave. Rest, failure or
   Todd's death cancels his transient walk but retains a pending carried body.
-- `DenDefense::StartAfterRest` calls `DenCleanup::BeforeWave` only after defender/Smitty validation,
-  before advancing the wave or spawning its first enemy. All remaining eligible bodies, including
-  unreachable or reserved ones, are removed and counted individually. Only `MercLoot` targets for
-  those bodies are released; collectors, their inventories and other jobs/items are not deleted.
+- `DenDefense::FinishRest` calls `DenCleanup::BeforeWave` only after defender/Smitty validation,
+  at the midpoint of the rest blackout, before fade-in, wave advancement or spawning. Remaining
+  bodies disappear, the counter increases and Todd is repositioned while the screen is fully black.
+  All remaining eligible bodies, including unreachable or reserved ones, are removed and counted
+  individually. Only `MercLoot` targets for those bodies are released; collectors, their inventories
+  and other jobs/items are not deleted.
   A previously carried body is credited once via its separate pending flag, not counted again in
   the map corpse scan. Repeated calls cannot recount already removed bodies or a cleared pending
-  flag. A canceled rest does not run this cleanup.
+  flag. Cancellation before the blackout midpoint skips cleanup; cancellation after it retains
+  the already completed cleanup/count and spilled loot without starting the next wave.
 - Remaining ordinary corpse items are spilled intact onto the corpse's hex before body deletion,
   through `DenDefense.SpillLoot` and `ItemStacks`; failed moves assert instead of deleting unclaimed
   loot. Todd does not move these items into Smitty's crate. The crate at `35:60` still holds workshop
@@ -390,9 +393,14 @@ A rest request persists its next 10:00 target and phase. If that morning passes 
 or a server pause, it is reselected before the first clock advance. The target is then locked before
 calling the setter, so a resumed/partly completed rest cannot advance by an extra day. Every online
 client, even outside Sierra, receives phase/remaining-time state. A mid-rest entrant joins that same
-transition; disconnect/failure/reset clears its local blackout. Both fade phases block client intent
-and authoritative server actions; black pixels are not authorization. Rest and failure also stop any
-global-map group containing an action-frozen member, regardless of its leader. `GlobalmapGroup` clears
+transition; disconnect/failure/reset clears its local blackout. The transition lasts **four real
+seconds**: one second fading to black, one fully black second before cleanup, one fully black second
+for cleanup updates to synchronize, then one second fading back in. Phase 0 covers fade-out and the
+first black hold; phase 1 covers the second hold and fade-in. `FinishRest` performs the calendar/heal
+updates and hidden corpse cleanup between these phases. `StartAfterRest` starts the next wave only
+when fade-in has finished. Both phases block client intent and authoritative server actions;
+black pixels are not authorization. Rest and failure also stop any global-map group containing an
+action-frozen member, regardless of its leader. `GlobalmapGroup` clears
 the route and pending encounter, synchronizes the stopped state and blocks autonomous travel/encounter
 processing before callbacks, fuel consumption or encounter selection. Unfreezing does not resume the
 old route or pending encounter; travel requires a new command.

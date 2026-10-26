@@ -19,6 +19,11 @@ namespace DenDefense
 ///@ RemoteCall Client DenDefenseTransition(int32 generation, int32 state)
 ///@ RemoteCall Client DenDefenseRestTransition(int32 generation, int32 phase, timespan remaining)
 
+// Каждая фаза: секунда плавного перехода и секунда полного чёрного экрана.
+// Уборка приходится на середину затемнения, с запасом до и после синхронизации карты.
+const int REST_FADE_MILLISECONDS = 1000;
+const int REST_PHASE_MILLISECONDS = 2000;
+
 #if SERVER
 
 ///@ Property Game Server int32 DenDefenseGeneration Mutable Persistent
@@ -759,13 +764,13 @@ void Rest(Critter player, Critter npc)
     Game.DenDefenseRestUsed = true;
     Game.DenDefenseStage = STAGE_RESTING;
     Game.DenDefenseRestPhase = 0;
-    Game.DenDefenseRestUntil = Game.FrameTime + Time::Seconds(1);
+    Game.DenDefenseRestUntil = Game.FrameTime + Time::Milliseconds(REST_PHASE_MILLISECONDS);
     Game.DenDefenseDawn = GameTime::GetNearSynchronizedTime(0, 0, 0, 10, 0, 0);
     Game.DenDefenseDawnLocked = false;
     StopScenarioActions();
     Game.StartTimeEvent(Time::Milliseconds(1), CloseRestDialogs, Game.DenDefenseGeneration);
     BroadcastRest(0);
-    Game.StartTimeEvent(Time::Seconds(1), FinishRest, Game.DenDefenseGeneration);
+    Game.StartTimeEvent(Time::Milliseconds(REST_PHASE_MILLISECONDS), FinishRest, Game.DenDefenseGeneration);
 }
 
 [[TimeEvent]]
@@ -799,10 +804,15 @@ void FinishRest(any value)
             cr.CurrentAp = cr.ActionPoints * Tla::AP_DIVIDER;
         }
     }
+    Map? map = Game.GetMap(Game.DenDefenseMapId);
+    verify(map != null, "Sierra entrance disappeared during rest");
+    // Экран уже полностью чёрный: убираем тела, считаем их и переставляем Тодда.
+    // История прошлой волны ещё действует; до осветления оставляем время на синхронизацию.
+    DenCleanup::BeforeWave(map);
     Game.DenDefenseRestPhase = 1;
-    Game.DenDefenseRestUntil = Game.FrameTime + Time::Seconds(1);
+    Game.DenDefenseRestUntil = Game.FrameTime + Time::Milliseconds(REST_PHASE_MILLISECONDS);
     BroadcastRest(1);
-    Game.StartTimeEvent(Time::Seconds(1), StartAfterRest, Game.DenDefenseGeneration);
+    Game.StartTimeEvent(Time::Milliseconds(REST_PHASE_MILLISECONDS), StartAfterRest, Game.DenDefenseGeneration);
 }
 
 timespan RestRemaining()
@@ -845,8 +855,7 @@ void StartAfterRest(any value)
     }
     Map? map = Game.GetMap(Game.DenDefenseMapId);
     verify(map != null, "Sierra entrance disappeared after rest");
-    // Пока поколение и история прошлой волны ещё действуют, завершаем перенос тел без двойного счёта.
-    DenCleanup::BeforeWave(map);
+    // Скрытая уборка завершена в FinishRest; после осветления запускаем только волну.
     Game.DenDefenseStage = STAGE_FIGHTING;
     BroadcastRest(2);
     Game.DenDefenseWave = Game.DenDefenseWave + 1;
@@ -1424,7 +1433,10 @@ void DrawRest()
 {
     if (Game.DenDefenseClientResting) {
         int remaining = Game.DenDefenseClientBlackAt > Game.FrameTime ? (Game.DenDefenseClientBlackAt - Game.FrameTime).milliseconds : 0;
-        int progress = Math::Clamp(remaining * 255 / 1000, 0, 255);
+        // Перед уборкой затемняем сразу, затем держим чёрный экран до конца фазы.
+        // После уборки сначала ждём синхронизации, а осветляем только в последнюю секунду.
+        int fading = Game.DenDefenseClientRestPhase == 0 ? remaining - (REST_PHASE_MILLISECONDS - REST_FADE_MILLISECONDS) : remaining;
+        int progress = Math::Clamp(fading * 255 / REST_FADE_MILLISECONDS, 0, 255);
         int alpha = Game.DenDefenseClientRestPhase == 0 ? 255 - progress : progress;
         Effects::DrawFullscreenOverlay(ucolor(0, 0, 0, alpha));
     }
