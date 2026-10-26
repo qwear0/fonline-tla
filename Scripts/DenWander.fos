@@ -548,7 +548,7 @@ void ProcessBrawlEscape(Critter npc, Critter partner, Map map)
     int speed = run ? npc.WalkSpeed * 2 : npc.WalkSpeed;
     // Ограничиваем не только конечный гекс: один соседний шаг не позволяет пути
     // обогнуть препятствие с выходом за шестигексовый круг. Телепортации нет.
-    npc.MoveToHex(npc.DenWanderGoal, 0, ipos(0, 0), 1, speed, MainPlanes::CanOpenDoor);
+    npc.MoveToHex(npc.DenWanderGoal, 0, ipos16(0, 0), 1, speed, MainPlanes::CanOpenDoor);
 }
 
 void ProcessBrawl(Critter npc, Map map)
