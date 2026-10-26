@@ -344,10 +344,11 @@ and `Texts/Text.{russ,engl}.fotxt`.
   bodies are excluded. Ordinary collection respects `MercLoot` reservations both at selection and
   immediately before removal.
 - Todd walks with ordinary door-aware NPC plans to corpse-looting distance (one hex plus both
-  multihex radii), faces the body and removes it immediately. He then walks to the western rear
-  of the `TRUCK2.FRM` sprite, preferably to `56:48`, otherwise to a reachable available hex within
-  **one hex of `56:48`**. This unloading area is separate from his wider waiting area at `50:56`;
-  a blocked rear approach does not send him to the cab or the opposite side. At the exact
+  multihex radii), faces the body and removes it immediately. He then walks right up to the
+  **southwestern edge of the `TRUCK2.FRM` sprite**, preferably to `57:53`, otherwise to a reachable
+  available `57:52` or `57:54` along that same edge, immediately outside the truck's blocking hexes.
+  This unloading area is separate from his wider waiting area at `50:56`; a blocked approach does
+  not send him farther from the truck, to the cab or to the opposite side. At the exact
   unloading hex he faces into the truck and waits **one real second**, credits one body to the truck,
   then may select the next corpse. His `nmlosr` model has no pickup/use frames, so the pause retains
   his standing sprite. A blocked return is retried without losing the carried body; it never

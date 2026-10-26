@@ -1,5 +1,5 @@
 // DenCleanup — Тодд у грузовика убирает тела врагов после завершённых волн осады Сьерры.
-// SERVER: подход к телу, перенос к задней части грузовика, секунда разгрузки и уборка перед волной.
+// SERVER: подход к телу, перенос к юго-западному борту грузовика, секунда разгрузки и уборка перед волной.
 // CLIENT: постоянный локализованный счётчик над грузовиком, независимо от имён и реплик NPC.
 // Счётчик и несомое тело сохраняются на карте; задание на NPC, изменяемых глобальных таблиц нет.
 // Связи: DenDefense (стадии и поколения), MercLoot (резерв тела), NpcPlanes, ItemStacks.
@@ -103,11 +103,11 @@ Critter? GetTodd(Map map)
     return todd;
 }
 
-// Ожидание — у исходного гекса; разгрузка — у западного заднего борта спрайта TRUCK2.
-// Телепорт выбирает весь радиус ожидания, обычный подход не уводит Тодда к кабине.
+// Ожидание — у исходного гекса; разгрузка — вплотную к юго-западному борту спрайта TRUCK2.
+// Запасные гексы разгрузки идут вдоль того же борта, за блокировкой грузовика на x = 56.
 bool FindTruckHex(Critter todd, Map map, bool teleport, mpos& hex)
 {
-    const mpos center = teleport ? mpos(50, 56) : mpos(56, 48);
+    const mpos center = teleport ? mpos(50, 56) : mpos(57, 53);
     const int radius = teleport ? 3 : 1;
     const mpos workshop = mpos(37, 60);
     mpos[] candidates = {};
@@ -117,7 +117,7 @@ bool FindTruckHex(Critter todd, Map map, bool teleport, mpos& hex)
                 continue;
             }
             mpos candidate = mpos(x, y);
-            if (Game.GetDistance(center, candidate) > radius || !NpcPositioning::IsFreeHex(todd, map, candidate) ||
+            if (Game.GetDistance(center, candidate) > radius || (!teleport && candidate.x != center.x) || !NpcPositioning::IsFreeHex(todd, map, candidate) ||
                 (!map.IsHexMovable(candidate) && todd.Hex != candidate) || map.GetPathLength(candidate, workshop, 1, DenDefense::CanLeaveSpawnHouse) == 0 ||
                 (!teleport && todd.Hex != candidate && map.GetPathLength(todd, candidate, 0, MainPlanes::CanOpenDoor) == 0)) {
                 continue;
