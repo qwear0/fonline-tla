@@ -688,6 +688,18 @@ bool IsTimedUseItem(AbstractItem item)
     return item.IsCanUse && item.IsHasTimer;
 }
 
+// Медицинский инструмент запускает обычный навык с его проверками, бонусом предмета в руке и откатом.
+CritterProperty GetMedicalKitSkill(AbstractItem item)
+{
+    if (item.ProtoId == Content::Item::first_aid_kit || item.ProtoId == Content::Item::field_medic_kit) {
+        return CritterProperty::SkillFirstAid;
+    }
+    if (item.ProtoId == Content::Item::doctors_bag || item.ProtoId == Content::Item::paramedics_bag) {
+        return CritterProperty::SkillDoctor;
+    }
+    return CritterProperty::None;
+}
+
 #if CLIENT
 void SwitchUnarmedWeapon(Critter cr, bool next)
 {
@@ -755,8 +767,9 @@ void UseMainItem()
 
     Critter chosen = Chosen;
 
-    if (Gui::Cursor == CursorType::UseWeapon) {
+    if (Gui::Cursor == CursorType::UseWeapon || Gui::Cursor == CursorType::UseItem) {
         Gui::Cursor = CursorType::Default;
+        Gui::CursorData = ZERO_IDENT;
         return;
     }
 
@@ -775,8 +788,8 @@ void UseMainItem()
         Gui::Cursor = CursorType::UseWeapon;
     }
     else if (use == WeaponHelpers::USE_USE && item.IsCanUseOnSmth) {
-        // Self->CurUseItem = 0;
-        // Self->SetCurMode( CUR_USE_ITEM );
+        // Выбираем именно предмет из руки, а не оставшиеся данные курсора предыдущего навыка.
+        Gui::CursorData = itemId;
         Gui::Cursor = CursorType::UseItem;
     }
     else if (use == WeaponHelpers::USE_USE && item.IsCanUse) {

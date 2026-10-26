@@ -21,6 +21,25 @@ request manual First Aid, and Alt+Shift+F2 does not invoke Doctor. Unmodified F1
 unmodified F2 keeps its existing behavior. Shift+F10 retains the existing atlas-dump shortcut.
 F11 remains the separate session-only NPC-name toggle.
 
+## Using a held item
+
+- Left-click the main-hand plate to use the held item. Targetable items (including stimpaks and
+  medical kits) select a use cursor; click yourself or another character on the map. Clicking the
+  plate again cancels the use cursor. Self-use-only items act directly; timed items open the timer.
+- `Parameters::UseMainItem` uses `CritterItem::GetActiveMode`: non-weapons derive availability from
+  their use flags, so a newly created item's default `Mode = 0` cannot disable the button. The target
+  cursor stores the held item's ID, replacing any previous skill-cursor data.
+- Flow: `Gui/Game.fogui` -> `Parameters::UseMainItem` -> `ChosenActions` -> `UseItemOn` RPC ->
+  `CritterActions::UseItemOn` -> `Main::CritterUseItem`. The server checks ownership, capability,
+  life/scenario state, AP and target distance. Stimpaks retain ordinary `Drugs` processing and
+  stack consumption.
+- `first_aid_kit` / `field_medic_kit` invoke First Aid; `doctors_bag` / `paramedics_bag` invoke Doctor.
+  These targetable tools also allow self-treatment despite lacking the direct `IsCanUse` flag.
+  After ordinary item-use notifications (including quest observers), `Main` raises the existing
+  skill event. Held-kit bonuses, possible kit consumption, healing/injury rules and cooldowns stay
+  in the normal skill handler. Only the item-use AP cost is charged, once; no second skill RPC is sent.
+  Using a kit on an item/scenery does not heal. No new save/network contract is introduced.
+
 ## Self-care queue contract
 
 - Client API: `bool SelfCare::Request(CritterProperty skill, bool priority = false)`,

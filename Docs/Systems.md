@@ -92,7 +92,11 @@ See [Animation.md](Animation.md) for the native baked root-motion flow, distinct
 | `Core/Gui` and companion Core GUI modules | C | Game-owned retained GUI infrastructure |
 
 `CritterItem::GetActive` resolves the selected `HandsProtoItemId` when a hand is empty;
-`GetActiveMode` reads `HandsItemMode` rather than the immutable prototype's `Mode`.
+`GetActiveMode` reads `HandsItemMode` rather than the immutable prototype's `Mode` for empty hands;
+held non-weapons derive their use mode from `IsCanUse` / `IsCanUseOnSmth`, not the default weapon mode zero.
+`Parameters::UseMainItem` binds the use cursor to the held item ID. Server `Main::CritterUseItem`
+routes medical kits through the ordinary First Aid/Doctor event after item-use notifications;
+see [ClientControls.md](ClientControls.md#using-a-held-item).
 `Gui/Game.fogui` redraws the main-hand plate from `OnDraw`, including empty-hand attacks,
 AP cost and aiming. `ClientItems::OnCritterAction` refreshes cached inventory cells after
 authoritative slot moves; the engine must apply slots before raising that event.
