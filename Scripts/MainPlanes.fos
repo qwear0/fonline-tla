@@ -200,6 +200,11 @@ EventResult NpcPlaneRun(Critter npc, int planeId, int reason, any& r0, any& r1, 
     NpcPlanes::NpcPlane? plane = NpcPlanes::GetCritterPlane(npc, planeId);
 
     if (reason == NpcPlanes::REASON_ATTACK_WEAPON) {
+        Critter? scenarioTarget = Game.GetCritter(r0);
+        if (DenWander::ChooseWeapon(npc, scenarioTarget, r0, r1, r2)) {
+            return EventResult::ContinueChain;
+        }
+
         // особое оружие отдельных видов NPC
         hstring npcPid = npc.ProtoId;
         if (npcPid == Content::Critter::FireGecko || npcPid == Content::Critter::ToughFireGecko) {
@@ -543,7 +548,13 @@ EventResult NpcPlaneRun(Critter npc, int planeId, int reason, any& r0, any& r1, 
     else if (reason == NpcPlanes::REASON_ATTACK_USE_AIM) {
         int mode = 0;
         int aim = 0;
-        if (CogitateFiring(npc, ident(r0), mode, aim)) {
+        if (npc.DenWanderActive && (npc.DenWanderMode == DenWander::BRAWL || npc.DenWanderMode == DenWander::ROCKS)) {
+            // Не подменяем бросок камня вторичным рукопашным режимом и не даём
+            // участникам парной драки переключиться на оружие или прицельный удар.
+            r0 = 0;
+            r1 = 0;
+        }
+        else if (CogitateFiring(npc, ident(r0), mode, aim)) {
             r0 = mode;
             r1 = aim;
         }

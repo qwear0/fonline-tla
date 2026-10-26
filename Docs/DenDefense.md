@@ -9,8 +9,8 @@ renaming the existing `DenDefense*` properties, script owners or dialog resource
 [`Maps/sad_enter.fomap`](../Maps/sad_enter.fomap) authors Smitty at `37:60` inside the workshop
 on the right of the truck (`51:51`), Todd beside the truck at `50:56`, and supplies at `35:60`.
 Initial participant placement searches around `55:64`; companions use the same connected-hex search
-near the player. Both stay in the outdoor `DenWander` yard (`x=49..61`, `y=56..72`), the destination
-of the first-wave enemies that randomly wander before attacking.
+near the player. Both retain the small outdoor spawn yard (`x=49..61`, `y=56..72`);
+expanding the first-wave behavior field does not expand player/companion placement.
 The workshop door at `40:57` is reopened for each attempt. Its interior is `x=33..47`, `y=58..68`.
 The two visible workshop pairs are four named usable containers: screen-left melee/self-use supplies
 and screen-right ranged weapons/ammunition/other loot. Left is map `35:59`, right `33:59` (increasing
@@ -428,21 +428,49 @@ lines. Its stock bags supply knives/switchblades/shivs, jet, flowers and caps; d
 carry beer/booze and rocks. Bags are filled once, not refreshed during combat; city quest state is
 not copied to these attackers.
 
-Each newly spawned wave-1 enemy independently has a **30%** chance to take an initial non-aggressive
-walk, owned by [`Scripts/DenWander.fos`](../Scripts/DenWander.fos). It chooses a random free, reachable
-hex on the yard in front of Smitty (`x=49..61`, `y=56..72`, by the truck outside the workshop), using the actual
-NPC's door-aware path and zero stopping radius. While walking it can retaliate only against actors
-that actually attacked that NPC, including missed attacks; it does not select other defenders or
-Smitty opportunistically. Both plan admission and actual combat/damage pass through the same
-`DenDefense.CanAttack` restriction. A high-priority attacked handler records the aggressor before
-`Main` admits the ordinary retaliation plan. With no usable aggressor, the enemy resumes the yard walk.
-Every five real seconds a blocked/occupied goal can be replaced by another reachable yard hex;
-if none is available, it waits without becoming aggressive or teleporting.
+[`Scripts/DenWander.fos`](../Scripts/DenWander.fos) owns wave-1 distractions. One uniform roll per
+new enemy assigns mutually exclusive modes: **30% lost**, **10% object fascination**, **10% rock
+thrower** (only a model with throwing animation), **10% brawl initiator**, **5% random runner**
+(only a model with running animation), otherwise normal siege AI. An ineligible animation roll
+falls back to normal AI, not another distraction. A brawl initiator can forcibly recruit an unpaired
+living wave enemy, overriding that enemy's earlier mode; these are initiation probabilities, not
+final population quotas. Waves 2/3 are unchanged.
 
-On reaching the exact goal hex it says one uniformly selected line from `DenWander/Arrival1..9`
-in `Texts/Text.{russ,engl}.fotxt`, once, and returns to normal scenario target selection. The own walk
-completion event handles arrival; the combat controller also checks the exact position. Waves 2/3
-are unchanged. Goal, active flag, aggressor IDs and path-check deadline are transient server-only
+All random destinations use the expanded central approach field (`x=49..99`, `y=33..128`): between
+the workshop and left bunker, from the outer entrance approach to the base facade, excluding the
+lateral yards, buildings and base interior. Free hexes require the actual NPC's door-aware path
+and exact stopping position; unreachable/occupied goals are reconsidered every five real seconds.
+Unavailable destinations wait without teleporting or enabling ordinary aggression. The small
+player/companion spawn yard is independent of these bounds.
+
+- **Lost:** walks to a random destination, retaliating only against its recorded direct aggressors
+  (including missed attacks). A high-priority attacked handler records them before `Main` admits
+  retaliation. With no usable aggressor it resumes walking. Exact arrival, from its own walk-end
+  event or controller fallback, says one `DenWander/Arrival1..9` line and restores ordinary AI.
+- **Fascinated:** approaches a reachable free hex beside an authored turret, barrel, truck, tire or
+  tree, then stands facing its anchor for **60–180 real seconds**. During this mode it does not
+  attack. Every independently randomized **30–60 seconds** it says a `Stare1..14` line, including the
+  three emotes; the first due line is processed before expiry, guaranteeing at least one. Afterwards
+  ordinary AI resumes.
+- **Rock thrower:** `nftrmp` has `NFTRMPAS`; `nmlosr` lacks the throw animation, so it is excluded.
+  A finite **3–6 rock** ground stack is seeded once on a reachable field hex. The NPC walks to pick
+  up real ground rocks, throws them using their primary attack and recovers thrown rocks through
+  normal pickup. No inventory refill is generated during combat. Only a target already adjacent
+  permits an unarmed attack; without rocks it never chases a distant target into melee.
+- **Brawl:** both members are forced to adjacent reachable random field destinations and wait for
+  each other before fighting. Only this mutually linked pair bypasses same-side attack/damage
+  rejection, and `MainPlanes` forces unarmed primary attacks. Each member speaks a `Brawl1..13` line
+  every **30–60 real seconds** after assembly. Below **10% maximum HP**, a member stops attacking
+  and repeatedly chooses distant escape destinations; its opponent pursues, using running only
+  when supported. If both are below the threshold, both flee. Losing the partner restores normal
+  AI; an unpaired initiator waits for later batches, but gives up when spawning is finished and
+  no partner is available. Damage/HP balance and lethal-hit rules are unchanged.
+- **Runner:** repeatedly runs to random reachable field destinations without attacking. Eligibility
+  uses `CritterTypes.CanRun` and `IsNoRun`; no missing run animation is requested.
+
+Both languages define all `DenWander` lines in `Texts/Text.{russ,engl}.fotxt`. Plan admission,
+actual attacks and damage use the same `DenDefense.CanAttack` gate, with the narrow reciprocal
+brawl-pair exception. Mode, goals, partner, aggressor IDs and deadlines are transient server-only
 critter properties; no public property, RemoteCall or rename/removal migration is added.
 
 The first batch is admitted when the 10:00 rest transition finishes. Wave 1 admits **1–3 enemies
@@ -462,7 +490,7 @@ Counts and equipment still advance per enemy, not per batch. No existing propert
 Every candidate needs a route toward the workshop through openable, unlocked doors. Blocked exits
 never force an unrelated spawn or unlocking. If all candidates are blocked, the same
 cursor retries with another randomized delay and logs periodically;
-this is not a kill. Outside the wave-1 initial yard walk, visible reachable participants/companions
+this is not a kill. Outside the special wave-1 behaviors, visible reachable participants/companions
 distract attackers; otherwise they walk toward living Smitty.
 Stale/invisible distractions return to that objective. `MainPlanes.CanOpenDoor` is shared by target
 reachability, actual NPC movement and `MainPlanes` door reactions: AI permission is required, and

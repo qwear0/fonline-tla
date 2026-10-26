@@ -74,7 +74,8 @@ Map? GetBaseMap()
     return Game.GetMap(Content::Map::sad_enter);
 }
 
-// Спавн — на площадке DenWander перед домом, с выходом к мастерской, не в кармане между машинами.
+// Спавн — на прежней небольшой площадке перед домом, не на всём поле DenWander.
+// Сохраняем выход к мастерской, не размещаем игроков в кармане между машинами.
 // Проверяем все кольца от центра: случайная проверка одного гекса связность не гарантирует.
 bool FindBaseSpawnHex(Map map, mpos center, int radius, mpos& hex)
 {
@@ -86,7 +87,8 @@ bool FindBaseSpawnHex(Map map, mpos center, int radius, mpos& hex)
                     continue;
                 }
                 mpos candidate = mpos(x, y);
-                if (DenWander::IsYardHex(candidate) && Game.GetDistance(center, candidate) == ring && map.IsHexMovable(candidate) && map.GetCritterOnHex(candidate) == null &&
+                if (candidate.x >= 49 && candidate.x <= 61 && candidate.y >= 56 && candidate.y <= 72 && Game.GetDistance(center, candidate) == ring &&
+                    map.IsHexMovable(candidate) && map.GetCritterOnHex(candidate) == null &&
                     (Game.GetDistance(candidate, workshop) <= 1 || map.GetPathLength(candidate, workshop, 1, CanLeaveSpawnHouse) > 0)) {
                     hex = candidate;
                     return true;
@@ -648,7 +650,8 @@ bool CanAttack(Critter attacker, Critter target)
         bool attackerEnemy = attacker.DenDefenseRole == ROLE_ENEMY;
         bool targetEnemy = IsActor(target) && target.DenDefenseRole == ROLE_ENEMY;
         bool smittyRetaliates = attacker.DenDefenseRole == ROLE_SMITTY && EnemyStack::CheckEnemyInStack(attacker, target.Id);
-        if (attackerEnemy == targetEnemy && !smittyRetaliates) {
+        // Внутри одной стороны разрешаем только взаимно связанную пару первой волны.
+        if (attackerEnemy == targetEnemy && !smittyRetaliates && !DenWander::IsPair(attacker, target)) {
             return false;
         }
     }

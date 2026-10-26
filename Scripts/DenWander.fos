@@ -1,7 +1,7 @@
-// DenWander — растерянные враги первой волны сначала идут на площадку перед Смитти.
-// SERVER: 30% при создании, достижимый случайный гекс, только самооборона до прибытия.
-// Цель, список напавших и срок перепроверки пути хранятся на NPC; общих таблиц нет.
-// Связи: DenDefense (создание, выбор цели и запрет агрессии), NpcPlanes, Messaging.
+// DenWander — растерянность, залипание, камни, парные драки и бег врагов первой волны.
+// SERVER: один бросок поведения при создании; DenDefense вызывает Process до выбора жертвы.
+// Режим, цели, напарник и реальные сроки хранятся на NPC; общих изменяемых таблиц нет.
+// Связи: DenDefense (допуск атак и урона), MainPlanes (оружие), NpcPlanes, Messaging.
 namespace DenWander
 {
 
@@ -11,26 +11,47 @@ namespace DenWander
 ///@ Property Critter Server mpos DenWanderGoal Mutable
 ///@ Property Critter Server ident[] DenWanderAttackerIds Mutable
 ///@ Property Critter Server nanotime DenWanderRecheckAt Mutable
+///@ Property Critter Server int32 DenWanderMode Mutable
+///@ Property Critter Server mpos DenWanderFocus Mutable
+///@ Property Critter Server nanotime DenWanderUntil Mutable
+///@ Property Critter Server nanotime DenWanderSayAt Mutable
+///@ Property Critter Server ident DenWanderPartnerId Mutable
+///@ Property Critter Server bool DenWanderReady Mutable
+///@ Property Critter Server bool DenWanderFleeing Mutable
+
+const int LOST = 1;
+const int STARE = 2;
+const int ROCKS = 3;
+const int BRAWL = 4;
+const int RUN = 5;
 
 bool IsYardHex(mpos hex)
 {
-    // Открытая площадка у грузовика перед мастерской Сьерры; дом не входит.
-    return hex.x >= 49 && hex.x <= 61 && hex.y >= 56 && hex.y <= 72;
+    // Центральное поле между домом и левым бункером, от входного ограждения
+    // до фасада базы. Боковые площадки, дом, бункер и внутренность базы не входят.
+    return hex.x >= 49 && hex.x <= 99 && hex.y >= 33 && hex.y <= 128;
 }
 
-bool PickGoal(Critter npc, Map map)
+bool CanStand(Critter npc, Map map, mpos hex)
+{
+    return IsYardHex(hex) && map.IsHexesMovable(hex, npc.Multihex) && (map.GetCritterOnHex(hex) == null || npc.Hex == hex) &&
+           (npc.Hex == hex || map.GetPathLength(npc, hex, 0, MainPlanes::CanOpenDoor) > 0);
+}
+
+bool PickGoal(Critter npc, Map map, Critter? avoid = null)
 {
     mpos[] candidates = {};
-    for (int x = 49; x <= 61; x++) {
-        for (int y = 56; y <= 72; y++) {
+    int escapeDistance = avoid != null ? Math::Min(20, Game.GetDistance(npc, avoid) + 5) : 0;
+    for (int x = 49; x <= 99; x++) {
+        for (int y = 33; y <= 128; y++) {
             mpos hex = mpos(x, y);
-            if (map.IsHexesMovable(hex, npc.Multihex) && map.GetCritterOnHex(hex) == null) {
+            if (hex != npc.Hex && map.IsHexesMovable(hex, npc.Multihex) && map.GetCritterOnHex(hex) == null &&
+                (avoid == null || Game.GetDistance(hex, avoid.Hex) >= escapeDistance)) {
                 candidates.insertLast(hex);
             }
         }
     }
-    // Случайная перестановка без повторов: первый достижимый гекс равновероятен.
-    // Не ищем путь ко всем точкам, если уже нашли подходящую.
+    // Равновероятный выбор без повторов; путь ищем только до первого пригодного гекса.
     while (!candidates.isEmpty()) {
         int index = Game.Random(0, candidates.length() - 1);
         mpos hex = candidates[index];
@@ -45,23 +66,104 @@ bool PickGoal(Critter npc, Map map)
     return false;
 }
 
+void Stop(Critter npc)
+{
+    npc.StopMoving();
+    NpcPlanes::DropPlanes(npc);
+}
+
+void Finish(Critter npc, bool stop = true)
+{
+    if (stop) {
+        Stop(npc);
+    }
+    npc.DenWanderActive = false;
+    npc.DenWanderMode = 0;
+    npc.DenWanderGoal = mpos();
+    npc.DenWanderAttackerIds = {};
+    npc.DenWanderPartnerId = ZERO_IDENT;
+    npc.DenWanderReady = false;
+    npc.DenWanderFleeing = false;
+    npc.DenWanderUntil = ZERO_NANOTIME;
+    npc.DenWanderSayAt = ZERO_NANOTIME;
+    npc.DenWanderRecheckAt = ZERO_NANOTIME;
+}
+
+bool CanRun(Critter npc)
+{
+    auto type = CritterTypes::GetCritterType(npc);
+    return type != null && type.CanRun && !npc.IsNoRun;
+}
+
+bool CanThrow(Critter npc)
+{
+    // В первой волне только две модели. У nftrmp есть NFTRMPAS (бросок),
+    // у nmlosr нет ни AS, ни AT. Сервер не загружает клиентский пакет спрайтов.
+    return npc.ModelName == "art/critters/nftrmpaa.frm".hstr();
+}
+
 void TryStart(Critter npc)
 {
-    if (Game.DenDefenseWave != 1 || Game.Random(1, 100) > 30) {
+    if (Game.DenDefenseWave != 1) {
         return;
     }
-    npc.DenWanderActive = true;
+    int roll = Game.Random(1, 100);
+    int mode = 0;
+    if (roll <= 30) {
+        mode = LOST;
+    }
+    else if (roll <= 40) {
+        mode = STARE;
+    }
+    else if (roll <= 50 && CanThrow(npc)) {
+        mode = ROCKS;
+    }
+    else if (roll > 50 && roll <= 60) {
+        mode = BRAWL;
+    }
+    else if (roll > 60 && roll <= 65 && CanRun(npc)) {
+        mode = RUN;
+    }
+    npc.DenWanderMode = mode;
+    npc.DenWanderActive = mode != 0;
     npc.OnNpcPlaneEnd.Subscribe(WalkEnd);
+    if (mode == ROCKS) {
+        Map? map = npc.GetMap();
+        verify(map != null, "Rock thrower spawned without map", npc);
+        // Конечный запас на земле, а не бесконечные камни в руках. Брошенные
+        // камни Combat оставляет у цели, откуда их можно подобрать снова.
+        if (PickGoal(npc, map)) {
+            ItemStacks::AddItem(map, npc.DenWanderGoal, Content::Item::rock, Game.Random(3, 6));
+            npc.DenWanderGoal = mpos();
+        }
+    }
+}
+
+bool IsPair(Critter first, Critter second)
+{
+    return first.Id != second.Id && first.DenWanderActive && second.DenWanderActive && first.DenWanderMode == BRAWL && second.DenWanderMode == BRAWL &&
+           first.DenWanderPartnerId == second.Id && second.DenWanderPartnerId == first.Id && DenDefense::IsWaveEnemy(first) &&
+           DenDefense::IsWaveEnemy(second) && first.MapId == second.MapId;
 }
 
 bool CanAttack(Critter npc, Critter target)
 {
-    return !npc.DenWanderActive || npc.DenWanderAttackerIds.exists(target.Id);
+    if (!npc.DenWanderActive) {
+        return true;
+    }
+    if (npc.DenWanderMode == BRAWL) {
+        return IsPair(npc, target) && npc.DenWanderReady && target.DenWanderReady && !npc.DenWanderFleeing && npc.CurrentHp * 100 >= npc.MaxLife * 10;
+    }
+    if (npc.DenWanderMode == ROCKS) {
+        return Game.GetDistance(npc, target) <= 1 + npc.Multihex + target.Multihex || npc.GetItem(Content::Item::rock) != null;
+    }
+    return npc.DenWanderMode == LOST && npc.DenWanderAttackerIds.exists(target.Id);
 }
 
 void OnAttacked(Critter npc, Critter attacker)
 {
-    if (!npc.DenWanderActive || !DenDefense::IsWaveEnemy(npc) || !npc.IsAlive() || !DenDefense::CanAct(npc) || npc.MapId != attacker.MapId ||
+    if (!npc.DenWanderActive || npc.DenWanderMode != LOST || !DenDefense::IsWaveEnemy(npc) || !npc.IsAlive() || !DenDefense::CanAct(npc) ||
+        npc.MapId != attacker.MapId ||
         (!DenDefense::IsParticipant(attacker) && (!DenDefense::IsActor(attacker) || attacker.DenDefenseRole == DenDefense::ROLE_ENEMY))) {
         return;
     }
@@ -72,10 +174,9 @@ void OnAttacked(Critter npc, Critter attacker)
     }
 }
 
-void Arrive(Critter npc)
+void Arrive(Critter npc, bool stop = true)
 {
-    npc.DenWanderActive = false;
-    npc.DenWanderAttackerIds = {};
+    Finish(npc, stop);
     Messaging::Say(npc, TextPackKey(TextPackName::Text, "DenWander", "Arrival" + Game.Random(1, 9)));
 }
 
@@ -84,25 +185,39 @@ void Arrive(Critter npc)
 void WalkEnd(Critter npc, int planeId, int reason, Critter? someCr, Item? someItem)
 {
     NpcPlanes::NpcPlane? plane = NpcPlanes::GetCritterPlane(npc, planeId);
-    if (npc.DenWanderActive && DenDefense::IsWaveEnemy(npc) && npc.IsAlive() && DenDefense::CanAct(npc) && Game.DenDefenseStage == DenDefense::STAGE_FIGHTING &&
-        plane != null && plane.Identifier == "DenWander".hstr() && reason == NpcPlanes::REASON_SUCCESS && npc.Hex == npc.DenWanderGoal) {
-        Arrive(npc);
+    if (npc.DenWanderActive && npc.DenWanderMode == LOST && DenDefense::IsWaveEnemy(npc) && npc.IsAlive() && DenDefense::CanAct(npc) &&
+        Game.DenDefenseStage == DenDefense::STAGE_FIGHTING && plane != null && plane.Identifier == "DenWander".hstr() && reason == NpcPlanes::REASON_SUCCESS &&
+        npc.Hex == npc.DenWanderGoal) {
+        // Завершаемый план удалит NpcPlanes: внутри его callback таблицу не очищаем.
+        Arrive(npc, false);
     }
 }
 
-// true подавляет обычный выбор жертвы; после прибытия DenDefense продолжает штатный ИИ.
-bool Process(Critter npc, Map map)
+void Walk(Critter npc, bool run = false)
 {
-    if (!npc.DenWanderActive) {
-        return false;
+    if (!IsYardHex(npc.DenWanderGoal)) {
+        return;
     }
-    if (IsYardHex(npc.DenWanderGoal) && npc.Hex == npc.DenWanderGoal) {
-        npc.StopMoving();
-        NpcPlanes::DropPlanes(npc);
-        Arrive(npc);
-        return false;
+    // Идентификатор находится и у родителя: не прерываем открытие двери на маршруте.
+    if (NpcPlanes::GetPlanes(npc, "DenWander".hstr()) != null) {
+        return;
     }
+    Stop(npc);
+    NpcPlanes::AddWalkPlane(npc, 0, "DenWander".hstr(), 0, npc.DenWanderGoal, Game.GetDirection(npc.Hex, npc.DenWanderGoal), run && CanRun(npc), 0);
+}
 
+void Attack(Critter npc, Critter target, bool run = false)
+{
+    auto planes = NpcPlanes::GetPlanes(npc);
+    if (planes != null && planes[0].Type == NpcPlanes::AI_PLANE_ATTACK && planes[0].Attack_TargId == target.Id && planes[0].Run == (run && CanRun(npc))) {
+        return;
+    }
+    Stop(npc);
+    NpcPlanes::AddAttackPlane(npc, 0, target, run && CanRun(npc));
+}
+
+bool Retaliate(Critter npc, Map map)
+{
     Critter? best = null;
     int nearest = 2147483647;
     for (int i = 0; i < npc.DenWanderAttackerIds.length(); i++) {
@@ -117,33 +232,353 @@ bool Process(Critter npc, Map map)
             nearest = distance;
         }
     }
-    NpcPlanes::NpcPlane[]? planes = NpcPlanes::GetPlanes(npc);
     if (best != null) {
-        if (planes == null || planes[0].Type != NpcPlanes::AI_PLANE_ATTACK || planes[0].Attack_TargId != best.Id) {
-            npc.StopMoving();
-            NpcPlanes::DropPlanes(npc);
-            NpcPlanes::AddAttackPlane(npc, 0, best);
-        }
+        Attack(npc, best);
         return true;
     }
+    auto planes = NpcPlanes::GetPlanes(npc);
     if (planes != null && planes[0].Type == NpcPlanes::AI_PLANE_ATTACK) {
-        npc.StopMoving();
-        NpcPlanes::DropPlanes(npc);
+        Stop(npc);
     }
-    // Занятую или перекрытую точку заменяем, не превращая задержку в внезапную агрессию.
+    return false;
+}
+
+bool FindNear(Critter npc, Map map, mpos center, int radius, mpos& goal)
+{
+    for (int ring = 1; ring <= radius; ring++) {
+        mpos[] candidates = {};
+        for (int x = int(center.x) - ring * 2; x <= int(center.x) + ring * 2; x++) {
+            for (int y = int(center.y) - ring * 2; y <= int(center.y) + ring * 2; y++) {
+                if (x < 0 || y < 0 || x >= int(map.Size.width) || y >= int(map.Size.height)) {
+                    continue;
+                }
+                mpos hex = mpos(x, y);
+                if (Game.GetDistance(center, hex) == ring && IsYardHex(hex) && map.IsHexesMovable(hex, npc.Multihex) &&
+                    (map.GetCritterOnHex(hex) == null || npc.Hex == hex)) {
+                    candidates.insertLast(hex);
+                }
+            }
+        }
+        while (!candidates.isEmpty()) {
+            int index = Game.Random(0, candidates.length() - 1);
+            mpos hex = candidates[index];
+            candidates.removeAt(index);
+            if (CanStand(npc, map, hex)) {
+                goal = hex;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool PickFocus(Critter npc, Map map)
+{
+    mpos[] objects = {};
+    // Авторские прототипы бочек, грузовиков, шин и деревьев sad_enter.
+    const hstring[] props = {"generic_2005".hstr(),
+                             "generic_2006".hstr(),
+                             "generic_2007".hstr(),
+                             "generic_2321".hstr(),
+                             "generic_2323".hstr(),
+                             "generic_2101".hstr(),
+                             "generic_2945".hstr(),
+                             "generic_2946".hstr(),
+                             "generic_2947".hstr()};
+    auto statics = map.GetStaticItems();
+    for (int i = 0; i < statics.length(); i++) {
+        if (props.exists(statics[i].ProtoId) && IsYardHex(statics[i].Hex) && !objects.exists(statics[i].Hex)) {
+            objects.insertLast(statics[i].Hex);
+        }
+    }
+    auto turrets = map.GetCritters(CritterFindType::NonDead);
+    for (int i = 0; i < turrets.length(); i++) {
+        if (turrets[i].ProtoId == Content::Critter::AutoCannon && IsYardHex(turrets[i].Hex)) {
+            objects.insertLast(turrets[i].Hex);
+        }
+    }
+    while (!objects.isEmpty()) {
+        int index = Game.Random(0, objects.length() - 1);
+        mpos focus = objects[index];
+        objects.removeAt(index);
+        mpos goal;
+        if (FindNear(npc, map, focus, 3 + npc.Multihex, goal)) {
+            npc.DenWanderFocus = focus;
+            npc.DenWanderGoal = goal;
+            return true;
+        }
+    }
+    return false;
+}
+
+void SayPeriodically(Critter npc, string prefix, int count)
+{
+    if (Game.FrameTime >= npc.DenWanderSayAt) {
+        Messaging::Say(npc, TextPackKey(TextPackName::Text, "DenWander", prefix + Game.Random(1, count)));
+        npc.DenWanderSayAt = Game.FrameTime + Time::Seconds(Game.Random(30, 60));
+    }
+}
+
+void ProcessStare(Critter npc, Map map)
+{
+    if (npc.DenWanderUntil != ZERO_NANOTIME) {
+        // Даже при минутном залипании и первом интервале в 60 секунд реплика
+        // предшествует окончанию: минимум одна гарантирована.
+        Stop(npc);
+        npc.SetDir(Game.GetDirection(npc.Hex, npc.DenWanderFocus));
+        SayPeriodically(npc, "Stare", 14);
+        if (Game.FrameTime >= npc.DenWanderUntil) {
+            Finish(npc);
+        }
+        return;
+    }
+    if (npc.Hex == npc.DenWanderGoal && IsYardHex(npc.DenWanderGoal)) {
+        Stop(npc);
+        npc.SetDir(Game.GetDirection(npc.Hex, npc.DenWanderFocus));
+        npc.DenWanderUntil = Game.FrameTime + Time::Seconds(Game.Random(60, 180));
+        npc.DenWanderSayAt = Game.FrameTime + Time::Seconds(Game.Random(30, 60));
+        return;
+    }
     if (Game.FrameTime >= npc.DenWanderRecheckAt) {
         npc.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
-        if (!IsYardHex(npc.DenWanderGoal) || map.GetCritterOnHex(npc.DenWanderGoal) != null ||
-            map.GetPathLength(npc, npc.DenWanderGoal, 0, MainPlanes::CanOpenDoor) == 0) {
-            npc.StopMoving();
-            NpcPlanes::DropPlanes(npc);
+        if (!CanStand(npc, map, npc.DenWanderGoal)) {
+            Stop(npc);
+            npc.DenWanderGoal = mpos();
+            PickFocus(npc, map);
+        }
+    }
+    Walk(npc);
+}
+
+bool PairGoals(Critter npc, Critter partner, Map map)
+{
+    // Пробуем несколько площадок, обе точки должны быть достижимы для своей модели.
+    for (int attempt = 0; attempt < 8; attempt++) {
+        mpos other;
+        if (PickGoal(npc, map) && FindNear(partner, map, npc.DenWanderGoal, 1, other)) {
+            Stop(npc);
+            Stop(partner);
+            partner.DenWanderGoal = other;
+            npc.DenWanderReady = partner.DenWanderReady = false;
+            npc.DenWanderRecheckAt = partner.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
+            return true;
+        }
+    }
+    npc.DenWanderGoal = partner.DenWanderGoal = mpos();
+    return false;
+}
+
+bool FindPartner(Critter npc, Map map)
+{
+    Critter[] candidates = {};
+    auto ids = Game.DenDefenseEnemyIds.clone();
+    for (int i = 0; i < ids.length(); i++) {
+        Critter? other = Game.GetCritter(ids[i]);
+        if (other != null && other.Id != npc.Id && other.IsAlive() && other.MapId == npc.MapId && DenDefense::IsWaveEnemy(other) &&
+            other.DenWanderPartnerId == ZERO_IDENT && !other.IsNoUnarmed) {
+            candidates.insertLast(other);
+        }
+    }
+    while (!candidates.isEmpty()) {
+        int index = Game.Random(0, candidates.length() - 1);
+        Critter partner = candidates[index];
+        candidates.removeAt(index);
+        mpos previousGoal = partner.DenWanderGoal;
+        if (!PairGoals(npc, partner, map)) {
+            partner.DenWanderGoal = previousGoal;
+            continue;
+        }
+        // Выбранный напарник принудительно прекращает прежнее занятие.
+        partner.DenWanderActive = true;
+        partner.DenWanderMode = BRAWL;
+        partner.DenWanderUntil = ZERO_NANOTIME;
+        partner.DenWanderSayAt = ZERO_NANOTIME;
+        partner.DenWanderAttackerIds = {};
+        partner.DenWanderFleeing = false;
+        npc.DenWanderPartnerId = partner.Id;
+        partner.DenWanderPartnerId = npc.Id;
+        return true;
+    }
+    return false;
+}
+
+void ProcessBrawl(Critter npc, Map map)
+{
+    if (npc.DenWanderPartnerId == ZERO_IDENT) {
+        if (Game.FrameTime >= npc.DenWanderRecheckAt) {
+            npc.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
+            // После последней партии ждать уже некого — возвращаемся к осаде.
+            if (!FindPartner(npc, map) && Game.DenDefenseSpawned >= Game.DenDefenseSpawnTotal) {
+                Finish(npc);
+            }
+        }
+        return;
+    }
+    Critter? partner = Game.GetCritter(npc.DenWanderPartnerId);
+    if (partner == null || !partner.IsAlive() || !IsPair(npc, partner)) {
+        Finish(npc);
+        return;
+    }
+    if (!npc.DenWanderReady || !partner.DenWanderReady) {
+        if (Game.FrameTime >= npc.DenWanderRecheckAt) {
+            npc.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
+            if ((!CanStand(npc, map, npc.DenWanderGoal) || !CanStand(partner, map, partner.DenWanderGoal)) && !PairGoals(npc, partner, map)) {
+                Stop(npc);
+                Stop(partner);
+                npc.DenWanderReady = partner.DenWanderReady = false;
+                partner.DenWanderRecheckAt = npc.DenWanderRecheckAt;
+            }
+        }
+        if (npc.Hex != npc.DenWanderGoal) {
+            Walk(npc);
+            return;
+        }
+        Stop(npc);
+        npc.DenWanderReady = true;
+        if (partner.Hex != partner.DenWanderGoal) {
+            return;
+        }
+        partner.DenWanderReady = true;
+        if (npc.DenWanderSayAt == ZERO_NANOTIME) {
+            npc.DenWanderSayAt = Game.FrameTime + Time::Seconds(Game.Random(30, 60));
+            partner.DenWanderSayAt = Game.FrameTime + Time::Seconds(Game.Random(30, 60));
+        }
+    }
+    SayPeriodically(npc, "Brawl", 13);
+    if (!npc.DenWanderFleeing && npc.CurrentHp * 100 < npc.MaxLife * 10) {
+        npc.DenWanderFleeing = true;
+        npc.DenWanderGoal = mpos();
+        npc.DenWanderRecheckAt = ZERO_NANOTIME;
+        Stop(npc);
+    }
+    if (npc.DenWanderFleeing) {
+        if (Game.FrameTime >= npc.DenWanderRecheckAt || npc.Hex == npc.DenWanderGoal) {
+            npc.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
+            if (npc.Hex == npc.DenWanderGoal || !CanStand(npc, map, npc.DenWanderGoal) || Game.GetDistance(npc.DenWanderGoal, partner.Hex) < 6) {
+                Stop(npc);
+                PickGoal(npc, map, partner);
+            }
+        }
+        Walk(npc, true);
+    }
+    else {
+        Attack(npc, partner, true);
+    }
+}
+
+Critter? FindRockTarget(Critter npc, Map map)
+{
+    auto ids = Game.DenDefenseParticipantIds.clone();
+    ids.insertLast(Game.DenDefenseCompanionIds);
+    ids.insertLast(Game.DenDefenseSmittyId);
+    Critter? best = null;
+    int nearest = 2147483647;
+    for (int i = 0; i < ids.length(); i++) {
+        Critter? target = Game.GetCritter(ids[i]);
+        if (target == null || target.IsDead() || !DenDefense::CanAttack(npc, target) || !npc.IsSee(target)) {
+            continue;
+        }
+        int distance = Game.GetDistance(npc, target);
+        int cut = 1 + npc.Multihex + target.Multihex;
+        if (distance < nearest && (distance <= cut || map.GetPathLength(npc, target.Hex, cut, MainPlanes::CanOpenDoor) > 0)) {
+            best = target;
+            nearest = distance;
+        }
+    }
+    return best;
+}
+
+void ProcessRocks(Critter npc, Map map)
+{
+    Critter? target = FindRockTarget(npc, map);
+    if (target != null) {
+        Attack(npc, target);
+        return;
+    }
+    Item? best = null;
+    int nearest = 2147483647;
+    auto rocks = map.GetItems(Content::Item::rock);
+    for (int i = 0; i < rocks.length(); i++) {
+        int distance = Game.GetDistance(npc.Hex, rocks[i].Hex);
+        if (distance < nearest && (distance <= 1 + npc.Multihex || map.GetPathLength(npc, rocks[i].Hex, 1 + npc.Multihex, MainPlanes::CanOpenDoor) > 0)) {
+            best = rocks[i];
+            nearest = distance;
+        }
+    }
+    if (best != null && npc.GetItem(Content::Item::rock) == null) {
+        auto planes = NpcPlanes::GetPlanes(npc);
+        if (planes == null || planes[0].Type != NpcPlanes::AI_PLANE_PICK || planes[0].Pick_Hex != best.Hex) {
+            Stop(npc);
+            NpcPlanes::AddPickPlane(npc, 0, best, ZERO_IDENT, false);
+        }
+        return;
+    }
+    // Без камней и без вплотную подошедшего врага рукопашного преследования нет.
+    auto planes = NpcPlanes::GetPlanes(npc);
+    if (planes != null && planes[0].Type == NpcPlanes::AI_PLANE_ATTACK) {
+        Stop(npc);
+    }
+    ProcessWalk(npc, map, false);
+}
+
+// MainPlanes вызывает до общего подбора оружия: драка строго на кулаках,
+// метатель безоружен только вплотную, в остальных случаях бросает настоящий камень.
+bool ChooseWeapon(Critter npc, Critter? target, any& weaponId, any& use, any& unarmedPid)
+{
+    if (!npc.DenWanderActive || (npc.DenWanderMode != BRAWL && npc.DenWanderMode != ROCKS)) {
+        return false;
+    }
+    weaponId = 0;
+    use = 0;
+    unarmedPid = Content::Item::default_weapon.hash;
+    if (npc.DenWanderMode == ROCKS && target != null && Game.GetDistance(npc, target) > 1 + npc.Multihex + target.Multihex) {
+        Item? rock = npc.GetItem(Content::Item::rock);
+        if (rock != null) {
+            weaponId = rock.Id;
+        }
+    }
+    return true;
+}
+
+void ProcessWalk(Critter npc, Map map, bool run)
+{
+    if (Game.FrameTime >= npc.DenWanderRecheckAt || npc.Hex == npc.DenWanderGoal) {
+        npc.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
+        if (npc.Hex == npc.DenWanderGoal || !CanStand(npc, map, npc.DenWanderGoal)) {
+            Stop(npc);
             PickGoal(npc, map);
         }
     }
-    if (IsYardHex(npc.DenWanderGoal) && NpcPlanes::GetPlanes(npc, "DenWander".hstr()) == null) {
-        NpcPlanes::AddWalkPlane(npc, 0, "DenWander".hstr(), 0, npc.DenWanderGoal, Game.GetDirection(npc.Hex, npc.DenWanderGoal), false, 0);
+    Walk(npc, run);
+}
+
+// true подавляет обычный выбор жертвы; завершённое занятие возвращает штатный ИИ.
+bool Process(Critter npc, Map map)
+{
+    if (!npc.DenWanderActive) {
+        return false;
     }
-    return true;
+    if (npc.DenWanderMode == STARE) {
+        ProcessStare(npc, map);
+    }
+    else if (npc.DenWanderMode == BRAWL) {
+        ProcessBrawl(npc, map);
+    }
+    else if (npc.DenWanderMode == ROCKS) {
+        ProcessRocks(npc, map);
+    }
+    else if (npc.DenWanderMode == RUN) {
+        ProcessWalk(npc, map, true);
+    }
+    else if (npc.DenWanderMode == LOST) {
+        if (IsYardHex(npc.DenWanderGoal) && npc.Hex == npc.DenWanderGoal) {
+            Arrive(npc);
+        }
+        else if (!Retaliate(npc, map)) {
+            ProcessWalk(npc, map, false);
+        }
+    }
+    return npc.DenWanderActive;
 }
 
 #endif
