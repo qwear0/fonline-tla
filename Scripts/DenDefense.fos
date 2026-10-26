@@ -668,7 +668,7 @@ bool CanSelectTarget(Critter attacker, Critter target)
 
 bool CanAttack(Critter attacker, Critter target)
 {
-    return CanSelectTarget(attacker, target) && DenWander::CanAttack(attacker, target);
+    return CanSelectTarget(attacker, target) && (!IsScenarioCombat(attacker, target) || DenWander::CanAttack(attacker, target));
 }
 
 // Проверяем фактическую жертву промаха, очереди или взрыва; самоурон и среда не являются атакой другой цели.
