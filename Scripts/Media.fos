@@ -81,13 +81,19 @@ void OnLoop()
     }
 }
 
-// При загрузке карты запускаем случайный трек из её списка музыки, если он задан.
+// При загрузке локальной карты запускаем случайный трек из её списка музыки, если он задан.
 [[Event]]
 void OnMapLoaded()
 {
+    // Событие приходит и при выходе на глобальную карту, где CurMap отсутствует.
+    if (!HasCurMap) {
+        return;
+    }
+
+    Map map = CurMap;
     hstring music;
-    if (CurMap.Music.length() > 0) {
-        music = CurMap.Music[Game.Random(0, CurMap.Music.length() - 1)];
+    if (map.Music.length() > 0) {
+        music = map.Music[Game.Random(0, map.Music.length() - 1)];
     }
 
     if (music != EMPTY_HSTRING) {

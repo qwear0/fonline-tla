@@ -2,6 +2,7 @@
 // SERVER: один бросок поведения до выбора прототипа; DenDefense вызывает Process до выбора жертвы.
 // Режим, цели, напарник и реальные сроки хранятся на NPC; общих изменяемых таблиц нет.
 // Бегуны кружат вокруг допустимого противника и отскакивают после сближения.
+// Любая роль завершается не позднее трёх реальных минут после появления NPC.
 // Связи: DenDefense (допуск атак и урона), MainPlanes (оружие), NpcPlanes, Messaging.
 namespace DenWander
 {
@@ -15,6 +16,7 @@ namespace DenWander
 ///@ Property Critter Server int32 DenWanderMode Mutable
 ///@ Property Critter Server mpos DenWanderFocus Mutable
 ///@ Property Critter Server nanotime DenWanderUntil Mutable
+///@ Property Critter Server nanotime DenWanderDeadline Mutable
 ///@ Property Critter Server nanotime DenWanderSayAt Mutable
 ///@ Property Critter Server ident DenWanderPartnerId Mutable
 ///@ Property Critter Server bool DenWanderReady Mutable
@@ -31,6 +33,7 @@ const int RUN = 5;
 const int RUN_CIRCLE = 0;
 const int RUN_APPROACH = 1;
 const int RUN_RETREAT = 2;
+const int MAX_DISTRACTION_SECONDS = 180;
 
 [[ModuleInit]]
 void Init()
@@ -149,6 +152,9 @@ void TryStart(Critter npc, int mode)
     }
     verify(mode != RUN || CanRun(npc), "Siege runner animation missing", npc);
     verify(mode != ROCKS || CanThrow(npc), "Siege rock throw animation missing", npc);
+    // Срок общий для всех ролей, включая последующее принудительное вовлечение в драку.
+    // Завершение роли и поиск напарника его не продлевают: к штурму должен вернуться каждый враг.
+    npc.DenWanderDeadline = Game.FrameTime + Time::Seconds(MAX_DISTRACTION_SECONDS);
     npc.DenWanderMode = mode;
     npc.DenWanderActive = mode != 0;
     npc.OnNpcPlaneEnd.Subscribe(WalkEnd);
@@ -405,7 +411,7 @@ bool FindPartner(Critter npc, Map map)
     for (int i = 0; i < ids.length(); i++) {
         Critter? other = Game.GetCritter(ids[i]);
         if (other != null && other.Id != npc.Id && other.IsAlive() && other.MapId == npc.MapId && DenDefense::IsWaveEnemy(other) &&
-            other.DenWanderPartnerId == ZERO_IDENT && !other.IsNoUnarmed) {
+            other.DenWanderPartnerId == ZERO_IDENT && !other.IsNoUnarmed && Game.FrameTime < other.DenWanderDeadline) {
             candidates.insertLast(other);
         }
     }
@@ -739,6 +745,12 @@ void ProcessWalk(Critter npc, Map map, bool run)
 bool Process(Critter npc, Map map)
 {
     if (!npc.DenWanderActive) {
+        return false;
+    }
+    if (Game.FrameTime >= npc.DenWanderDeadline) {
+        // Снимаем и движение, и ограничения оружия/целей, даже если путь или партнёр недоступен.
+        // В этом же тике DenDefense выберет защитника либо направит NPC к Смитти.
+        Finish(npc);
         return false;
     }
     if (npc.DenWanderMode == STARE) {

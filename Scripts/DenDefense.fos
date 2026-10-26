@@ -997,7 +997,8 @@ void SpawnBatch()
     verify(!approaches.isEmpty(), "Sierra global exit zone is missing");
     verify(Game.DenDefenseWave != 1 || !Game.DenDefenseSpawnGroups.isEmpty(), "Missing Den wave-1 spawn group");
     int batchSize = Game.DenDefenseWave == 1 ? Game.DenDefenseSpawnGroups[0] : (Game.DenDefenseWave == 2 ? 3 : 1);
-    verify(batchSize >= 1 && batchSize <= 3 && Game.DenDefenseSpawnTotal - Game.DenDefenseSpawned >= batchSize, "Invalid Den spawn batch size");
+    verify(batchSize >= 1 && batchSize <= (Game.DenDefenseWave == 1 ? 6 : 3) && Game.DenDefenseSpawnTotal - Game.DenDefenseSpawned >= batchSize,
+           "Invalid Den spawn batch size");
     Critter? smitty = Game.GetCritter(Game.DenDefenseSmittyId);
     verify(smitty != null, "Smitty disappeared during spawn");
     mpos[] candidates = {};
@@ -1044,10 +1045,10 @@ void SpawnEnemy(Map map, mpos hex)
     if (Game.DenDefenseWave == 1) {
         // Выбираем роль до создания: бегунам и метателям нужны отдельные модели жителей.
         if (wanderMode == DenWander::RUN) {
-            proto = Content::Critter::DenDefenseAddict;
+            proto = "DenDefenseAddict".hstr();
         }
         else if (wanderMode == DenWander::ROCKS) {
-            proto = Content::Critter::DenDefensePsycho;
+            proto = "DenDefensePsycho".hstr();
         }
         else {
             proto = cursor % 3 == 0 ? Content::Critter::Loser2 : Content::Critter::Loser;

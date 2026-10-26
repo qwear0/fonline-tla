@@ -449,6 +449,14 @@ and exact stopping position; unreachable/occupied goals are reconsidered every f
 Unavailable destinations wait without teleporting or enabling ordinary aggression. The small
 player/companion spawn yard is independent of these bounds.
 
+Every wave-1 NPC gets one absolute **180-real-second distraction deadline at spawn**, including
+ordinary attackers that may later be recruited into a brawl. Role changes, partner selection,
+blocked paths, circling and rock recovery never extend it. On the first controller tick at/after
+the deadline, any active distraction drops its plans and attack/weapon restrictions; normal target
+selection resumes in that same tick, attacking a visible reachable defender or advancing on living
+Smitty. An expired NPC cannot be recruited back into a brawl. This cap overrides the local activity
+timers below, so no role can indefinitely park a surviving enemy near the exit.
+
 - **Lost:** walks to a random destination, retaliating only against its recorded direct aggressors
   (including missed attacks). A high-priority attacked handler records them before `Main` admits
   retaliation. With no usable aggressor it resumes walking. Exact arrival, from its own walk-end
@@ -456,14 +464,16 @@ player/companion spawn yard is independent of these bounds.
 - **Fascinated:** approaches a reachable free hex beside an authored turret, barrel, truck, tire or
   tree, then stands facing its anchor for **60–180 real seconds**. During this mode it does not
   attack. Every independently randomized **30–60 seconds** it says a `Stare1..14` line, including the
-  three emotes; the first due line is processed before expiry, guaranteeing at least one. Afterwards
+  three emotes; the first due line is processed before the local stare timer expires. The absolute
+  spawn deadline may cut the approach/stare short, including before the first line. Afterwards
   ordinary AI resumes.
 - **Rock thrower:** the dedicated `nmbsnp` model has `NMBSNPAS` (throw) and `NMBSNPAT` (run);
   `nmlosr` is never assigned this role. Each thrower starts with exactly **one rock**, equipped in
   the main hand. A finite **3–6 rock** ground stack is also seeded once on a reachable field hex.
   The NPC walks to pick up real ground rocks, throws them using their primary attack and recovers
   thrown rocks through normal pickup. No inventory refill is generated during combat. Only a target
-  already adjacent permits an unarmed attack; without rocks it never chases a distant target into melee.
+  already adjacent permits an unarmed attack; while this role is active, without rocks it never
+  chases a distant target into melee. At the absolute deadline it rejoins the ordinary siege AI.
 - **Brawl:** both members are forced to adjacent reachable random field destinations and wait for
   each other before fighting. Only this mutually linked pair bypasses same-side attack/damage
   rejection, and `MainPlanes` forces unarmed primary attacks. Each member speaks a `Brawl1..13` line
@@ -483,7 +493,8 @@ player/companion spawn yard is independent of these bounds.
   replanning/reselection. Destinations stay in the central field; if the inner ring is inaccessible,
   it skips that approach and continues outside, without entering melee or choosing allies/neutral
   NPCs instead. With no suitable target it waits and retries. Eligibility uses `CritterTypes.CanRun`
-  and `IsNoRun`; no missing run animation is requested. Runners still never attack.
+  and `IsNoRun`; no missing run animation is requested. Runners do not attack while this role is
+  active; at the absolute deadline they can attack normally.
 
 Both languages define all `DenWander` lines in `Texts/Text.{russ,engl}.fotxt`. Plan admission,
 actual attacks and damage use the same `DenDefense.CanAttack` gate, with the narrow reciprocal
