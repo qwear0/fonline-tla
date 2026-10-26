@@ -632,7 +632,9 @@ bool IsScenarioCombat(Critter first, Critter second)
     return IsActor(first) || IsActor(second);
 }
 
-bool CanAttack(Critter attacker, Critter target)
+// Общие правила выбора противника; временный запрет атаки у отвлечённого NPC
+// проверяется отдельно, чтобы бегун мог выбрать врага, не получая права ударить его.
+bool CanSelectTarget(Critter attacker, Critter target)
 {
     if (!CanAct(attacker)) {
         return false;
@@ -655,9 +657,6 @@ bool CanAttack(Critter attacker, Critter target)
             return false;
         }
     }
-    if (!DenWander::CanAttack(attacker, target)) {
-        return false;
-    }
     if (IsActor(attacker) && attacker.DenDefenseRole == ROLE_SMITTY) {
         return IsWorkshopHex(attacker.Hex) && IsWorkshopHex(target.Hex);
     }
@@ -665,6 +664,11 @@ bool CanAttack(Critter attacker, Critter target)
         return IsWorkshopHex(target.Hex);
     }
     return true;
+}
+
+bool CanAttack(Critter attacker, Critter target)
+{
+    return CanSelectTarget(attacker, target) && DenWander::CanAttack(attacker, target);
 }
 
 // Проверяем фактическую жертву промаха, очереди или взрыва; самоурон и среда не являются атакой другой цели.

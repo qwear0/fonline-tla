@@ -430,7 +430,7 @@ not copied to these attackers.
 
 [`Scripts/DenWander.fos`](../Scripts/DenWander.fos) owns wave-1 distractions. One uniform roll per
 new enemy assigns mutually exclusive modes: **30% lost**, **10% object fascination**, **10% rock
-thrower** (only a model with throwing animation), **10% brawl initiator**, **5% random runner**
+thrower** (only a model with throwing animation), **10% brawl initiator**, **5% circling runner**
 (only a model with running animation), otherwise normal siege AI. An ineligible animation roll
 falls back to normal AI, not another distraction. A brawl initiator can forcibly recruit an unpaired
 living wave enemy, overriding that enemy's earlier mode; these are initiation probabilities, not
@@ -465,13 +465,24 @@ player/companion spawn yard is independent of these bounds.
   when supported. If both are below the threshold, both flee. Losing the partner restores normal
   AI; an unpaired initiator waits for later batches, but gives up when spawning is finished and
   no partner is available. Damage/HP balance and lethal-hit rules are unchanged.
-- **Runner:** repeatedly runs to random reachable field destinations without attacking. Eligibility
-  uses `CritterTypes.CanRun` and `IsNoRun`; no missing run animation is requested.
+- **Runner:** randomly chooses a visible reachable participant, companion or Smitty admitted by
+  `DenDefense.CanSelectTarget` (the same faction/map/workshop rules as attack selection, without
+  granting permission to attack). It retains that target while valid and runs successive arcs in
+  one randomly chosen direction, normally **5–9 hexes** away. Every **20–40 real seconds** it tries
+  to approach to **two hexes**, then immediately retreats towards an **8–12 hex** outer destination;
+  after opening an eight-hex gap it resumes circling. Distances include both actors' multihex radii.
+  `OnCritterMoved` initiates the retreat on the actual two-hex crossing, without waiting for the
+  one-second controller tick. Moving targets, blocked endpoints and invalid targets trigger
+  replanning/reselection. Destinations stay in the central field; if the inner ring is inaccessible,
+  it skips that approach and continues outside, without entering melee or choosing allies/neutral
+  NPCs instead. With no suitable target it waits and retries. Eligibility uses `CritterTypes.CanRun`
+  and `IsNoRun`; no missing run animation is requested. Runners still never attack.
 
 Both languages define all `DenWander` lines in `Texts/Text.{russ,engl}.fotxt`. Plan admission,
 actual attacks and damage use the same `DenDefense.CanAttack` gate, with the narrow reciprocal
-brawl-pair exception. Mode, goals, partner, aggressor IDs and deadlines are transient server-only
-critter properties; no public property, RemoteCall or rename/removal migration is added.
+brawl-pair exception. Mode, goals, partner, runner target/phase/direction, aggressor IDs and deadlines
+are transient server-only critter properties; no public property, RemoteCall or rename/removal
+migration is added.
 
 The first batch is admitted when the 10:00 rest transition finishes. Wave 1 admits **1–3 enemies
 at once**, each size equally likely, over the original **50 batches**. Sizes are rolled once at wave

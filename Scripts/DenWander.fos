@@ -1,6 +1,7 @@
 // DenWander — растерянность, залипание, камни, парные драки и бег врагов первой волны.
 // SERVER: один бросок поведения при создании; DenDefense вызывает Process до выбора жертвы.
 // Режим, цели, напарник и реальные сроки хранятся на NPC; общих изменяемых таблиц нет.
+// Бегуны кружат вокруг допустимого противника и отскакивают после сближения.
 // Связи: DenDefense (допуск атак и урона), MainPlanes (оружие), NpcPlanes, Messaging.
 namespace DenWander
 {
@@ -18,12 +19,24 @@ namespace DenWander
 ///@ Property Critter Server ident DenWanderPartnerId Mutable
 ///@ Property Critter Server bool DenWanderReady Mutable
 ///@ Property Critter Server bool DenWanderFleeing Mutable
+///@ Property Critter Server ident DenWanderTargetId Mutable
+///@ Property Critter Server int32 DenWanderRunPhase Mutable
+///@ Property Critter Server int32 DenWanderRunTurn Mutable
 
 const int LOST = 1;
 const int STARE = 2;
 const int ROCKS = 3;
 const int BRAWL = 4;
 const int RUN = 5;
+const int RUN_CIRCLE = 0;
+const int RUN_APPROACH = 1;
+const int RUN_RETREAT = 2;
+
+[[ModuleInit]]
+void Init()
+{
+    Game.OnCritterMoved.Subscribe(RunnerMoved);
+}
 
 bool IsYardHex(mpos hex)
 {
@@ -87,6 +100,9 @@ void Finish(Critter npc, bool stop = true)
     npc.DenWanderUntil = ZERO_NANOTIME;
     npc.DenWanderSayAt = ZERO_NANOTIME;
     npc.DenWanderRecheckAt = ZERO_NANOTIME;
+    npc.DenWanderTargetId = ZERO_IDENT;
+    npc.DenWanderRunPhase = RUN_CIRCLE;
+    npc.DenWanderRunTurn = 0;
 }
 
 bool CanRun(Critter npc)
@@ -540,6 +556,158 @@ bool ChooseWeapon(Critter npc, Critter? target, any& weaponId, any& use, any& un
     return true;
 }
 
+bool IsRunnerTarget(Critter npc, Map map, Critter? target)
+{
+    if (target == null || !target.IsAlive() || !DenDefense::CanSelectTarget(npc, target) || !npc.IsSee(target)) {
+        return false;
+    }
+    int cut = 2 + npc.Multihex + target.Multihex;
+    return Game.GetDistance(npc, target) <= cut || map.GetPathLength(npc, target.Hex, cut, MainPlanes::CanOpenDoor) > 0;
+}
+
+bool PickRunnerGoal(Critter npc, Map map, Critter target)
+{
+    int phase = npc.DenWanderRunPhase;
+    int padding = npc.Multihex + target.Multihex;
+    int minRadius = (phase == RUN_APPROACH ? 2 : (phase == RUN_RETREAT ? 8 : 5)) + padding;
+    int maxRadius = (phase == RUN_APPROACH ? 2 : (phase == RUN_RETREAT ? 12 : 9)) + padding;
+    // Следующая дуга в одном направлении, а не случайная точка через центр цели.
+    float angle = phase == RUN_CIRCLE ? float(npc.DenWanderRunTurn * Game.Random(60, 100)) : 0.0f;
+    mpos ideal = target.Hex;
+    map.MoveHexByDir(ideal, Game.GetDirection(target.Hex, npc.Hex, angle), Game.Random(minRadius, maxRadius));
+    auto occupied = NpcPositioning::StopPositions(npc, map);
+    mpos[] candidates = {};
+    for (int x = Math::Max(49, int(target.Hex.x) - maxRadius); x <= Math::Min(99, int(target.Hex.x) + maxRadius); x++) {
+        for (int y = Math::Max(33, int(target.Hex.y) - maxRadius); y <= Math::Min(128, int(target.Hex.y) + maxRadius); y++) {
+            mpos hex = mpos(x, y);
+            int distance = Game.GetDistance(hex, target.Hex);
+            if (hex != npc.Hex && distance >= minRadius && distance <= maxRadius && occupied.IsFree(hex) && map.IsHexesMovable(hex, npc.Multihex)) {
+                candidates.insertLast(hex);
+            }
+        }
+    }
+    while (!candidates.isEmpty()) {
+        int best = 0;
+        for (int i = 1; i < candidates.length(); i++) {
+            if (Game.GetDistance(candidates[i], ideal) < Game.GetDistance(candidates[best], ideal)) {
+                best = i;
+            }
+        }
+        mpos hex = candidates[best];
+        candidates.removeAt(best);
+        if (map.GetPathLength(npc, hex, 0, MainPlanes::CanOpenDoor) > 0) {
+            npc.DenWanderGoal = hex;
+            npc.DenWanderFocus = target.Hex;
+            return true;
+        }
+    }
+    npc.DenWanderGoal = mpos();
+    return false;
+}
+
+Critter? FindRunnerTarget(Critter npc, Map map)
+{
+    auto ids = Game.DenDefenseParticipantIds.clone();
+    ids.insertLast(Game.DenDefenseCompanionIds);
+    ids.insertLast(Game.DenDefenseSmittyId);
+    npc.DenWanderRunPhase = RUN_CIRCLE;
+    npc.DenWanderRunTurn = Game.Random(0, 1) == 0 ? -1 : 1;
+    while (!ids.isEmpty()) {
+        int index = Game.Random(0, ids.length() - 1);
+        Critter? target = Game.GetCritter(ids[index]);
+        ids.removeAt(index);
+        if (target != null && IsRunnerTarget(npc, map, target) && PickRunnerGoal(npc, map, target)) {
+            npc.DenWanderTargetId = target.Id;
+            npc.DenWanderUntil = Game.FrameTime + Time::Seconds(Game.Random(20, 40));
+            return target;
+        }
+    }
+    return null;
+}
+
+void ProcessRunner(Critter npc, Map map)
+{
+    if (npc.IsNoMove) {
+        Stop(npc);
+        return;
+    }
+    Critter? target = Game.GetCritter(npc.DenWanderTargetId);
+    bool replan = false;
+    if (!IsRunnerTarget(npc, map, target)) {
+        Stop(npc);
+        npc.DenWanderTargetId = ZERO_IDENT;
+        npc.DenWanderGoal = mpos();
+        if (Game.FrameTime < npc.DenWanderRecheckAt) {
+            return;
+        }
+        npc.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
+        target = FindRunnerTarget(npc, map);
+        if (target == null) {
+            return; // Не заменяем недоступную боевую цель нейтральным NPC или союзником.
+        }
+        replan = true;
+    }
+    if (target == null) {
+        return;
+    }
+    int gap = Game.GetDistance(npc, target) - npc.Multihex - target.Multihex;
+    if (npc.DenWanderRunPhase != RUN_RETREAT && gap <= 2) {
+        npc.DenWanderRunPhase = RUN_RETREAT;
+        npc.DenWanderUntil = Game.FrameTime + Time::Seconds(Game.Random(20, 40));
+        replan = true;
+    }
+    else if (npc.DenWanderRunPhase == RUN_RETREAT && gap >= 8) {
+        npc.DenWanderRunPhase = RUN_CIRCLE;
+        replan = true;
+    }
+    else if (npc.DenWanderRunPhase == RUN_CIRCLE && Game.FrameTime >= npc.DenWanderUntil) {
+        npc.DenWanderRunPhase = RUN_APPROACH;
+        replan = true;
+    }
+    if (replan || npc.Hex == npc.DenWanderGoal || Game.GetDistance(target.Hex, npc.DenWanderFocus) >= 2 ||
+        (Game.FrameTime >= npc.DenWanderRecheckAt && !CanStand(npc, map, npc.DenWanderGoal))) {
+        Stop(npc);
+        if (!PickRunnerGoal(npc, map, target)) {
+            // Кольцо в два гекса может быть перекрыто или выходить за поле: не лезем
+            // вплотную и не стоим в ожидании удара, а продолжаем кружить снаружи.
+            npc.DenWanderRunPhase = RUN_CIRCLE;
+            npc.DenWanderUntil = Game.FrameTime + Time::Seconds(Game.Random(20, 40));
+            if (!PickRunnerGoal(npc, map, target)) {
+                npc.DenWanderTargetId = ZERO_IDENT;
+                npc.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(5);
+                return;
+            }
+        }
+        npc.DenWanderRecheckAt = Game.FrameTime + Time::Seconds(2);
+        Walk(npc, true);
+        // План остаётся владельцем маршрута, но первый шаг не ждёт секундного
+        // тика NpcPlanes: особенно важно сразу отскочить при достижении двух гексов.
+        if (!CritterState::IsBusy(npc)) {
+            int speed = CanRun(npc) && !npc.IsDamagedLeftLeg && !npc.IsDamagedRightLeg && !npc.IsOverweight ? npc.WalkSpeed * 2 : npc.WalkSpeed;
+            npc.MoveToHex(npc.DenWanderGoal, 0, speed, MainPlanes::CanOpenDoor);
+        }
+    }
+    else {
+        Walk(npc, true);
+    }
+}
+
+[[Event]]
+void RunnerMoved(Critter npc, mpos oldHex)
+{
+    if (!npc.DenWanderActive || npc.DenWanderMode != RUN || npc.DenWanderRunPhase == RUN_RETREAT || !npc.IsAlive() || !DenDefense::CanAct(npc) ||
+        Game.DenDefenseStage != DenDefense::STAGE_FIGHTING || !DenDefense::IsWaveEnemy(npc)) {
+        return;
+    }
+    Critter? target = Game.GetCritter(npc.DenWanderTargetId);
+    if (target != null && target.MapId == npc.MapId && Game.GetDistance(npc, target) <= 2 + npc.Multihex + target.Multihex) {
+        Map? map = npc.GetMap();
+        if (map != null) {
+            ProcessRunner(npc, map);
+        }
+    }
+}
+
 void ProcessWalk(Critter npc, Map map, bool run)
 {
     if (Game.FrameTime >= npc.DenWanderRecheckAt || npc.Hex == npc.DenWanderGoal) {
@@ -568,7 +736,7 @@ bool Process(Critter npc, Map map)
         ProcessRocks(npc, map);
     }
     else if (npc.DenWanderMode == RUN) {
-        ProcessWalk(npc, map, true);
+        ProcessRunner(npc, map);
     }
     else if (npc.DenWanderMode == LOST) {
         if (IsYardHex(npc.DenWanderGoal) && npc.Hex == npc.DenWanderGoal) {
