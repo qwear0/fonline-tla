@@ -32,3 +32,6 @@ __pycache__
 /TexDump_**
 /.sass-cache
 /CMakeUserPresets.json
+
+# Keep private Beads task data local.
+/.beads/
