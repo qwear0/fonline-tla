@@ -271,7 +271,7 @@ Pick the boundary before reaching for a heavy interactive session:
 
 ## Commit Policy
 
-- If there were code edits, create a commit with a description in Russian and push it. This is standing authorization for task-owned staging, commits and a normal push to the configured fork remote; do not push to upstream or rewrite published history.
+- If there were code edits, create a commit with a description in English and push it. This is standing authorization for task-owned staging, commits and a normal push to the configured fork remote; do not push to upstream or rewrite published history.
 - Never commit files in folders added to `.gitignore`.
 - After publication, if it makes sense and Git status is clean, start the appropriate existing project build and report it as started, not passed, until completion is observed. This repository has no QSD `build.sh`; use the build entrypoints documented above.
 - Keep game and engine changes in separate repositories and commits. Do not include unrelated user edits in task commits, discard them, or use destructive Git operations.
